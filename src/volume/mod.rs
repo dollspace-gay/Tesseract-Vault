@@ -8,6 +8,7 @@ pub mod container;
 pub mod filesystem;
 pub mod header;
 pub mod keyslot;
+pub mod mount;
 pub mod operations;
 pub mod sector;
 
@@ -15,5 +16,9 @@ pub use container::{Container, METADATA_SIZE, KEYSLOTS_SIZE};
 pub use filesystem::{EncryptedFilesystem, FileAttr, FileType, FilesystemError, DirEntry};
 pub use header::VolumeHeader;
 pub use keyslot::{KeySlots, MasterKey, MAX_KEY_SLOTS};
+pub use mount::{MountOptions, MountError};
 pub use operations::InMemoryFilesystem;
 pub use sector::{SectorCipher, SECTOR_SIZE_512, SECTOR_SIZE_4K};
+
+#[cfg(feature = "encrypted-volumes")]
+pub use mount::{mount, MountHandle};

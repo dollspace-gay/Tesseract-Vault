@@ -29,10 +29,11 @@ name = "secure-cryptor-register"
 path = "src/bin/register/mod.rs"
 
 [dependencies]
-aes-gcm = "0.10.3"
+aes-gcm = { path = "aes-gcm-fork/aes-gcm" }
 xts-mode = "0.5"
 aes = "0.8"
 argon2 = "0.5.3"
+generic-array = { version = "1.1", features = ["compat-0_14"] }
 rand = { version = "0.8.5", features = ["getrandom"] }
 rand_core = "0.6.4"
 rpassword = "7.4"
@@ -55,6 +56,7 @@ dirs = "5.0"
 notify-rust = "4.11"
 tray-icon = "0.18"
 image = "0.25"
+ctrlc = "3.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 fuser = { version = "0.14", optional = true }
@@ -77,3 +79,14 @@ quickcheck = "1.0"
 [[bench]]
 name = "streaming_benchmark"
 harness = false
+
+[patch.crates-io]
+crypto-common = { path = "rustcrypto-traits-fork/crypto-common" }
+cipher = { path = "rustcrypto-traits-fork/cipher" }
+aead = { path = "rustcrypto-traits-fork/aead" }
+inout = { path = "rustcrypto-utils-fork/inout" }
+block-buffer = { path = "rustcrypto-utils-fork/block-buffer" }
+digest = { path = "rustcrypto-traits-fork/digest" }
+universal-hash = { path = "rustcrypto-traits-fork/universal-hash" }
+ctr = { path = "rustcrypto-block-modes-fork/ctr" }
+blake2 = { path = "rustcrypto-hashes-fork/blake2" }

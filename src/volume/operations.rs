@@ -26,6 +26,7 @@ const ROOT_INODE: InodeId = 1;
 #[derive(Debug, Clone)]
 struct Inode {
     /// Inode ID
+    #[allow(dead_code)]
     id: InodeId,
 
     /// File type
@@ -163,7 +164,8 @@ impl InMemoryFilesystem {
         let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
-        let nonce = Nonce::from(*aes_gcm::aead::generic_array::GenericArray::from_slice(&nonce_bytes));
+        #[allow(deprecated)]
+        let nonce = Nonce::clone_from_slice(&nonce_bytes);
         let ciphertext = cipher.encrypt(&nonce, data)
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
@@ -189,7 +191,8 @@ impl InMemoryFilesystem {
         let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
-        let nonce = Nonce::from(*aes_gcm::aead::generic_array::GenericArray::from_slice(&nonce_bytes));
+        #[allow(deprecated)]
+        let nonce = Nonce::clone_from_slice(&nonce_bytes);
         let plaintext = cipher.decrypt(&nonce, ciphertext)
             .map_err(|_| FilesystemError::CryptoError("Decryption failed".to_string()))?;
 

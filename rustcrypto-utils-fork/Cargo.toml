@@ -1,0 +1,14 @@
+[workspace]
+members = [
+    "blobby",
+    "block-buffer",
+    "collectable",
+    "cmov",
+    "cpufeatures",
+    "dbl",
+    "hex-literal",
+    "opaque-debug",
+    "wycheproof2blb",
+    "zeroize",
+    "zeroize/derive"
+]

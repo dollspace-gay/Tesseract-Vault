@@ -25,6 +25,7 @@
 /// added at a higher layer if needed (e.g., in the filesystem).
 
 use aes::Aes256;
+#[allow(deprecated)]
 use aes::cipher::{KeyInit, generic_array::GenericArray};
 use thiserror::Error;
 use xts_mode::{get_tweak_default, Xts128};
@@ -100,7 +101,9 @@ impl SectorCipher {
         let xts_key = Self::derive_xts_key(master_key)?;
 
         // Create XTS cipher
+        #[allow(deprecated)]
         let key1 = Aes256::new(GenericArray::from_slice(&xts_key[0..32]));
+        #[allow(deprecated)]
         let key2 = Aes256::new(GenericArray::from_slice(&xts_key[32..64]));
 
         let cipher = Xts128::<Aes256>::new(key1, key2);

@@ -172,6 +172,8 @@ fn notify_queue_complete(total: usize, succeeded: usize, failed: usize, enabled:
 enum Mode {
     Encrypt,
     Decrypt,
+    #[allow(dead_code)]
+    Volume,
 }
 
 #[derive(Clone)]
@@ -225,6 +227,17 @@ struct CryptorApp {
     show_queue_panel: bool,
     tray_manager: Option<tray::TrayManager>,
     window_visible: bool,
+    // Volume management fields
+    #[cfg(feature = "encrypted-volumes")]
+    volume_manager: Option<secure_cryptor::volume::VolumeManager>,
+    #[allow(dead_code)]
+    volume_container_path: String,
+    #[allow(dead_code)]
+    volume_mount_point: String,
+    #[allow(dead_code)]
+    volume_size: String,
+    #[allow(dead_code)]
+    mounted_volumes: Vec<secure_cryptor::volume::MountedVolumeInfo>,
 }
 
 impl Default for CryptorApp {
@@ -268,6 +281,13 @@ impl CryptorApp {
             show_queue_panel: false,
             tray_manager,
             window_visible: true,
+            // Volume management fields
+            #[cfg(feature = "encrypted-volumes")]
+            volume_manager: Some(secure_cryptor::volume::VolumeManager::new()),
+            volume_container_path: String::new(),
+            volume_mount_point: String::new(),
+            volume_size: String::from("100M"),
+            mounted_volumes: Vec::new(),
         };
 
         // If initial file is provided, set it up
@@ -296,6 +316,9 @@ impl CryptorApp {
                         .trim_end_matches(".encrypted")
                         .to_string();
                     app.status_message = format!("Ready to decrypt: {}", file_path);
+                }
+                Some(Mode::Volume) => {
+                    app.status_message = "Volume mode selected".to_string();
                 }
                 None => {}
             }
@@ -415,6 +438,10 @@ impl CryptorApp {
                 Mode::Decrypt => rt.block_on(async {
                     decrypt_file(&item.input_path, &item.output_path, &item.password)
                 }),
+                Mode::Volume => {
+                    // Volume operations don't go through the queue
+                    continue;
+                }
             };
 
             match result {
@@ -513,6 +540,7 @@ impl CryptorApp {
                                             let mode_text = match item.mode {
                                                 Mode::Encrypt => "Encrypt",
                                                 Mode::Decrypt => "Decrypt",
+                                                Mode::Volume => "Volume",
                                             };
                                             ui.label(egui::RichText::new(mode_text)
                                                 .size(11.0)
@@ -804,6 +832,11 @@ impl CryptorApp {
                     }
                 }
             }
+            Mode::Volume => {
+                // Volume operations are handled separately, not through this process_file method
+                self.status_message = "Volume operations available via Volumes menu".to_string();
+                self.progress = 0.0;
+            }
         }
 
         self.is_processing = false;
@@ -906,6 +939,14 @@ impl eframe::App for CryptorApp {
                 ui.menu_button("Queue", |ui| {
                     if ui.button(format!("📋 View Queue ({})", self.queue.len())).clicked() {
                         self.show_queue_panel = true;
+                        ui.close_menu();
+                    }
+                });
+
+                #[cfg(feature = "encrypted-volumes")]
+                ui.menu_button("Volumes", |ui| {
+                    if ui.button("📦 Manage Volumes").clicked() {
+                        self.mode = Some(Mode::Volume);
                         ui.close_menu();
                     }
                 });
@@ -1090,6 +1131,7 @@ impl eframe::App for CryptorApp {
                                     match &self.mode {
                                         Some(Mode::Encrypt) => "🔐 Encrypt File",
                                         Some(Mode::Decrypt) => "🔓 Decrypt File",
+                                        Some(Mode::Volume) => "📦 Manage Volumes",
                                         None => "Select Mode First",
                                     }
                                 };

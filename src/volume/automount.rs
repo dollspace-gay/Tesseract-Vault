@@ -181,8 +181,8 @@ impl Default for AutoMountConfig {
 /// Auto-mount service that manages mounting of encrypted volumes
 pub struct AutoMountService {
     config: AutoMountConfig,
-    #[allow(dead_code)]
-    mounted: HashMap<String, Box<dyn std::any::Any>>, // Store MountHandle (type-erased)
+    volume_manager: super::manager::VolumeManager,
+    mounted_ids: HashMap<String, PathBuf>, // volume ID -> container path
 }
 
 impl AutoMountService {
@@ -190,7 +190,8 @@ impl AutoMountService {
     pub fn new(config: AutoMountConfig) -> Self {
         Self {
             config,
-            mounted: HashMap::new(),
+            volume_manager: super::manager::VolumeManager::new(),
+            mounted_ids: HashMap::new(),
         }
     }
 
@@ -219,31 +220,153 @@ impl AutoMountService {
     }
 
     /// Mounts a single volume
-    fn mount_volume(&mut self, _config: &VolumeConfig) -> Result<()> {
-        // TODO: Implement actual mounting logic
-        // This would involve:
-        // 1. Authenticate based on config.auth
-        // 2. Open container with Container::open()
-        // 3. Mount using the appropriate mount backend (FUSE/WinFsp)
-        // 4. Store MountHandle in self.mounted
+    fn mount_volume(&mut self, config: &VolumeConfig) -> Result<()> {
+        // Get password based on auth method
+        let password = match &config.auth {
+            AutoMountAuth::PasswordPrompt => {
+                // In a real implementation, this would prompt the user
+                // For now, we return an error as we can't prompt in a library
+                return Err(AutoMountError::AuthFailed(
+                    "Password prompt not supported in library context".to_string()
+                ));
+            }
+            AutoMountAuth::Tpm { .. } => {
+                // TPM unsealing not yet implemented
+                return Err(AutoMountError::AuthFailed(
+                    "TPM authentication not yet implemented".to_string()
+                ));
+            }
+            AutoMountAuth::Keyring { entry_name } => {
+                // Keyring lookup not yet implemented
+                return Err(AutoMountError::AuthFailed(
+                    format!("Keyring lookup not yet implemented for '{}'", entry_name)
+                ));
+            }
+            AutoMountAuth::None => {
+                // No authentication - use empty password (for recovery key scenarios)
+                String::new()
+            }
+        };
 
-        // For now, this is a placeholder
+        // Create mount options
+        let options = super::mount::MountOptions {
+            mount_point: config.mount_point.clone(),
+            read_only: config.read_only,
+            allow_other: false,
+            auto_unmount: config.auto_unmount,
+            fs_name: Some(config.name.clone()),
+        };
+
+        // Mount using VolumeManager
+        self.volume_manager
+            .mount(&config.container_path, &password, options)
+            .map_err(|e| AutoMountError::MountFailed(e.to_string()))?;
+
+        // Track the mounted volume
+        self.mounted_ids.insert(config.id.clone(), config.container_path.clone());
+
         Ok(())
+    }
+
+    /// Mounts a single volume with an explicit password
+    ///
+    /// This is useful for integrating with GUI/CLI where the user provides
+    /// the password directly.
+    ///
+    /// # Arguments
+    ///
+    /// * `volume_id` - ID of the volume to mount
+    /// * `password` - Password to unlock the volume
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The volume ID is not found in the configuration
+    /// - The volume is already mounted
+    /// - The mount operation fails
+    pub fn mount_with_password(&mut self, volume_id: &str, password: &str) -> Result<()> {
+        // Find the volume config
+        let volume_config = self.config.get_volume(volume_id)
+            .ok_or_else(|| AutoMountError::ConfigError(
+                format!("Volume '{}' not found in configuration", volume_id)
+            ))?.clone();
+
+        // Create mount options
+        let options = super::mount::MountOptions {
+            mount_point: volume_config.mount_point.clone(),
+            read_only: volume_config.read_only,
+            allow_other: false,
+            auto_unmount: volume_config.auto_unmount,
+            fs_name: Some(volume_config.name.clone()),
+        };
+
+        // Mount using VolumeManager
+        self.volume_manager
+            .mount(&volume_config.container_path, password, options)
+            .map_err(|e| AutoMountError::MountFailed(e.to_string()))?;
+
+        // Track the mounted volume
+        self.mounted_ids.insert(volume_config.id.clone(), volume_config.container_path.clone());
+
+        Ok(())
+    }
+
+    /// Unmounts a volume by ID
+    ///
+    /// # Arguments
+    ///
+    /// * `volume_id` - ID of the volume to unmount
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the volume is not mounted
+    pub fn unmount(&mut self, volume_id: &str) -> Result<()> {
+        if let Some(container_path) = self.mounted_ids.remove(volume_id) {
+            self.volume_manager
+                .unmount(&container_path)
+                .map_err(|e| AutoMountError::MountFailed(e.to_string()))?;
+            Ok(())
+        } else {
+            Err(AutoMountError::MountFailed(
+                format!("Volume '{}' is not mounted", volume_id)
+            ))
+        }
     }
 
     /// Unmounts all mounted volumes
     pub fn unmount_all(&mut self) {
-        self.mounted.clear();
+        self.volume_manager.unmount_all();
+        self.mounted_ids.clear();
     }
 
     /// Checks if a volume is currently mounted
     pub fn is_mounted(&self, id: &str) -> bool {
-        self.mounted.contains_key(id)
+        self.mounted_ids.contains_key(id)
     }
 
     /// Gets the list of mounted volume IDs
     pub fn mounted_volumes(&self) -> Vec<String> {
-        self.mounted.keys().cloned().collect()
+        self.mounted_ids.keys().cloned().collect()
+    }
+
+    /// Gets the mount point for a volume
+    ///
+    /// # Arguments
+    ///
+    /// * `volume_id` - ID of the volume
+    ///
+    /// # Returns
+    ///
+    /// The mount point path if the volume is mounted, None otherwise
+    pub fn get_mount_point(&self, volume_id: &str) -> Option<PathBuf> {
+        self.mounted_ids
+            .get(volume_id)
+            .and_then(|container_path| self.volume_manager.find_mount_point(container_path))
+    }
+
+    /// Gets information about all mounted volumes
+    pub fn list_mounted_info(&self) -> Vec<super::manager::MountedVolumeInfo> {
+        self.volume_manager.list_mounted()
     }
 }
 

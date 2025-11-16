@@ -44,7 +44,14 @@
       "Bash(cmd /c \"if not exist src\\bin\\gui mkdir src\\bin\\gui\")",
       "Bash(move:*)",
       "Bash(cmd /c \"move src\\bin\\tray.rs src\\bin\\gui\\tray.rs\")",
-      "Bash(cmd /c \"move src\\bin\\gui.rs src\\bin\\gui\\main.rs\")"
+      "Bash(cmd /c \"move src\\bin\\gui.rs src\\bin\\gui\\main.rs\")",
+      "Bash(cargo clean:*)",
+      "Bash(git checkout:*)",
+      "Bash(git clone:*)",
+      "Bash(cat:*)",
+      "Bash(1)",
+      "Bash(robocopy:*)",
+      "Bash(exit 0)"
     ],
     "deny": [],
     "ask": []

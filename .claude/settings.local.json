@@ -17,7 +17,12 @@
       "Bash(bd show:*)",
       "Bash(if not exist benches mkdir benches)",
       "Bash(cargo bench:*)",
-      "Bash(cargo fix:*)"
+      "Bash(cargo fix:*)",
+      "Bash(node --version:*)",
+      "Bash(npm --version:*)",
+      "Bash(npx create-tauri-app@latest:*)",
+      "Bash(npm install:*)",
+      "Bash(cargo check:*)"
     ],
     "deny": [],
     "ask": []

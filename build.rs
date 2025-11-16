@@ -1,7 +1,8 @@
-// Build script to embed Windows icon resource
+// Build script for platform-specific resource embedding
 
 fn main() {
-    #[cfg(windows)]
+    // Embed Windows icon resource on Windows only
+    #[cfg(target_os = "windows")]
     {
         let mut res = winres::WindowsResource::new();
         res.set_icon("icons/app_icon.ico");
@@ -11,5 +12,11 @@ fn main() {
         if let Err(e) = res.compile() {
             eprintln!("Failed to compile Windows resources: {}", e);
         }
+    }
+
+    // On other platforms, no special build steps required
+    #[cfg(not(target_os = "windows"))]
+    {
+        println!("cargo:warning=Building for non-Windows platform (no icon embedding)");
     }
 }

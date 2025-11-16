@@ -75,6 +75,25 @@ GIT WORKFLOW (AUTO-SYNC)
     • No manual export/import needed!
   Disable with: --no-auto-flush or --no-auto-import
 
+## Cross-Platform Requirements
+
+This project MUST be cross-platform and support Windows, Linux, and macOS.
+
+IMPORTANT: Do not use Windows-specific APIs or crates unless you also provide equivalent implementations for Linux and macOS. All platform-specific code should be properly gated with #[cfg(target_os = "...")] attributes.
+
+Testing Environment:
+  • Windows: Primary development environment (f:\cryptor\secure-cryptor)
+  • Linux: WSL instance with Fedora - use "wsl -d fedora" to access
+    - You have root access for installing dependencies
+    - Test Linux compilation there using: wsl -d fedora -- cargo build --release
+  • macOS: Currently no test environment available
+
+When implementing platform-specific features:
+  1. Implement Windows version first if needed
+  2. Implement Linux version and test in WSL Fedora
+  3. Implement macOS version (best effort without testing environment)
+  4. Use feature flags and conditional compilation properly
+
   Rust Development Best Practices
 
 When generating Rust code, you must adhere to the highest standards of safety, legibility, and maintainability. Follow these principles rigorously.

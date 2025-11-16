@@ -22,7 +22,7 @@ path = "src/bin/gui.rs"
 
 [[bin]]
 name = "secure-cryptor-register"
-path = "src/bin/register.rs"
+path = "src/bin/register/mod.rs"
 
 [dependencies]
 aes-gcm = "0.10.3"

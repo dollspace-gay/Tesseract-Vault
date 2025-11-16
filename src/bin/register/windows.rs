@@ -1,13 +1,8 @@
-// Windows Registry Installer for Secure Cryptor
-// Handles file associations and context menu integration
-//
-// Usage:
-//   secure-cryptor-register install   - Register file associations and context menus
-//   secure-cryptor-register uninstall - Remove all registry entries
+// Windows Registry Integration for Secure Cryptor
+// Handles file associations and context menu integration via Windows Registry
 
 #![cfg(windows)]
 
-use std::env;
 use std::path::PathBuf;
 use winreg::enums::*;
 use winreg::RegKey;
@@ -15,68 +10,25 @@ use winreg::RegKey;
 const PROGID: &str = "SecureCryptor.EncryptedFile";
 const APP_NAME: &str = "Secure Cryptor";
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
+/// Install Windows file associations and context menus
+pub fn install(gui_exe: &PathBuf) -> std::io::Result<()> {
+    install_file_association(gui_exe)?;
+    install_context_menus(gui_exe)?;
 
-    if args.len() < 2 {
-        eprintln!("Usage: {} [install|uninstall]", args[0]);
-        eprintln!();
-        eprintln!("Commands:");
-        eprintln!("  install   - Register file associations and context menus");
-        eprintln!("  uninstall - Remove all registry entries");
-        std::process::exit(1);
-    }
+    println!("\nFile associations registered:");
+    println!("  - .enc files will open with Secure Cryptor GUI");
+    println!("\nContext menu items added:");
+    println!("  - Right-click any file → 'Encrypt with Secure Cryptor'");
+    println!("  - Right-click .enc file → 'Decrypt with Secure Cryptor'");
 
-    let exe_path = get_gui_exe_path();
-
-    match args[1].as_str() {
-        "install" => {
-            println!("Installing Secure Cryptor file associations and context menus...");
-            println!("GUI executable: {}", exe_path.display());
-
-            if let Err(e) = install_file_association(&exe_path) {
-                eprintln!("Error installing file association: {}", e);
-                std::process::exit(1);
-            }
-
-            if let Err(e) = install_context_menus(&exe_path) {
-                eprintln!("Error installing context menus: {}", e);
-                std::process::exit(1);
-            }
-
-            println!("✓ Installation complete!");
-            println!("\nFile associations registered:");
-            println!("  - .enc files will open with Secure Cryptor GUI");
-            println!("\nContext menu items added:");
-            println!("  - Right-click any file → 'Encrypt with Secure Cryptor'");
-            println!("  - Right-click .enc file → 'Decrypt with Secure Cryptor'");
-        }
-        "uninstall" => {
-            println!("Uninstalling Secure Cryptor file associations and context menus...");
-
-            if let Err(e) = uninstall_file_association() {
-                eprintln!("Error uninstalling file association: {}", e);
-            }
-
-            if let Err(e) = uninstall_context_menus() {
-                eprintln!("Error uninstalling context menus: {}", e);
-            }
-
-            println!("✓ Uninstallation complete!");
-        }
-        _ => {
-            eprintln!("Unknown command: {}", args[1]);
-            eprintln!("Use 'install' or 'uninstall'");
-            std::process::exit(1);
-        }
-    }
+    Ok(())
 }
 
-/// Get the path to the GUI executable
-fn get_gui_exe_path() -> PathBuf {
-    let current_exe = env::current_exe().expect("Failed to get current executable path");
-    let exe_dir = current_exe.parent().expect("Failed to get executable directory");
-    exe_dir.join("secure-cryptor-gui.exe")
+/// Uninstall Windows file associations and context menus
+pub fn uninstall() -> std::io::Result<()> {
+    uninstall_file_association()?;
+    uninstall_context_menus()?;
+    Ok(())
 }
 
 /// Install .enc file association

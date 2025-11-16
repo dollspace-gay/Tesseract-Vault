@@ -88,11 +88,11 @@ The GUI executable will be located at `target/release/secure-cryptor-gui.exe`.
 - **Real-time progress**: Visual progress bar with percentage indicator
 - **No console window**: Clean, professional Windows application
 
-### Windows Integration (Optional)
+### System Integration (Optional)
 
-You can register file associations and context menu entries for seamless Windows integration.
+You can register file associations and context menu entries for seamless system integration on Windows, Linux, and macOS.
 
-#### Installing File Associations
+#### Windows
 
 **Note: Requires Administrator privileges**
 
@@ -109,10 +109,50 @@ This will register:
 - **Context Menu (All Files)**: Right-click any file → "Encrypt with Secure Cryptor"
 - **Context Menu (.enc Files)**: Right-click .enc files → "Decrypt with Secure Cryptor"
 
-#### Uninstalling File Associations
+To uninstall:
 
 ```bash
 .\target\release\secure-cryptor-register.exe uninstall
 ```
 
-This removes all registry entries created during installation.
+#### Linux
+
+Run the registration utility:
+
+```bash
+./target/release/secure-cryptor-register install
+```
+
+This will:
+- Create `.desktop` file in `~/.local/share/applications/`
+- Register MIME type for `.enc` files
+- Add file associations to `~/.config/mimeapps.list`
+- Update MIME database
+
+To uninstall:
+
+```bash
+./target/release/secure-cryptor-register uninstall
+```
+
+#### macOS
+
+Run the registration utility:
+
+```bash
+./target/release/secure-cryptor-register install
+```
+
+**Note**: macOS file associations work best with `.app` bundles. For full integration, install the `duti` tool:
+
+```bash
+brew install duti
+```
+
+Then run the installer again. Alternatively, manually associate `.enc` files through Finder's "Get Info" panel.
+
+To uninstall:
+
+```bash
+./target/release/secure-cryptor-register uninstall
+```

@@ -9,7 +9,9 @@ use secure_cryptor::{
     crypto::{aes_gcm::AesGcmEncryptor, kdf::Argon2Kdf, KeyDerivation},
     validation::validate_password,
 };
+use serde::{Deserialize, Serialize};
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 use tokio::runtime::Runtime;
 use zeroize::Zeroizing;
@@ -72,6 +74,52 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct Settings {
+    default_compression: bool,
+    last_input_directory: Option<String>,
+    last_output_directory: Option<String>,
+    panel_transparency: u8,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            default_compression: false,
+            last_input_directory: None,
+            last_output_directory: None,
+            panel_transparency: 100,
+        }
+    }
+}
+
+impl Settings {
+    fn load() -> Self {
+        let config_path = Self::config_path();
+        if let Ok(contents) = fs::read_to_string(&config_path) {
+            serde_json::from_str(&contents).unwrap_or_default()
+        } else {
+            Self::default()
+        }
+    }
+
+    fn save(&self) -> std::io::Result<()> {
+        let config_path = Self::config_path();
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let contents = serde_json::to_string_pretty(self)?;
+        fs::write(&config_path, contents)
+    }
+
+    fn config_path() -> PathBuf {
+        dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("SecureCryptor")
+            .join("settings.json")
+    }
+}
+
 #[derive(PartialEq, Clone)]
 enum Mode {
     Encrypt,
@@ -89,6 +137,8 @@ struct CryptorApp {
     is_processing: bool,
     progress: f32,
     runtime: Option<Runtime>,
+    settings: Settings,
+    show_settings: bool,
 }
 
 impl Default for CryptorApp {
@@ -100,17 +150,20 @@ impl Default for CryptorApp {
 impl CryptorApp {
     /// Create a new CryptorApp with optional initial file and mode
     fn new(initial_file: Option<String>, initial_mode: Option<Mode>) -> Self {
+        let settings = Settings::load();
         let mut app = Self {
             mode: None,
             input_path: String::new(),
             output_path: String::new(),
             password: String::new(),
             confirm_password: String::new(),
-            use_compression: false,
+            use_compression: settings.default_compression,
             status_message: String::new(),
             is_processing: false,
             progress: 0.0,
             runtime: None,
+            settings: settings.clone(),
+            show_settings: false,
         };
 
         // If initial file is provided, set it up
@@ -173,6 +226,98 @@ impl CryptorApp {
             self.output_path = path.display().to_string();
             self.status_message = format!("Output: {}", path.display());
         }
+    }
+
+    fn render_settings_panel(&mut self, ctx: &egui::Context) {
+        egui::Window::new("Settings")
+            .fixed_size([500.0, 400.0])
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                // Apply trans pride theme to settings panel
+                let panel_frame = egui::Frame::default()
+                    .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, self.settings.panel_transparency))
+                    .rounding(egui::Rounding::same(15.0))
+                    .inner_margin(egui::Margin::same(25.0))
+                    .shadow(egui::epaint::Shadow {
+                        offset: egui::Vec2::new(0.0, 4.0),
+                        blur: 15.0,
+                        spread: 0.0,
+                        color: egui::Color32::from_black_alpha(40),
+                    });
+
+                panel_frame.show(ui, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new("⚙ Settings")
+                            .size(28.0)
+                            .color(egui::Color32::from_rgb(50, 50, 50)));
+                    });
+
+                    ui.add_space(20.0);
+
+                    // Default compression checkbox
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Default Compression:").size(14.0));
+                        ui.add_space(10.0);
+                        if ui.checkbox(&mut self.settings.default_compression, "").changed() {
+                            self.use_compression = self.settings.default_compression;
+                            let _ = self.settings.save();
+                        }
+                    });
+
+                    ui.add_space(15.0);
+
+                    // Panel transparency slider
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Panel Transparency:").size(14.0));
+                        ui.add_space(10.0);
+                    });
+
+                    ui.add_space(5.0);
+
+                    ui.horizontal(|ui| {
+                        let slider = egui::Slider::new(&mut self.settings.panel_transparency, 50..=255)
+                            .text("Alpha")
+                            .show_value(true);
+                        if ui.add(slider).changed() {
+                            let _ = self.settings.save();
+                        }
+                    });
+
+                    ui.add_space(20.0);
+
+                    // Settings info
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new("Settings are automatically saved")
+                            .size(11.0)
+                            .color(egui::Color32::from_rgb(100, 100, 100)));
+
+                        ui.add_space(10.0);
+
+                        let config_path = Settings::config_path();
+                        ui.label(egui::RichText::new(format!("Location: {}", config_path.display()))
+                            .size(10.0)
+                            .color(egui::Color32::from_rgb(120, 120, 120)));
+                    });
+
+                    ui.add_space(20.0);
+
+                    // Close button
+                    ui.vertical_centered(|ui| {
+                        let close_btn = egui::Button::new(
+                            egui::RichText::new("Close").size(16.0).color(egui::Color32::WHITE)
+                        )
+                        .fill(egui::Color32::from_rgb(91, 206, 250))
+                        .min_size(egui::vec2(150.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0));
+
+                        if ui.add(close_btn).clicked() {
+                            self.show_settings = false;
+                        }
+                    });
+                });
+            });
     }
 
     fn process_file(&mut self) {
@@ -280,6 +425,35 @@ impl eframe::App for CryptorApp {
         };
         painter.add(egui::Shape::mesh(mesh));
 
+        // Menu bar
+        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+            egui::menu::bar(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Exit").clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+
+                ui.menu_button("Settings", |ui| {
+                    if ui.button("⚙ Open Settings").clicked() {
+                        self.show_settings = true;
+                        ui.close_menu();
+                    }
+                });
+
+                ui.menu_button("Help", |ui| {
+                    if ui.button("About").clicked() {
+                        ui.close_menu();
+                    }
+                });
+            });
+        });
+
+        // Settings panel window
+        if self.show_settings {
+            self.render_settings_panel(ctx);
+        }
+
         // Main content panel
         egui::CentralPanel::default()
             .frame(egui::Frame::none())
@@ -289,7 +463,7 @@ impl eframe::App for CryptorApp {
                 // Center the main panel
                 ui.vertical_centered(|ui| {
                     let panel_frame = egui::Frame::default()
-                        .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, 100))
+                        .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, self.settings.panel_transparency))
                         .rounding(egui::Rounding::same(20.0))
                         .inner_margin(egui::Margin::same(50.0))
                         .shadow(egui::epaint::Shadow {

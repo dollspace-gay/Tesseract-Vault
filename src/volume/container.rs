@@ -86,6 +86,10 @@ pub enum ContainerError {
     /// Container is locked (already mounted)
     #[error("Container is locked (already mounted)")]
     Locked,
+
+    /// Other error
+    #[error("Container error: {0}")]
+    Other(String),
 }
 
 pub type Result<T> = std::result::Result<T, ContainerError>;
@@ -362,6 +366,201 @@ impl Container {
         Ok(())
     }
 
+    /// Exports an encrypted backup of the volume header and key slots
+    ///
+    /// This creates a portable backup file that can be used to recover
+    /// the volume if the header becomes corrupted. The backup is encrypted
+    /// with the provided password.
+    ///
+    /// # Arguments
+    ///
+    /// * `backup_path` - Path where the backup file will be created
+    /// * `password` - Password to encrypt the backup (can be different from volume password)
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if the backup was created successfully
+    ///
+    /// # Security Note
+    ///
+    /// The backup contains all key slots and volume metadata. It should be
+    /// stored securely. Anyone with access to the backup and the backup password
+    /// can decrypt the volume.
+    pub fn export_header_backup(&self, backup_path: impl AsRef<Path>, password: &str) -> Result<()> {
+        use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}};
+        use crate::crypto::kdf::Argon2Kdf;
+        use crate::crypto::KeyDerivation;
+        use crate::config::CryptoConfig;
+        use zeroize::Zeroizing;
+
+        // Serialize header and key slots
+        let header_bytes = self.header.to_bytes()?;
+        let keyslots_bytes = bincode::serialize(&self.key_slots)?;
+
+        // Combine header + keyslots
+        let mut backup_data = Vec::new();
+        backup_data.extend_from_slice(&header_bytes);
+        backup_data.extend_from_slice(&keyslots_bytes);
+
+        // Generate salt and nonce for backup encryption
+        let mut salt = [0u8; 32];
+        let mut nonce_bytes = [0u8; 12];
+        rand::thread_rng().fill_bytes(&mut salt);
+        rand::thread_rng().fill_bytes(&mut nonce_bytes);
+
+        // Derive encryption key from password
+        let kdf = Argon2Kdf::new(CryptoConfig::default());
+        let key = Zeroizing::new(kdf.derive_key(password.as_bytes(), &salt)
+            .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?);
+
+        // Encrypt the backup
+        let cipher = Aes256Gcm::new_from_slice(&key[..])
+            .map_err(|e| ContainerError::Other(format!("Cipher creation failed: {}", e)))?;
+        let nonce = Nonce::from(*aes_gcm::aead::generic_array::GenericArray::from_slice(&nonce_bytes));
+        let ciphertext = cipher.encrypt(&nonce, backup_data.as_ref())
+            .map_err(|e| ContainerError::Other(format!("Encryption failed: {}", e)))?;
+
+        // Create backup file with magic header
+        let mut backup_file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(backup_path)?;
+
+        // Write backup format:
+        // - Magic: "SCBAK01\0" (8 bytes)
+        // - Salt: 32 bytes
+        // - Nonce: 12 bytes
+        // - Ciphertext: variable length
+        backup_file.write_all(b"SCBAK01\0")?;
+        backup_file.write_all(&salt)?;
+        backup_file.write_all(&nonce_bytes)?;
+        backup_file.write_all(&ciphertext)?;
+        backup_file.sync_all()?;
+
+        Ok(())
+    }
+
+    /// Restores the volume header and key slots from an encrypted backup
+    ///
+    /// # Arguments
+    ///
+    /// * `backup_path` - Path to the backup file
+    /// * `password` - Password used to encrypt the backup
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if the restore was successful
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The backup file is invalid
+    /// - The password is incorrect
+    /// - The backup data is corrupted
+    ///
+    /// # Warning
+    ///
+    /// This overwrites the current header and key slots. Use with caution!
+    pub fn restore_from_backup(&mut self, backup_path: impl AsRef<Path>, password: &str) -> Result<()> {
+        use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}};
+        use crate::crypto::kdf::Argon2Kdf;
+        use crate::crypto::KeyDerivation;
+        use crate::config::CryptoConfig;
+        use zeroize::Zeroizing;
+
+        // Read backup file
+        let mut backup_file = File::open(backup_path)?;
+
+        // Read and verify magic
+        let mut magic = [0u8; 8];
+        backup_file.read_exact(&mut magic)?;
+        if &magic != b"SCBAK01\0" {
+            return Err(ContainerError::Other("Invalid backup file format".to_string()));
+        }
+
+        // Read salt and nonce
+        let mut salt = [0u8; 32];
+        let mut nonce_bytes = [0u8; 12];
+        backup_file.read_exact(&mut salt)?;
+        backup_file.read_exact(&mut nonce_bytes)?;
+
+        // Read ciphertext
+        let mut ciphertext = Vec::new();
+        backup_file.read_to_end(&mut ciphertext)?;
+
+        // Derive decryption key from password
+        let kdf = Argon2Kdf::new(CryptoConfig::default());
+        let key = Zeroizing::new(kdf.derive_key(password.as_bytes(), &salt)
+            .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?);
+
+        // Decrypt the backup
+        let cipher = Aes256Gcm::new_from_slice(&key[..])
+            .map_err(|e| ContainerError::Other(format!("Cipher creation failed: {}", e)))?;
+        let nonce = Nonce::from(*aes_gcm::aead::generic_array::GenericArray::from_slice(&nonce_bytes));
+        let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref())
+            .map_err(|_| ContainerError::Other("Decryption failed: incorrect password or corrupted backup".to_string()))?;
+
+        // Split into header and keyslots
+        if plaintext.len() < HEADER_SIZE {
+            return Err(ContainerError::Other("Backup data too small".to_string()));
+        }
+
+        let header_bytes = &plaintext[0..HEADER_SIZE];
+        let keyslots_bytes = &plaintext[HEADER_SIZE..];
+
+        // Deserialize header and keyslots
+        let header = VolumeHeader::from_bytes(header_bytes)?;
+        let key_slots: KeySlots = bincode::deserialize(keyslots_bytes)?;
+
+        // Write to container file
+        let file = self.file.as_mut()
+            .ok_or_else(|| ContainerError::Other("Container file not open".to_string()))?;
+
+        // Write header
+        file.seek(SeekFrom::Start(0))?;
+        header.write_to(file)?;
+
+        // Write key slots
+        file.seek(SeekFrom::Start(HEADER_SIZE as u64))?;
+        let mut padded_keyslots = bincode::serialize(&key_slots)?;
+        padded_keyslots.resize(KEYSLOTS_SIZE, 0);
+        file.write_all(&padded_keyslots)?;
+        file.sync_all()?;
+
+        // Update in-memory copies
+        self.header = header;
+        self.key_slots = key_slots;
+
+        Ok(())
+    }
+
+    /// Verifies the integrity of the volume header
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if the header is valid, Err otherwise
+    pub fn verify_header(&self) -> Result<()> {
+        // Check magic bytes are preserved
+        if self.header.salt().len() != 32 {
+            return Err(ContainerError::Other("Invalid header: bad salt size".to_string()));
+        }
+
+        if self.header.header_iv().len() != 12 {
+            return Err(ContainerError::Other("Invalid header: bad IV size".to_string()));
+        }
+
+        if self.header.sector_size() == 0 || self.header.sector_size() % 512 != 0 {
+            return Err(ContainerError::Other("Invalid header: bad sector size".to_string()));
+        }
+
+        // Verify at least one key slot is active
+        if self.key_slots.active_count() == 0 {
+            return Err(ContainerError::Other("Invalid header: no active key slots".to_string()));
+        }
+
+        Ok(())
+    }
+
     /// Locks the container (clears master key and closes file)
     pub fn lock(&mut self) {
         self.master_key = None;
@@ -574,5 +773,131 @@ mod tests {
         assert!(result.is_err());
 
         cleanup(&path);
+    }
+
+    #[test]
+    fn test_header_backup_and_restore() {
+        let container_path = temp_path("backup_container");
+        let backup_path = temp_path("backup.scbak");
+        cleanup(&container_path);
+        cleanup(&backup_path);
+
+        // Create a container
+        let container = Container::create(
+            &container_path,
+            1024 * 1024,
+            "ContainerPassword!",
+            4096,
+        ).unwrap();
+
+        // Export header backup
+        container.export_header_backup(&backup_path, "BackupPassword123!").unwrap();
+        assert!(backup_path.exists());
+
+        // Verify backup file has magic bytes
+        let mut backup_file = File::open(&backup_path).unwrap();
+        let mut magic = [0u8; 8];
+        backup_file.read_exact(&mut magic).unwrap();
+        assert_eq!(&magic, b"SCBAK01\0");
+
+        drop(container);
+
+        // Open container and restore from backup
+        let mut container = Container::open(&container_path, "ContainerPassword!").unwrap();
+
+        // Restore from backup
+        container.restore_from_backup(&backup_path, "BackupPassword123!").unwrap();
+
+        // Verify it still works
+        assert!(container.verify_header().is_ok());
+        assert_eq!(container.key_slots().active_count(), 1);
+
+        cleanup(&container_path);
+        cleanup(&backup_path);
+    }
+
+    #[test]
+    fn test_backup_wrong_password() {
+        let container_path = temp_path("backup_wrong_pw");
+        let backup_path = temp_path("backup_wrong.scbak");
+        cleanup(&container_path);
+        cleanup(&backup_path);
+
+        let container = Container::create(
+            &container_path,
+            1024 * 1024,
+            "Password!",
+            4096,
+        ).unwrap();
+
+        container.export_header_backup(&backup_path, "BackupPass!").unwrap();
+        drop(container);
+
+        // Try to restore with wrong password
+        let mut container = Container::open(&container_path, "Password!").unwrap();
+        let result = container.restore_from_backup(&backup_path, "WrongPassword!");
+        assert!(result.is_err());
+
+        cleanup(&container_path);
+        cleanup(&backup_path);
+    }
+
+    #[test]
+    fn test_verify_header() {
+        let path = temp_path("verify");
+        cleanup(&path);
+
+        let container = Container::create(
+            &path,
+            1024 * 1024,
+            "Test!",
+            4096,
+        ).unwrap();
+
+        // Verify header is valid
+        assert!(container.verify_header().is_ok());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_backup_preserves_multiple_keyslots() {
+        let container_path = temp_path("backup_multi_slots");
+        let backup_path = temp_path("backup_multi.scbak");
+        cleanup(&container_path);
+        cleanup(&backup_path);
+
+        let mut container = Container::create(
+            &container_path,
+            1024 * 1024,
+            "Password1!",
+            4096,
+        ).unwrap();
+
+        // Add second password
+        container.add_password("Password2!").unwrap();
+        assert_eq!(container.key_slots().active_count(), 2);
+
+        // Export backup
+        container.export_header_backup(&backup_path, "Backup!").unwrap();
+        drop(container);
+
+        // Restore and verify both passwords work
+        let mut container = Container::open(&container_path, "Password1!").unwrap();
+        container.restore_from_backup(&backup_path, "Backup!").unwrap();
+
+        assert_eq!(container.key_slots().active_count(), 2);
+
+        // Test both passwords still work
+        drop(container);
+        let container1 = Container::open(&container_path, "Password1!").unwrap();
+        assert!(container1.is_unlocked());
+        drop(container1);
+
+        let container2 = Container::open(&container_path, "Password2!").unwrap();
+        assert!(container2.is_unlocked());
+
+        cleanup(&container_path);
+        cleanup(&backup_path);
     }
 }

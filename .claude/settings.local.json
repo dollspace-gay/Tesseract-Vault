@@ -22,7 +22,14 @@
       "Bash(npm --version:*)",
       "Bash(npx create-tauri-app@latest:*)",
       "Bash(npm install:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(npm run tauri:*)",
+      "Bash(taskkill:*)",
+      "Bash(nul)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(if exist gui rmdir /s /q gui)",
+      "Bash(if not exist srcbin mkdir srcbin)"
     ],
     "deny": [],
     "ask": []

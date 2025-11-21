@@ -38,7 +38,7 @@ pub use config::{CryptoConfig, MAGIC_BYTES, NONCE_LEN};
 pub use crypto::aes_gcm::AesGcmEncryptor;
 pub use crypto::kdf::{Argon2Kdf, generate_salt_string};
 pub use crypto::streaming::{
-    ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig, StreamHeader, MAGIC_BYTES_V2,
+    ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig, StreamHeader, MAGIC_BYTES_V3,
 };
 pub use crypto::{Encryptor, KeyDerivation};
 pub use error::{CryptorError, Result};
@@ -59,8 +59,9 @@ use std::path::Path;
 /// 3. Encrypts the data in chunks using AES-256-GCM (memory-efficient)
 /// 4. Writes the encrypted file atomically
 ///
-/// Uses the V2 file format with chunked encryption, which allows encrypting
-/// files of any size without loading the entire file into memory.
+/// Uses the V3 file format with chunked encryption and NIST-compliant nonce
+/// construction, which allows encrypting files of any size without loading
+/// the entire file into memory.
 ///
 /// # Arguments
 ///
@@ -139,13 +140,13 @@ pub fn encrypt_file_validated(input_path: &Path, output_path: &Path, password: &
 /// Decrypts a file with a password.
 ///
 /// This is the high-level API for file decryption. It:
-/// 1. Detects the file format (v1 or v2)
+/// 1. Detects the file format (v1 or v3)
 /// 2. Reads and parses the encrypted file header
 /// 3. Derives the key from the password
-/// 4. Decrypts and authenticates the data (streaming for v2, in-memory for v1)
+/// 4. Decrypts and authenticates the data (streaming for v3, in-memory for v1)
 /// 5. Writes the plaintext atomically
 ///
-/// Supports both v1 (legacy, in-memory) and v2 (streaming, memory-efficient) formats.
+/// Supports both v1 (legacy, in-memory) and v3 (streaming, memory-efficient) formats.
 ///
 /// # Arguments
 ///
@@ -182,9 +183,9 @@ pub fn decrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
     file.read_exact(&mut magic_buf)?;
 
     // Check which format version
-    if &magic_buf == MAGIC_BYTES_V2 {
-        // V2 format: Use streaming decryption
-        decrypt_file_v2(input_path, output_path, password)
+    if &magic_buf == MAGIC_BYTES_V3 {
+        // V3 format: Use streaming decryption with NIST-compliant nonces
+        decrypt_file_v3(input_path, output_path, password)
     } else if &magic_buf == MAGIC_BYTES {
         // V1 format: Use legacy in-memory decryption
         // Reset file to beginning for v1 parsing
@@ -214,8 +215,8 @@ fn decrypt_file_v1(mut file: File, output_path: &Path, password: &str) -> Result
     Ok(())
 }
 
-/// Decrypts a v2 format file (streaming, memory-efficient).
-fn decrypt_file_v2(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
+/// Decrypts a v3 format file (streaming, memory-efficient, NIST-compliant).
+fn decrypt_file_v3(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
     // First, read just the header to get the salt for key derivation
     let mut file = File::open(input_path)?;
     let header = StreamHeader::read_from(&mut file)?;

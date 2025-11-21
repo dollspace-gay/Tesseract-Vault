@@ -6,22 +6,22 @@
 //! # Security Design
 //!
 //! - Each chunk is encrypted independently with a unique nonce
-//! - Nonces are derived deterministically from a base nonce + chunk counter
+//! - Nonces use NIST SP 800-38D compliant construction: Fixed(4 bytes) || Counter(8 bytes)
 //! - Each chunk maintains AEAD properties (authentication + encryption)
 //! - Chunk size is configurable (default: 1 MB)
-//! - Maximum file size: 2^64 bytes (nonce counter is u64)
+//! - Maximum file size: 2^64 chunks (~18 exabytes with 1MB chunks)
 //!
-//! # File Format V2
+//! # File Format V3
 //!
 //! ```text
 //! [Header]
-//!   - Magic bytes: "SCRYPTv2" (8 bytes)
-//!   - Version: 0x02 (1 byte)
+//!   - Magic bytes: "SCRYPTv3" (8 bytes)
+//!   - Version: 0x03 (1 byte)
 //!   - Header size: u32 (4 bytes)
 //!   - Flags: u8 (1 byte) - bit 0: compression enabled
 //!   - Salt length: u16 (2 bytes)
 //!   - Salt: variable
-//!   - Base nonce: 12 bytes
+//!   - Base nonce: 12 bytes (only first 4 bytes used as fixed field)
 //!   - Chunk size: u32 (4 bytes)
 //!   - Total chunks: u64 (8 bytes)
 //!   - Original file size: u64 (8 bytes)
@@ -32,11 +32,13 @@
 //!   - Chunk index: u64 (8 bytes)
 //!   - Data size: u32 (4 bytes)
 //!   - Encrypted data + auth tag
+//!   - Chunk nonce: base_nonce[0..4] || chunk_index.to_be_bytes() (NIST-compliant)
 //!
 //! [Chunk 1]
 //!   - Chunk index: u64 (8 bytes)
 //!   - Data size: u32 (4 bytes)
 //!   - Encrypted data + auth tag
+//!   - Chunk nonce: base_nonce[0..4] || chunk_index.to_be_bytes() (NIST-compliant)
 //!
 //! ...
 //! ```
@@ -59,11 +61,11 @@ pub const MIN_CHUNK_SIZE: usize = 4 * 1024;
 /// Maximum chunk size: 16 MB
 pub const MAX_CHUNK_SIZE: usize = 16 * 1024 * 1024;
 
-/// Magic bytes for streaming file format v2
-pub const MAGIC_BYTES_V2: &[u8] = b"SCRYPTv2";
+/// Magic bytes for streaming file format v3
+pub const MAGIC_BYTES_V3: &[u8] = b"SCRYPTv3";
 
 /// File format version
-pub const FORMAT_VERSION: u8 = 0x02;
+pub const FORMAT_VERSION: u8 = 0x03;
 
 /// Configuration for streaming encryption/decryption.
 #[derive(Debug, Clone, Copy)]
@@ -130,39 +132,41 @@ impl StreamConfig {
     }
 }
 
-/// Derives a unique nonce for a specific chunk.
+/// Derives a unique nonce for a specific chunk using NIST-compliant construction.
 ///
 /// # Security
 ///
-/// This function generates a unique nonce for each chunk by combining:
-/// - A base nonce (12 bytes, randomly generated once per file)
-/// - A chunk counter (u64, incremented for each chunk)
+/// This function generates a unique nonce for each chunk following NIST SP 800-38D
+/// recommendations for deterministic IV construction using concatenation:
 ///
-/// The nonce is constructed as: base_nonce[0..8] || (base_nonce[8..12] XOR chunk_counter_bytes)
+/// **Nonce Structure (12 bytes total):**
+/// - Fixed Field (4 bytes): base_nonce[0..4] - Random per file
+/// - Invocation Field (8 bytes): chunk_index - Counter (big-endian for standard compliance)
 ///
-/// This ensures:
-/// - Each chunk gets a unique nonce
+/// This construction ensures:
+/// - Each chunk gets a unique nonce (unique counter)
 /// - Nonces are deterministic (same chunk = same nonce)
-/// - No nonce reuse within a single file
-/// - Maximum file size: 2^64 chunks
+/// - No nonce reuse within a single file (monotonic counter)
+/// - Maximum file size: 2^64 chunks (~18 exabytes with 1MB chunks)
+/// - Compliant with NIST SP 800-38D Section 8.2.2
 ///
 /// # Arguments
 ///
-/// * `base_nonce` - 12-byte base nonce (randomly generated per file)
-/// * `chunk_index` - Index of the chunk (0-based)
+/// * `base_nonce` - 12-byte base nonce (only first 4 bytes used as fixed field)
+/// * `chunk_index` - Index of the chunk (0-based, used as invocation field)
 ///
 /// # Returns
 ///
-/// A 12-byte nonce unique to this chunk.
+/// A 12-byte nonce unique to this chunk: Fixed(4) || Counter(8)
 pub fn derive_chunk_nonce(base_nonce: &[u8; NONCE_LEN], chunk_index: u64) -> [u8; NONCE_LEN] {
-    let mut nonce = *base_nonce;
+    let mut nonce = [0u8; NONCE_LEN];
 
-    // XOR the last 8 bytes with the chunk counter
-    // This ensures each chunk has a unique nonce
-    let counter_bytes = chunk_index.to_le_bytes();
-    for i in 0..8 {
-        nonce[i + 4] ^= counter_bytes[i];
-    }
+    // NIST-compliant construction: Fixed Field || Invocation Field
+    // Fixed Field: First 4 bytes from base_nonce (random per file)
+    nonce[0..4].copy_from_slice(&base_nonce[0..4]);
+
+    // Invocation Field: 8-byte counter in big-endian (network byte order, standard convention)
+    nonce[4..12].copy_from_slice(&chunk_index.to_be_bytes());
 
     nonce
 }
@@ -386,7 +390,7 @@ impl StreamHeader {
     /// Writes the header to a writer.
     pub fn write_to<W: Write>(&self, writer: &mut W) -> Result<()> {
         // Magic bytes
-        writer.write_all(MAGIC_BYTES_V2)?;
+        writer.write_all(MAGIC_BYTES_V3)?;
 
         // Version
         writer.write_all(&[FORMAT_VERSION])?;
@@ -431,7 +435,7 @@ impl StreamHeader {
         // Magic bytes
         let mut magic = [0u8; 8];
         reader.read_exact(&mut magic)?;
-        if magic != MAGIC_BYTES_V2 {
+        if magic != MAGIC_BYTES_V3 {
             return Err(CryptorError::InvalidFormat);
         }
 
@@ -1513,7 +1517,7 @@ mod tests {
         encryptor.encrypt_to(&mut output).unwrap();
 
         // Verify header is present
-        assert!(output.starts_with(MAGIC_BYTES_V2));
+        assert!(output.starts_with(MAGIC_BYTES_V3));
         assert!(output.len() > test_data.len()); // Encrypted data should be larger
     }
 
@@ -2033,7 +2037,7 @@ mod tests {
         encryptor.encrypt_to_parallel(&mut output, Some(4)).unwrap();
 
         // Verify header is present
-        assert!(output.starts_with(MAGIC_BYTES_V2));
+        assert!(output.starts_with(MAGIC_BYTES_V3));
         assert!(output.len() > test_data.len());
     }
 

@@ -51,13 +51,16 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-/// Encrypts a file with a password.
+/// Encrypts a file with a password using streaming (chunked) encryption.
 ///
 /// This is the high-level API for file encryption. It:
-/// 1. Reads the input file
+/// 1. Opens the input file for streaming
 /// 2. Derives a key from the password using Argon2id
-/// 3. Encrypts the data using AES-256-GCM
+/// 3. Encrypts the data in chunks using AES-256-GCM (memory-efficient)
 /// 4. Writes the encrypted file atomically
+///
+/// Uses the V2 file format with chunked encryption, which allows encrypting
+/// files of any size without loading the entire file into memory.
 ///
 /// # Arguments
 ///
@@ -85,24 +88,29 @@ use std::path::Path;
 /// ).unwrap();
 /// ```
 pub fn encrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
-    let plaintext = storage::read_file(input_path)?;
-
+    // Derive encryption key from password
     let salt = generate_salt_string();
     let kdf = Argon2Kdf::default();
     let key = kdf.derive_key_with_salt_string(password.as_bytes(), &salt)?;
 
-    let encryptor = AesGcmEncryptor::new();
-    let mut nonce_bytes = vec![0u8; encryptor.nonce_len()];
-    ArgonRng.fill_bytes(&mut nonce_bytes);
+    // Generate base nonce for chunk nonce derivation
+    let mut base_nonce = [0u8; NONCE_LEN];
+    ArgonRng.fill_bytes(&mut base_nonce);
 
-    let ciphertext = encryptor.encrypt(&key, &nonce_bytes, &plaintext)?;
+    // Open input file for chunked reading
+    let config = StreamConfig::default();
+    let reader = ChunkedReader::open(input_path, config)?;
 
+    // Create chunked encryptor
+    let encryptor = Box::new(AesGcmEncryptor::new());
+    let salt_string = salt.as_str().to_string();
+    let chunked_encryptor = ChunkedEncryptor::new(reader, encryptor, key, base_nonce, salt_string);
+
+    // Encrypt to output file atomically
     storage::write_atomically(output_path, |file| {
-        match storage::format::write_encrypted_file(file, &salt, &nonce_bytes, &ciphertext) {
-            Ok(()) => Ok(()),
-            Err(CryptorError::Io(io_err)) => Err(io_err),
-            Err(e) => Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
-        }
+        chunked_encryptor
+            .encrypt_to(file)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
     })?;
 
     Ok(())
@@ -131,10 +139,13 @@ pub fn encrypt_file_validated(input_path: &Path, output_path: &Path, password: &
 /// Decrypts a file with a password.
 ///
 /// This is the high-level API for file decryption. It:
-/// 1. Reads and parses the encrypted file header
-/// 2. Derives the key from the password
-/// 3. Decrypts and authenticates the data
-/// 4. Writes the plaintext atomically
+/// 1. Detects the file format (v1 or v2)
+/// 2. Reads and parses the encrypted file header
+/// 3. Derives the key from the password
+/// 4. Decrypts and authenticates the data (streaming for v2, in-memory for v1)
+/// 5. Writes the plaintext atomically
+///
+/// Supports both v1 (legacy, in-memory) and v2 (streaming, memory-efficient) formats.
 ///
 /// # Arguments
 ///
@@ -162,7 +173,31 @@ pub fn encrypt_file_validated(input_path: &Path, output_path: &Path, password: &
 /// ).unwrap();
 /// ```
 pub fn decrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
+    use crate::config::MAGIC_BYTES;
+
     let mut file = File::open(input_path)?;
+
+    // Read magic bytes to detect format version
+    let mut magic_buf = [0u8; 8];
+    file.read_exact(&mut magic_buf)?;
+
+    // Check which format version
+    if &magic_buf == MAGIC_BYTES_V2 {
+        // V2 format: Use streaming decryption
+        decrypt_file_v2(input_path, output_path, password)
+    } else if &magic_buf == MAGIC_BYTES {
+        // V1 format: Use legacy in-memory decryption
+        // Reset file to beginning for v1 parsing
+        use std::io::Seek;
+        file.seek(std::io::SeekFrom::Start(0))?;
+        decrypt_file_v1(file, output_path, password)
+    } else {
+        Err(CryptorError::InvalidFormat)
+    }
+}
+
+/// Decrypts a v1 format file (legacy, in-memory).
+fn decrypt_file_v1(mut file: File, output_path: &Path, password: &str) -> Result<()> {
     let header = storage::format::read_encrypted_header(&mut file)?;
 
     let mut ciphertext = Vec::new();
@@ -175,6 +210,33 @@ pub fn decrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
     let plaintext = encryptor.decrypt(&key, &header.nonce, &ciphertext)?;
 
     storage::write_file_atomic(output_path, &plaintext)?;
+
+    Ok(())
+}
+
+/// Decrypts a v2 format file (streaming, memory-efficient).
+fn decrypt_file_v2(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
+    // First, read just the header to get the salt for key derivation
+    let mut file = File::open(input_path)?;
+    let header = StreamHeader::read_from(&mut file)?;
+
+    // Derive key from password using salt from header
+    let kdf = Argon2Kdf::default();
+    let salt = argon2::password_hash::SaltString::from_b64(&header.salt)
+        .map_err(|e| CryptorError::PasswordHash(e.to_string()))?;
+    let key = kdf.derive_key_with_salt_string(password.as_bytes(), &salt)?;
+
+    // Reopen file for full decryption with correct key
+    let file = File::open(input_path)?;
+    let encryptor = Box::new(AesGcmEncryptor::new());
+    let mut chunked_decryptor = ChunkedDecryptor::new(file, encryptor, key)?;
+
+    // Decrypt to output file atomically
+    storage::write_atomically(output_path, |output_file| {
+        chunked_decryptor
+            .decrypt_to(output_file)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+    })?;
 
     Ok(())
 }

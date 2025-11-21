@@ -164,8 +164,7 @@ impl InMemoryFilesystem {
         let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
-        #[allow(deprecated)]
-        let nonce = Nonce::clone_from_slice(&nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes).clone();
         let ciphertext = cipher.encrypt(&nonce, data)
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
@@ -191,8 +190,7 @@ impl InMemoryFilesystem {
         let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
-        #[allow(deprecated)]
-        let nonce = Nonce::clone_from_slice(&nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes).clone();
         let plaintext = cipher.decrypt(&nonce, ciphertext)
             .map_err(|_| FilesystemError::CryptoError("Decryption failed".to_string()))?;
 

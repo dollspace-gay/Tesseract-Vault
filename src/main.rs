@@ -44,6 +44,9 @@ enum Commands {
     /// Encrypted volume management commands
     #[command(subcommand)]
     Volume(VolumeCommands),
+    /// Daemon management commands
+    #[command(subcommand)]
+    Daemon(DaemonCommands),
 }
 
 /// Volume subcommands
@@ -168,6 +171,25 @@ enum VolumeCommands {
     },
 }
 
+/// Daemon subcommands
+#[derive(Subcommand, Debug)]
+enum DaemonCommands {
+    /// Start the daemon in foreground mode
+    Start,
+    /// Stop the running daemon
+    Stop,
+    /// Check if the daemon is running
+    Status,
+    /// Install the daemon as a system service
+    InstallService,
+    /// Uninstall the daemon system service
+    UninstallService,
+    /// Start the system service
+    StartService,
+    /// Stop the system service
+    StopService,
+}
+
 /// Main application entry point
 fn main() -> Result<(), CryptorError> {
     let cli = Cli::parse();
@@ -185,6 +207,9 @@ fn main() -> Result<(), CryptorError> {
         }
         Commands::Volume(volume_cmd) => {
             handle_volume_command(volume_cmd)?;
+        }
+        Commands::Daemon(daemon_cmd) => {
+            handle_daemon_command(daemon_cmd)?;
         }
     }
 
@@ -323,22 +348,79 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                 ))?;
             println!("✓ Volume unmounted.");
         }
-        VolumeCommands::Unmount { path: _path } => {
-            // This is a placeholder - in a real implementation, we'd need a daemon
-            // or persistent state to track mounts across processes
-            println!("Note: Unmount requires a running volume manager daemon.");
-            println!("Currently, volumes are automatically unmounted when the mount process exits.");
-            return Err(CryptorError::Io(
-                std::io::Error::new(std::io::ErrorKind::Other, "Unmount not yet implemented")
-            ));
+        VolumeCommands::Unmount { path } => {
+            use secure_cryptor::daemon::DaemonClient;
+
+            // Try to use daemon for unmount
+            let client = DaemonClient::new();
+
+            if !client.is_running() {
+                println!("Error: Daemon is not running.");
+                println!("Start the daemon with: secure-cryptor daemon start");
+                return Err(CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, "Daemon not running")
+                ));
+            }
+
+            // Unmount by path (could be container or mount point)
+            match client.unmount(path.clone()) {
+                Ok(response) => {
+                    if let secure_cryptor::daemon::DaemonResponse::Success { message } = response {
+                        println!("✓ {}", message);
+                    } else {
+                        println!("✓ Volume unmounted successfully.");
+                    }
+                }
+                Err(e) => {
+                    return Err(CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, format!("Unmount failed: {}", e))
+                    ));
+                }
+            }
         }
         VolumeCommands::List => {
-            // This is a placeholder - in a real implementation, we'd query a daemon
-            println!("Note: List requires a running volume manager daemon.");
-            println!("Currently, this feature is not yet implemented.");
-            return Err(CryptorError::Io(
-                std::io::Error::new(std::io::ErrorKind::Other, "List not yet implemented")
-            ));
+            use secure_cryptor::daemon::DaemonClient;
+
+            // Try to use daemon for list
+            let client = DaemonClient::new();
+
+            if !client.is_running() {
+                println!("Error: Daemon is not running.");
+                println!("Start the daemon with: secure-cryptor daemon start");
+                return Err(CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, "Daemon not running")
+                ));
+            }
+
+            match client.list() {
+                Ok(response) => {
+                    if let secure_cryptor::daemon::DaemonResponse::MountList { mounts } = response {
+                        if mounts.is_empty() {
+                            println!("No volumes currently mounted.");
+                        } else {
+                            println!("Mounted volumes:");
+                            println!();
+                            for mount in mounts {
+                                println!("  Container: {}", mount.container_path.display());
+                                println!("  Mount Point: {}", mount.mount_point.display());
+                                println!("  Read-Only: {}", mount.read_only);
+                                println!("  Hidden: {}", mount.is_hidden);
+                                if let Some(pid) = mount.pid {
+                                    println!("  PID: {}", pid);
+                                }
+                                println!();
+                            }
+                        }
+                    } else {
+                        println!("Unexpected response from daemon.");
+                    }
+                }
+                Err(e) => {
+                    return Err(CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, format!("List failed: {}", e))
+                    ));
+                }
+            }
         }
         VolumeCommands::Info { container } => {
             println!("Volume information for '{}'", container.display());
@@ -716,6 +798,185 @@ fn handle_volume_command(_cmd: VolumeCommands) -> Result<(), CryptorError> {
     eprintln!("Error: Encrypted volumes feature is not enabled.");
     eprintln!("Please recompile with --features encrypted-volumes");
     std::process::exit(1);
+}
+
+/// Handle daemon subcommands
+fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
+    use secure_cryptor::daemon::{DaemonServer, DaemonClient};
+
+    match cmd {
+        DaemonCommands::Start => {
+            println!("Starting Secure Cryptor Daemon...");
+            let server = DaemonServer::new();
+            server.run()
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+        }
+        DaemonCommands::Stop => {
+            println!("Stopping Secure Cryptor Daemon...");
+            let client = DaemonClient::new();
+
+            if !client.is_running() {
+                println!("Daemon is not running.");
+                return Ok(());
+            }
+
+            match client.send_command(secure_cryptor::daemon::DaemonCommand::Shutdown) {
+                Ok(_) => println!("✓ Daemon stopped successfully."),
+                Err(e) => {
+                    return Err(CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to stop daemon: {}", e))
+                    ));
+                }
+            }
+        }
+        DaemonCommands::Status => {
+            let client = DaemonClient::new();
+
+            if client.is_running() {
+                println!("✓ Daemon is running.");
+
+                // Try to get ping response
+                match client.send_command(secure_cryptor::daemon::DaemonCommand::Ping) {
+                    Ok(response) => {
+                        if let secure_cryptor::daemon::DaemonResponse::Pong = response {
+                            println!("  Status: Healthy");
+                        }
+                    }
+                    Err(_) => {
+                        println!("  Status: Not responding");
+                    }
+                }
+            } else {
+                println!("✗ Daemon is not running.");
+            }
+        }
+        DaemonCommands::InstallService => {
+            #[cfg(windows)]
+            {
+                use secure_cryptor::daemon::service;
+                service::install_service()
+                    .map_err(|e| CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    ))?;
+            }
+            #[cfg(target_os = "linux")]
+            {
+                use secure_cryptor::daemon::service;
+                service::install_service()
+                    .map_err(|e| CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    ))?;
+            }
+            #[cfg(target_os = "macos")]
+            {
+                use secure_cryptor::daemon::service;
+                service::install_service()
+                    .map_err(|e| CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    ))?;
+            }
+        }
+        DaemonCommands::UninstallService => {
+            #[cfg(windows)]
+            {
+                use secure_cryptor::daemon::service;
+                service::uninstall_service()
+                    .map_err(|e| CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    ))?;
+            }
+            #[cfg(target_os = "linux")]
+            {
+                use secure_cryptor::daemon::service;
+                service::uninstall_service()
+                    .map_err(|e| CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    ))?;
+            }
+            #[cfg(target_os = "macos")]
+            {
+                use secure_cryptor::daemon::service;
+                service::uninstall_service()
+                    .map_err(|e| CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    ))?;
+            }
+        }
+        DaemonCommands::StartService => {
+            #[cfg(windows)]
+            {
+                use std::process::Command;
+                let output = Command::new("sc")
+                    .args(&["start", "SecureCryptorDaemon"])
+                    .output()
+                    .map_err(|e| CryptorError::Io(e))?;
+
+                if output.status.success() {
+                    println!("✓ Service started successfully.");
+                } else {
+                    let error = String::from_utf8_lossy(&output.stderr);
+                    return Err(CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to start service: {}", error))
+                    ));
+                }
+            }
+            #[cfg(target_os = "linux")]
+            {
+                use secure_cryptor::daemon::service;
+                service::start_service()
+                    .map_err(|e| CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    ))?;
+            }
+            #[cfg(target_os = "macos")]
+            {
+                use secure_cryptor::daemon::service;
+                service::load_service()
+                    .map_err(|e| CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    ))?;
+            }
+        }
+        DaemonCommands::StopService => {
+            #[cfg(windows)]
+            {
+                use std::process::Command;
+                let output = Command::new("sc")
+                    .args(&["stop", "SecureCryptorDaemon"])
+                    .output()
+                    .map_err(|e| CryptorError::Io(e))?;
+
+                if output.status.success() {
+                    println!("✓ Service stopped successfully.");
+                } else {
+                    let error = String::from_utf8_lossy(&output.stderr);
+                    return Err(CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to stop service: {}", error))
+                    ));
+                }
+            }
+            #[cfg(target_os = "linux")]
+            {
+                use secure_cryptor::daemon::service;
+                service::stop_service()
+                    .map_err(|e| CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    ))?;
+            }
+            #[cfg(target_os = "macos")]
+            {
+                use secure_cryptor::daemon::service;
+                service::unload_service()
+                    .map_err(|e| CryptorError::Io(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    ))?;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Parse a size string like "100M", "1G", "500M" into bytes

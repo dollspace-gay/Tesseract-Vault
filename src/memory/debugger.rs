@@ -295,7 +295,7 @@ pub mod anti_debug {
             // Debuggers sometimes modify page protections
             let mut mbi: MEMORY_BASIC_INFORMATION = std::mem::zeroed();
             let result = VirtualQuery(
-                check_debugger_artifacts as *const _ as *const _,
+                check_debugger_artifacts as usize as *const winapi::ctypes::c_void,
                 &mut mbi,
                 std::mem::size_of::<MEMORY_BASIC_INFORMATION>()
             );

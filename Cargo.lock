@@ -4728,6 +4728,7 @@ dependencies = [
  "web-sys",
  "winapi",
  "windows 0.61.3",
+ "windows-service",
  "winfsp",
  "winreg",
  "winres",
@@ -6142,6 +6143,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56f42bd332cc6c8eac5af113fc0c1fd6a8fd2aa08a0119358686e5160d0586c6"
 dependencies = [
  "windows-link 0.1.3",
+]
+
+[[package]]
+name = "windows-service"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d24d6bcc7f734a4091ecf8d7a64c5f7d7066f45585c1861eba06449909609c8a"
+dependencies = [
+ "bitflags 2.10.0",
+ "widestring",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

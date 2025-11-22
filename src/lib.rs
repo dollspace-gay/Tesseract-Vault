@@ -43,6 +43,7 @@ pub use crypto::streaming::{
 };
 pub use crypto::{Encryptor, KeyDerivation};
 pub use error::{CryptorError, Result};
+pub use memory::allocator::{SecureAllocator, AllocatorStats};
 pub use memory::pool::{EncryptedAllocation, EncryptedMemoryPool, SecurityLevel};
 pub use memory::scrub::{scrub_bytes, scrub_bytes_pattern, scrub_and_verify, ScrubPattern, ScrubStats, ScrubGuard};
 pub use memory::LockedMemory;

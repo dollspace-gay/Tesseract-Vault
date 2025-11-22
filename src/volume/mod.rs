@@ -10,6 +10,7 @@ pub mod filesystem;
 pub mod header;
 pub mod keyslot;
 pub mod manager;
+pub mod migration;
 pub mod mount;
 pub mod operations;
 pub mod sector;
@@ -20,6 +21,7 @@ pub use filesystem::{EncryptedFilesystem, FileAttr, FileType, FilesystemError, D
 pub use header::VolumeHeader;
 pub use keyslot::{KeySlots, MasterKey, MAX_KEY_SLOTS};
 pub use manager::{VolumeManager, VolumeManagerError, MountedVolumeInfo};
+pub use migration::{VolumeMigration, MigrationBackup, MigrationError};
 pub use mount::{MountOptions, MountError};
 pub use operations::InMemoryFilesystem;
 pub use sector::{SectorCipher, SECTOR_SIZE_512, SECTOR_SIZE_4K};

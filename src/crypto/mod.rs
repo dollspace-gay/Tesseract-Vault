@@ -9,6 +9,9 @@ pub mod pqc;
 pub mod signatures;
 pub mod streaming;
 
+#[cfg(test)]
+mod pqc_tests;
+
 use crate::error::Result;
 use zeroize::Zeroizing;
 

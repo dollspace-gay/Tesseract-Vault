@@ -157,6 +157,15 @@ enum VolumeCommands {
         #[arg(short, long)]
         offset: String,
     },
+    /// Migrate a V1 volume to V2 with post-quantum cryptography
+    MigrateToPqc {
+        /// Path to the volume container
+        #[arg(short, long)]
+        container: PathBuf,
+        /// Path to save the PQC keypair (optional, will save to container.pqc-keypair if not specified)
+        #[arg(short, long)]
+        keypair_output: Option<PathBuf>,
+    },
 }
 
 /// Main application entry point
@@ -590,6 +599,66 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                 println!("✗ No volume header found at offset {} ({} MB).",
                     hidden_offset, hidden_offset / 1024 / 1024);
                 println!("  No hidden volume exists at this location.");
+            }
+        }
+        VolumeCommands::MigrateToPqc { container, keypair_output } => {
+            use secure_cryptor::volume::VolumeMigration;
+            use std::fs;
+
+            println!("Migrating volume '{}' to V2 with post-quantum cryptography", container.display());
+            println!();
+            println!("⚠️  WARNING: This will modify your volume header.");
+            println!("   A backup will be created, but please ensure you have backups of your data.");
+            println!();
+
+            // Get password to unlock volume
+            let password = validation::get_password()?;
+
+            // Create migration manager
+            let mut migration = VolumeMigration::new(&container);
+
+            // Perform migration
+            println!("Starting migration...");
+            let pqc_keypair = migration.migrate(&password)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                ))?;
+
+            // Determine output path for keypair
+            let keypair_path = keypair_output.unwrap_or_else(|| {
+                let mut path = container.clone();
+                path.set_extension("pqc-keypair");
+                path
+            });
+
+            // Save PQC keypair
+            let (ek_bytes, dk_bytes) = pqc_keypair.to_bytes();
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let keypair_data = serde_json::json!({
+                "encapsulation_key": hex::encode(&ek_bytes),
+                "decapsulation_key": hex::encode(&*dk_bytes),
+                "algorithm": "ML-KEM-1024",
+                "created_timestamp": timestamp,
+            });
+
+            fs::write(&keypair_path, serde_json::to_string_pretty(&keypair_data)?)
+                .map_err(|e| CryptorError::Io(e))?;
+
+            println!();
+            println!("✓ Migration successful!");
+            println!("  Volume is now V2 with ML-KEM-1024 post-quantum cryptography");
+            println!("  PQC keypair saved to: {}", keypair_path.display());
+
+            if let Some(backup_path) = migration.backup_path() {
+                println!("  Backup saved to: {}", backup_path.display());
+                println!();
+                println!("IMPORTANT:");
+                println!("  - Keep the PQC keypair file secure - you need it to access the volume");
+                println!("  - Keep the backup file until you verify the migration worked");
+                println!("  - Test mounting the volume before deleting the backup");
             }
         }
     }

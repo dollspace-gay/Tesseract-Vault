@@ -12,8 +12,14 @@ use thiserror::Error;
 /// "SECVOL01" in ASCII
 const MAGIC: [u8; 8] = [0x53, 0x45, 0x43, 0x56, 0x4F, 0x4C, 0x30, 0x31];
 
+/// Volume format version 1 (classical cryptography only)
+const VERSION_V1: u32 = 1;
+
+/// Volume format version 2 (includes post-quantum cryptography)
+const VERSION_V2: u32 = 2;
+
 /// Current volume format version
-const VERSION: u32 = 1;
+const VERSION: u32 = VERSION_V2;
 
 /// Size of the volume header in bytes (4KB aligned)
 pub const HEADER_SIZE: usize = 4096;
@@ -24,6 +30,34 @@ pub const HEADER_SIZE: usize = 4096;
 pub enum CipherAlgorithm {
     /// AES-256-GCM (default)
     Aes256Gcm = 1,
+}
+
+/// Post-quantum cryptography algorithm identifier
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum PqAlgorithm {
+    /// No PQC (classical cryptography only) - V1 compatibility
+    None = 0,
+    /// ML-KEM-1024 (FIPS 203) - Quantum-resistant key encapsulation
+    MlKem1024 = 1,
+}
+
+/// Post-quantum cryptography metadata for volume encryption
+///
+/// This structure is serialized to JSON and stored after the main header.
+/// It contains ML-KEM-1024 key encapsulation data for quantum-resistant
+/// volume encryption.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PqVolumeMetadata {
+    /// PQ algorithm used
+    pub algorithm: PqAlgorithm,
+    /// ML-KEM encapsulation key (public key) - base64 encoded
+    pub encapsulation_key: String,
+    /// ML-KEM ciphertext from encapsulation - base64 encoded
+    pub ciphertext: String,
+    /// Encrypted decapsulation key (private key) - base64 encoded
+    /// Format: nonce (12 bytes) + encrypted_key + auth tag
+    pub encrypted_decapsulation_key: String,
 }
 
 /// Volume header containing all metadata
@@ -56,9 +90,23 @@ pub struct VolumeHeader {
     /// Last modification timestamp (Unix epoch seconds)
     modified_at: u64,
 
-    /// Reserved space for future use (256 bytes)
+    /// Post-quantum cryptography algorithm (V2+)
+    /// Set to None for V1 compatibility
+    pq_algorithm: PqAlgorithm,
+
+    /// Offset to PQ metadata from start of file (V2+)
+    /// For V2 with PQC: typically HEADER_SIZE (4096)
+    /// For V1 or V2 without PQC: 0
+    pq_metadata_offset: u64,
+
+    /// Size of PQ metadata in bytes (V2+)
+    /// For V1 or V2 without PQC: 0
+    pq_metadata_size: u32,
+
+    /// Reserved space for future use (235 bytes in V2)
+    /// Reduced from 256 bytes to accommodate new PQC fields
     #[serde(with = "BigArray")]
-    reserved: [u8; 256],
+    reserved: [u8; 235],
 }
 
 /// Errors that can occur when working with volume headers
@@ -119,7 +167,52 @@ impl VolumeHeader {
             sector_size,
             created_at: now,
             modified_at: now,
-            reserved: [0u8; 256],
+            pq_algorithm: PqAlgorithm::None,  // Can be upgraded later
+            pq_metadata_offset: 0,
+            pq_metadata_size: 0,
+            reserved: [0u8; 235],
+        }
+    }
+
+    /// Creates a new V2 volume header with post-quantum cryptography enabled
+    ///
+    /// # Arguments
+    ///
+    /// * `volume_size` - Total size of the encrypted volume in bytes
+    /// * `sector_size` - Size of each sector in bytes
+    /// * `salt` - 32-byte salt for key derivation
+    /// * `header_iv` - 12-byte IV for header encryption
+    /// * `pq_metadata_size` - Size of the PQ metadata block
+    ///
+    /// # Returns
+    ///
+    /// A new V2 `VolumeHeader` with PQC enabled
+    pub fn new_with_pqc(
+        volume_size: u64,
+        sector_size: u32,
+        salt: [u8; 32],
+        header_iv: [u8; 12],
+        pq_metadata_size: u32,
+    ) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("System time before Unix epoch")
+            .as_secs();
+
+        Self {
+            magic: MAGIC,
+            version: VERSION_V2,
+            cipher: CipherAlgorithm::Aes256Gcm,
+            salt,
+            header_iv,
+            volume_size,
+            sector_size,
+            created_at: now,
+            modified_at: now,
+            pq_algorithm: PqAlgorithm::MlKem1024,
+            pq_metadata_offset: HEADER_SIZE as u64,  // PQ metadata follows header
+            pq_metadata_size,
+            reserved: [0u8; 235],
         }
     }
 
@@ -180,8 +273,8 @@ impl VolumeHeader {
             return Err(HeaderError::InvalidMagic);
         }
 
-        // Check version compatibility
-        if header.version != VERSION {
+        // Check version compatibility (support V1 and V2)
+        if header.version != VERSION_V1 && header.version != VERSION_V2 {
             return Err(HeaderError::UnsupportedVersion(header.version));
         }
 
@@ -264,6 +357,112 @@ impl VolumeHeader {
     pub fn cipher(&self) -> CipherAlgorithm {
         self.cipher
     }
+
+    /// Returns the PQ algorithm (V2+ only)
+    pub fn pq_algorithm(&self) -> PqAlgorithm {
+        self.pq_algorithm
+    }
+
+    /// Returns true if this volume uses post-quantum cryptography
+    pub fn has_pqc(&self) -> bool {
+        self.pq_algorithm != PqAlgorithm::None && self.pq_metadata_size > 0
+    }
+
+    /// Returns the offset to PQ metadata from start of file
+    pub fn pq_metadata_offset(&self) -> u64 {
+        self.pq_metadata_offset
+    }
+
+    /// Returns the size of PQ metadata in bytes
+    pub fn pq_metadata_size(&self) -> u32 {
+        self.pq_metadata_size
+    }
+
+    /// Returns the header version
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+
+    /// Returns true if this is a V2 header
+    pub fn is_v2(&self) -> bool {
+        self.version == VERSION_V2
+    }
+}
+
+/// Helper functions for PQ metadata I/O
+impl PqVolumeMetadata {
+    /// Serializes PQ metadata to JSON bytes
+    ///
+    /// # Returns
+    ///
+    /// JSON-encoded byte vector
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails
+    pub fn to_json_bytes(&self) -> Result<Vec<u8>, HeaderError> {
+        serde_json::to_vec(self)
+            .map_err(|e| HeaderError::Serialization(bincode::Error::from(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string()
+            ))))
+    }
+
+    /// Deserializes PQ metadata from JSON bytes
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - JSON-encoded byte slice
+    ///
+    /// # Returns
+    ///
+    /// Deserialized PQ metadata
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if deserialization fails
+    pub fn from_json_bytes(bytes: &[u8]) -> Result<Self, HeaderError> {
+        serde_json::from_slice(bytes)
+            .map_err(|e| HeaderError::Serialization(bincode::Error::from(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string()
+            ))))
+    }
+
+    /// Writes PQ metadata to a writer
+    ///
+    /// # Arguments
+    ///
+    /// * `writer` - The writer to write to
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization or writing fails
+    pub fn write_to<W: Write>(&self, writer: &mut W) -> Result<(), HeaderError> {
+        let bytes = self.to_json_bytes()?;
+        writer.write_all(&bytes)?;
+        Ok(())
+    }
+
+    /// Reads PQ metadata from a reader
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - The reader to read from
+    /// * `size` - Expected size of metadata in bytes
+    ///
+    /// # Returns
+    ///
+    /// Deserialized PQ metadata
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if reading or deserialization fails
+    pub fn read_from<R: Read>(reader: &mut R, size: u32) -> Result<Self, HeaderError> {
+        let mut bytes = vec![0u8; size as usize];
+        reader.read_exact(&mut bytes)?;
+        Self::from_json_bytes(&bytes)
+    }
 }
 
 #[cfg(test)]
@@ -341,5 +540,95 @@ mod tests {
 
         assert!(header.modified_at > original_modified);
         assert_eq!(header.created_at, original_modified);
+    }
+
+    #[test]
+    fn test_v2_header_with_pqc() {
+        let salt = [5u8; 32];
+        let iv = [6u8; 12];
+        let pq_size = 500; // Example PQ metadata size
+        let header = VolumeHeader::new_with_pqc(1024 * 1024, 4096, salt, iv, pq_size);
+
+        assert_eq!(header.version, VERSION_V2);
+        assert_eq!(header.pq_algorithm, PqAlgorithm::MlKem1024);
+        assert_eq!(header.pq_metadata_offset, HEADER_SIZE as u64);
+        assert_eq!(header.pq_metadata_size, pq_size);
+        assert!(header.has_pqc());
+        assert!(header.is_v2());
+    }
+
+    #[test]
+    fn test_v2_header_serialization() {
+        let salt = [7u8; 32];
+        let iv = [8u8; 12];
+        let header = VolumeHeader::new_with_pqc(512 * 1024, 512, salt, iv, 1000);
+
+        let bytes = header.to_bytes().unwrap();
+        assert_eq!(bytes.len(), HEADER_SIZE);
+
+        let deserialized = VolumeHeader::from_bytes(&bytes).unwrap();
+        assert_eq!(deserialized.version, VERSION_V2);
+        assert_eq!(deserialized.pq_algorithm, PqAlgorithm::MlKem1024);
+        assert_eq!(deserialized.pq_metadata_offset, HEADER_SIZE as u64);
+        assert_eq!(deserialized.pq_metadata_size, 1000);
+        assert!(deserialized.has_pqc());
+    }
+
+    #[test]
+    fn test_pq_metadata_serialization() {
+        let metadata = PqVolumeMetadata {
+            algorithm: PqAlgorithm::MlKem1024,
+            encapsulation_key: "test_ek".to_string(),
+            ciphertext: "test_ct".to_string(),
+            encrypted_decapsulation_key: "test_edk".to_string(),
+        };
+
+        let bytes = metadata.to_json_bytes().unwrap();
+        let deserialized = PqVolumeMetadata::from_json_bytes(&bytes).unwrap();
+
+        assert_eq!(deserialized.algorithm, PqAlgorithm::MlKem1024);
+        assert_eq!(deserialized.encapsulation_key, "test_ek");
+        assert_eq!(deserialized.ciphertext, "test_ct");
+        assert_eq!(deserialized.encrypted_decapsulation_key, "test_edk");
+    }
+
+    #[test]
+    fn test_pq_metadata_write_read() {
+        let metadata = PqVolumeMetadata {
+            algorithm: PqAlgorithm::MlKem1024,
+            encapsulation_key: "ek_base64".to_string(),
+            ciphertext: "ct_base64".to_string(),
+            encrypted_decapsulation_key: "edk_base64".to_string(),
+        };
+
+        let mut buffer = Vec::new();
+        metadata.write_to(&mut buffer).unwrap();
+
+        let size = buffer.len() as u32;
+        let mut cursor = Cursor::new(buffer);
+        let read_metadata = PqVolumeMetadata::read_from(&mut cursor, size).unwrap();
+
+        assert_eq!(read_metadata.algorithm, metadata.algorithm);
+        assert_eq!(read_metadata.encapsulation_key, metadata.encapsulation_key);
+        assert_eq!(read_metadata.ciphertext, metadata.ciphertext);
+        assert_eq!(read_metadata.encrypted_decapsulation_key, metadata.encrypted_decapsulation_key);
+    }
+
+    #[test]
+    fn test_backward_compatibility_v1() {
+        // Create a V2 header without PQC (should act like V1)
+        let salt = [9u8; 32];
+        let iv = [10u8; 12];
+        let header = VolumeHeader::new(1024 * 1024, 512, salt, iv);
+
+        assert_eq!(header.pq_algorithm, PqAlgorithm::None);
+        assert!(!header.has_pqc());
+        assert_eq!(header.pq_metadata_size, 0);
+
+        // Should serialize/deserialize correctly
+        let bytes = header.to_bytes().unwrap();
+        let deserialized = VolumeHeader::from_bytes(&bytes).unwrap();
+        assert_eq!(deserialized.pq_algorithm, PqAlgorithm::None);
+        assert!(!deserialized.has_pqc());
     }
 }

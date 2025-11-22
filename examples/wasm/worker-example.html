@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Cryptor - Web Worker Example</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], input[type="password"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .output {
+            background: #f9f9f9;
+            padding: 15px;
+            border-left: 4px solid #4CAF50;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .error {
+            border-left-color: #f44336;
+            background: #ffebee;
+            color: #c62828;
+        }
+        .success {
+            border-left-color: #4CAF50;
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1976d2;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>🔒 Secure Cryptor - Web Worker Example</h1>
+
+    <div class="section">
+        <h2>Worker Pool Configuration</h2>
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="poolSize">-</div>
+                <div class="stat-label">Pool Size</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="availableWorkers">-</div>
+                <div class="stat-label">Available Workers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="busyWorkers">-</div>
+                <div class="stat-label">Busy Workers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="queuedTasks">-</div>
+                <div class="stat-label">Queued Tasks</div>
+            </div>
+        </div>
+        <button onclick="updateStats()">Refresh Stats</button>
+        <button onclick="runSecurityAudit()">Security Audit</button>
+    </div>
+
+    <div class="section">
+        <h2>Encryption</h2>
+        <label for="password">Password:</label>
+        <input type="password" id="password" value="MySecurePassword123!" placeholder="Enter password">
+
+        <label for="plaintext">Plaintext:</label>
+        <textarea id="plaintext" placeholder="Enter text to encrypt">Hello from Web Worker! This encryption happens in a background thread, so the UI stays responsive.</textarea>
+
+        <button onclick="encrypt()">🔒 Encrypt (Worker)</button>
+        <button onclick="encryptMultiple()">🔒 Encrypt 10x Parallel</button>
+
+        <div id="encryptOutput"></div>
+    </div>
+
+    <div class="section">
+        <h2>Decryption</h2>
+        <label for="ciphertext">Ciphertext (Base64):</label>
+        <textarea id="ciphertext" placeholder="Paste encrypted text here"></textarea>
+
+        <button onclick="decrypt()">🔓 Decrypt (Worker)</button>
+
+        <div id="decryptOutput"></div>
+    </div>
+
+    <div class="section">
+        <h2>Benchmark</h2>
+        <p>Test parallel encryption performance using worker pool</p>
+        <button onclick="runBenchmark()">⚡ Run Benchmark</button>
+        <div id="benchmarkOutput"></div>
+    </div>
+
+    <script src="worker-pool.js"></script>
+    <script>
+        // Initialize worker pool
+        const pool = new WorkerPool('worker.js', navigator.hardwareConcurrency || 4);
+
+        // Update stats display
+        function updateStats() {
+            const stats = pool.getStats();
+            document.getElementById('poolSize').textContent = stats.poolSize;
+            document.getElementById('availableWorkers').textContent = stats.availableWorkers;
+            document.getElementById('busyWorkers').textContent = stats.busyWorkers;
+            document.getElementById('queuedTasks').textContent = stats.queuedTasks;
+        }
+
+        // Update stats every second
+        setInterval(updateStats, 1000);
+        updateStats();
+
+        // Encrypt text
+        async function encrypt() {
+            const password = document.getElementById('password').value;
+            const plaintext = document.getElementById('plaintext').value;
+            const output = document.getElementById('encryptOutput');
+
+            if (!password || !plaintext) {
+                output.innerHTML = '<div class="output error">Please enter both password and plaintext</div>';
+                return;
+            }
+
+            output.innerHTML = '<div class="output">Encrypting... <span class="spinner"></span></div>';
+
+            try {
+                const startTime = performance.now();
+                const encrypted = await pool.encryptText(password, plaintext);
+                const endTime = performance.now();
+
+                // Store for decryption
+                document.getElementById('ciphertext').value = encrypted;
+
+                output.innerHTML = `
+                    <div class="output success">✓ Encrypted in ${(endTime - startTime).toFixed(2)}ms</div>
+                    <div class="output">${encrypted}</div>
+                `;
+            } catch (error) {
+                output.innerHTML = `<div class="output error">✗ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Decrypt text
+        async function decrypt() {
+            const password = document.getElementById('password').value;
+            const ciphertext = document.getElementById('ciphertext').value;
+            const output = document.getElementById('decryptOutput');
+
+            if (!password || !ciphertext) {
+                output.innerHTML = '<div class="output error">Please enter both password and ciphertext</div>';
+                return;
+            }
+
+            output.innerHTML = '<div class="output">Decrypting... <span class="spinner"></span></div>';
+
+            try {
+                const startTime = performance.now();
+                const decrypted = await pool.decryptText(password, ciphertext);
+                const endTime = performance.now();
+
+                output.innerHTML = `
+                    <div class="output success">✓ Decrypted in ${(endTime - startTime).toFixed(2)}ms</div>
+                    <div class="output">${decrypted}</div>
+                `;
+            } catch (error) {
+                output.innerHTML = `<div class="output error">✗ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Encrypt multiple times in parallel
+        async function encryptMultiple() {
+            const password = document.getElementById('password').value;
+            const plaintext = document.getElementById('plaintext').value;
+            const output = document.getElementById('encryptOutput');
+
+            if (!password || !plaintext) {
+                output.innerHTML = '<div class="output error">Please enter both password and plaintext</div>';
+                return;
+            }
+
+            output.innerHTML = '<div class="output">Encrypting 10 messages in parallel... <span class="spinner"></span></div>';
+
+            try {
+                const startTime = performance.now();
+
+                // Create 10 encryption tasks
+                const tasks = [];
+                for (let i = 0; i < 10; i++) {
+                    tasks.push(pool.encryptText(password, `${plaintext} #${i + 1}`));
+                }
+
+                // Wait for all to complete
+                const results = await Promise.all(tasks);
+                const endTime = performance.now();
+
+                output.innerHTML = `
+                    <div class="output success">✓ Encrypted 10 messages in ${(endTime - startTime).toFixed(2)}ms (${((endTime - startTime) / 10).toFixed(2)}ms avg per message)</div>
+                    <div class="output">First result: ${results[0].substring(0, 100)}...</div>
+                `;
+            } catch (error) {
+                output.innerHTML = `<div class="output error">✗ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Run benchmark
+        async function runBenchmark() {
+            const output = document.getElementById('benchmarkOutput');
+            const password = 'BenchmarkPassword123!';
+            const plaintext = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+
+            output.innerHTML = '<div class="output">Running benchmark... <span class="spinner"></span></div>';
+
+            try {
+                const iterations = 50;
+                const startTime = performance.now();
+
+                const tasks = [];
+                for (let i = 0; i < iterations; i++) {
+                    tasks.push(pool.encryptText(password, plaintext));
+                }
+
+                await Promise.all(tasks);
+                const endTime = performance.now();
+
+                const totalTime = endTime - startTime;
+                const avgTime = totalTime / iterations;
+                const throughput = (iterations / (totalTime / 1000)).toFixed(2);
+
+                output.innerHTML = `
+                    <div class="output success">✓ Benchmark Complete</div>
+                    <div class="output">
+                        Total Time: ${totalTime.toFixed(2)}ms
+                        Iterations: ${iterations}
+                        Average: ${avgTime.toFixed(2)}ms per encryption
+                        Throughput: ${throughput} operations/second
+                        Worker Pool Size: ${pool.poolSize}
+                    </div>
+                `;
+            } catch (error) {
+                output.innerHTML = `<div class="output error">✗ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Run security audit
+        async function runSecurityAudit() {
+            try {
+                const audit = await pool.getSecurityAudit();
+                alert(audit);
+            } catch (error) {
+                alert('Error running security audit: ' + error.message);
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            pool.terminate();
+        });
+    </script>
+</body>
+</html>

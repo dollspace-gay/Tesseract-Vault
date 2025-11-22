@@ -59,7 +59,8 @@
       "Bash(build-wasm.bat)",
       "Bash(cmd /c build-wasm.bat)",
       "Bash(wasm-pack:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(wasm-opt:*)"
     ],
     "deny": [],
     "ask": []

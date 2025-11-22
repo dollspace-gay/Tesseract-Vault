@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Cryptor - Basic Example</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #2196F3;
+            padding-bottom: 10px;
+        }
+        .section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], input[type="password"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        button {
+            background: #2196F3;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        .output {
+            background: #f9f9f9;
+            padding: 15px;
+            border-left: 4px solid #2196F3;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .error {
+            border-left-color: #f44336;
+            background: #ffebee;
+            color: #c62828;
+        }
+        .success {
+            border-left-color: #4CAF50;
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔒 Secure Cryptor - Basic Example</h1>
+
+    <div class="section">
+        <h2>Encryption</h2>
+        <label for="password">Password:</label>
+        <input type="password" id="password" value="MySecurePassword123!" placeholder="Enter password">
+
+        <label for="plaintext">Plaintext:</label>
+        <textarea id="plaintext" placeholder="Enter text to encrypt">Hello, World! This is a basic encryption example using Secure Cryptor WASM.</textarea>
+
+        <button onclick="encrypt()">🔒 Encrypt</button>
+
+        <div id="encryptOutput"></div>
+    </div>
+
+    <div class="section">
+        <h2>Decryption</h2>
+        <label for="ciphertext">Ciphertext (Base64):</label>
+        <textarea id="ciphertext" placeholder="Paste encrypted text here"></textarea>
+
+        <button onclick="decrypt()">🔓 Decrypt</button>
+
+        <div id="decryptOutput"></div>
+    </div>
+
+    <script type="module">
+        import init, { encrypt_text, decrypt_text, version, security_audit_info } from '../../pkg/web/secure_cryptor.js';
+
+        // Initialize WASM module
+        await init();
+
+        console.log('Secure Cryptor Version:', version());
+        console.log(security_audit_info());
+
+        // Make functions available globally
+        window.encrypt = async function() {
+            const password = document.getElementById('password').value;
+            const plaintext = document.getElementById('plaintext').value;
+            const output = document.getElementById('encryptOutput');
+
+            if (!password || !plaintext) {
+                output.innerHTML = '<div class="output error">Please enter both password and plaintext</div>';
+                return;
+            }
+
+            try {
+                const startTime = performance.now();
+                const encrypted = encrypt_text(password, plaintext);
+                const endTime = performance.now();
+
+                // Store for decryption
+                document.getElementById('ciphertext').value = encrypted;
+
+                output.innerHTML = `
+                    <div class="output success">✓ Encrypted in ${(endTime - startTime).toFixed(2)}ms</div>
+                    <div class="output">${encrypted}</div>
+                `;
+            } catch (error) {
+                output.innerHTML = `<div class="output error">✗ Error: ${error.message}</div>`;
+            }
+        };
+
+        window.decrypt = async function() {
+            const password = document.getElementById('password').value;
+            const ciphertext = document.getElementById('ciphertext').value;
+            const output = document.getElementById('decryptOutput');
+
+            if (!password || !ciphertext) {
+                output.innerHTML = '<div class="output error">Please enter both password and ciphertext</div>';
+                return;
+            }
+
+            try {
+                const startTime = performance.now();
+                const decrypted = decrypt_text(password, ciphertext);
+                const endTime = performance.now();
+
+                output.innerHTML = `
+                    <div class="output success">✓ Decrypted in ${(endTime - startTime).toFixed(2)}ms</div>
+                    <div class="output">${decrypted}</div>
+                `;
+            } catch (error) {
+                output.innerHTML = `<div class="output error">✗ Error: ${error.message}</div>`;
+            }
+        };
+    </script>
+</body>
+</html>

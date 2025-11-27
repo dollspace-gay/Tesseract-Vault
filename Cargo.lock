@@ -5261,7 +5261,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tesseract"
+name = "tesseract-vault"
 version = "1.2.0"
 dependencies = [
  "aes 0.8.4",

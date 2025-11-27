@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document evaluates three leading formal verification tools for Rust: Prusti (ETH Zurich), Kani (Amazon), and Creusot (Inria). The analysis focuses on their suitability for verifying cryptographic primitives (AES-GCM, Argon2id, XTS-AES) in the Tesseract encryption suite.
+This document evaluates three leading formal verification tools for Rust: Prusti (ETH Zurich), Kani (Amazon), and Creusot (Inria). The analysis focuses on their suitability for verifying cryptographic primitives (AES-GCM, Argon2id, XTS-AES) in the Tesseract Vault encryption suite.
 
 **Recommendation**: **Kani** is the recommended primary tool, with **Prusti** as a complementary tool for contract-based verification.
 
@@ -118,14 +118,14 @@ This document evaluates three leading formal verification tools for Rust: Prusti
 | **Crypto Focus** | Implicit | Explicit | Explicit |
 | **AWS/Industry Use** | Yes | No | No |
 
-## Recommendation for Tesseract
+## Recommendation for Tesseract Vault
 
 ### Primary Tool: Kani
 
 **Rationale**:
 1. **Immediate value**: Can verify existing code without extensive refactoring
 2. **Critical properties**: Excellent for memory safety and undefined behavior in crypto
-3. **Unsafe code**: Tesseract uses unsafe blocks in performance-critical paths
+3. **Unsafe code**: Tesseract Vault uses unsafe blocks in performance-critical paths
 4. **Production confidence**: AWS production use demonstrates reliability
 5. **Low barrier**: Minimal annotation burden enables rapid deployment
 6. **Active development**: 2024 Rust stdlib verification shows strong momentum
@@ -218,5 +218,5 @@ This document evaluates three leading formal verification tools for Rust: Prusti
 
 **Document Version**: 1.0
 **Date**: 2025-11-27
-**Author**: Analysis for Tesseract Formal Verification Initiative
+**Author**: Analysis for Tesseract Vault Formal Verification Initiative
 **Status**: Tool selection complete - proceed to setup phase

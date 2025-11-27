@@ -1,14 +1,14 @@
-# Tesseract
+# Tesseract Vault
 
 ![Formal Verification](https://github.com/dollspace-gay/Tesseract/actions/workflows/formal-verification.yml/badge.svg)
 
-**Tesseract** is an advanced encryption suite providing military-grade file and volume encryption with post-quantum cryptography support.
+**Tesseract Vault** is an advanced encryption suite providing military-grade file and volume encryption with post-quantum cryptography support.
 
-Built in Rust for performance and memory safety, Tesseract employs state-of-the-art cryptographic practices to ensure your data remains confidential, tamper-proof, and secure against future quantum computing threats.
+Built in Rust for performance and memory safety, Tesseract Vault employs state-of-the-art cryptographic practices to ensure your data remains confidential, tamper-proof, and secure against future quantum computing threats.
 
 ## 🛡️ Security Features
 
-Tesseract is designed with a strong focus on defensive security and future-proofing:
+Tesseract Vault is designed with a strong focus on defensive security and future-proofing:
 
 ### Core Cryptography
 - **AES-256-GCM**: Authenticated Encryption mode ensuring both data confidentiality and integrity (tamper detection)
@@ -43,7 +43,7 @@ This project requires the Rust toolchain (including Cargo) to be installed.
 Clone the repository or navigate to the project directory:
 
 ```bash
-cd tesseract
+cd tesseract-vault
 ```
 
 Build the release binary:
@@ -56,7 +56,7 @@ The compiled binary will be located at [target/release/tesseract](target/release
 
 ### Build Features
 
-Tesseract supports several optional feature flags:
+Tesseract Vault supports several optional feature flags:
 
 | Feature | Default | Description |
 |---------|---------|-------------|
@@ -91,19 +91,19 @@ The `encrypted-volumes` feature requires platform-specific dependencies:
 
 ## 🚀 Usage
 
-Tesseract provides multiple modes of operation: file encryption, encrypted volumes, and daemon services.
+Tesseract Vault provides multiple modes of operation: file encryption, encrypted volumes, and daemon services.
 
 ### File Encryption
 
 #### Encrypting a File
 
 ```bash
-tesseract encrypt --input <INPUT_FILE> --output <OUTPUT_FILE>
+tesseract-vault encrypt --input <INPUT_FILE> --output <OUTPUT_FILE>
 ```
 
 Example:
 ```bash
-tesseract encrypt --input secrets.txt --output secrets.enc
+tesseract-vault encrypt --input secrets.txt --output secrets.enc
 ```
 
 The program will prompt you to enter and confirm a strong password. Your file will be encrypted using AES-256-GCM with post-quantum key encapsulation (if enabled).
@@ -111,24 +111,24 @@ The program will prompt you to enter and confirm a strong password. Your file wi
 #### Decrypting a File
 
 ```bash
-tesseract decrypt --input <INPUT_FILE> --output <OUTPUT_FILE>
+tesseract-vault decrypt --input <INPUT_FILE> --output <OUTPUT_FILE>
 ```
 
 Example:
 ```bash
-tesseract decrypt --input secrets.enc --output secrets_decrypted.txt
+tesseract-vault decrypt --input secrets.enc --output secrets_decrypted.txt
 ```
 
 Enter your password when prompted. If correct, the original data will be restored.
 
 ### Encrypted Volumes
 
-Tesseract can create encrypted virtual filesystems that appear as regular drives when mounted.
+Tesseract Vault can create encrypted virtual filesystems that appear as regular drives when mounted.
 
 #### Creating a Volume
 
 ```bash
-tesseract volume create --container my_vault.enc --size 1G --mount-point /mnt/vault
+tesseract-vault volume create --container my_vault.enc --size 1G --mount-point /mnt/vault
 ```
 
 Sizes can be specified as: `100M` (megabytes), `1G` (gigabytes), `500M`, etc.
@@ -136,7 +136,7 @@ Sizes can be specified as: `100M` (megabytes), `1G` (gigabytes), `500M`, etc.
 #### Mounting a Volume
 
 ```bash
-tesseract volume mount --container my_vault.enc --mount-point /mnt/vault
+tesseract-vault volume mount --container my_vault.enc --mount-point /mnt/vault
 ```
 
 Add `--read-only` flag for read-only access.
@@ -144,19 +144,19 @@ Add `--read-only` flag for read-only access.
 #### Unmounting a Volume
 
 ```bash
-tesseract volume unmount /mnt/vault
+tesseract-vault volume unmount /mnt/vault
 ```
 
 #### Listing Mounted Volumes
 
 ```bash
-tesseract volume list
+tesseract-vault volume list
 ```
 
 #### Volume Information
 
 ```bash
-tesseract volume info --container my_vault.enc
+tesseract-vault volume info --container my_vault.enc
 ```
 
 Shows volume metadata, size, encryption algorithms, and key slots.
@@ -165,29 +165,29 @@ Shows volume metadata, size, encryption algorithms, and key slots.
 
 Change or add a password:
 ```bash
-tesseract volume change-password --container my_vault.enc
+tesseract-vault volume change-password --container my_vault.enc
 ```
 
 Add to a specific slot (0-7):
 ```bash
-tesseract volume change-password --container my_vault.enc --slot 2
+tesseract-vault volume change-password --container my_vault.enc --slot 2
 ```
 
 #### Recovery Keys
 
 Generate a recovery key:
 ```bash
-tesseract volume generate-recovery-key --output recovery.key --name "My Vault"
+tesseract-vault volume generate-recovery-key --output recovery.key --name "My Vault"
 ```
 
 Add recovery key to volume:
 ```bash
-tesseract volume add-recovery-key --container my_vault.enc --recovery-key recovery.key
+tesseract-vault volume add-recovery-key --container my_vault.enc --recovery-key recovery.key
 ```
 
 Reset password using recovery key:
 ```bash
-tesseract volume reset-password --container my_vault.enc --recovery-key recovery.key
+tesseract-vault volume reset-password --container my_vault.enc --recovery-key recovery.key
 ```
 
 #### Hidden Volumes
@@ -195,7 +195,7 @@ tesseract volume reset-password --container my_vault.enc --recovery-key recovery
 Create a hidden volume inside an existing volume for plausible deniability:
 
 ```bash
-tesseract volume create-hidden --container my_vault.enc --size 100M
+tesseract-vault volume create-hidden --container my_vault.enc --size 100M
 ```
 
 Hidden volumes:
@@ -386,7 +386,7 @@ const decrypted = await decrypt_file(encrypted, password);
 
 ## 🔐 YubiKey Integration
 
-Tesseract supports hardware-backed authentication using YubiKey devices.
+Tesseract Vault supports hardware-backed authentication using YubiKey devices.
 
 ### Building with YubiKey Support
 
@@ -440,7 +440,7 @@ Tesseract is built with a modular architecture:
 
 ### Threat Model
 
-Tesseract is designed to protect against:
+Tesseract Vault is designed to protect against:
 - ✅ Brute-force attacks (Argon2id memory-hard KDF)
 - ✅ Quantum computer attacks (ML-KEM-1024, ML-DSA)
 - ✅ Cold boot attacks (memory locking and scrubbing)

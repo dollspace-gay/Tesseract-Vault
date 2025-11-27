@@ -34,7 +34,7 @@ scoop install temurin11-jdk
 3. Search for "Prusti Assistant"
 4. Click "Install" on the extension by `viper-admin`
 5. Reload VS Code when prompted
-6. Open any `.rs` file in Tesseract project
+6. Open any `.rs` file in Tesseract Vault project
 7. Extension will automatically download Prusti (may take a few minutes)
 8. Check Output panel → Select "Prusti" to see installation progress
 

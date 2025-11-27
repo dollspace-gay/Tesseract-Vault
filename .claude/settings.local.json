@@ -86,7 +86,8 @@
       "Bash(cargo install:*)",
       "Bash(java:*)",
       "Bash(winget install:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(bd stats:*)"
     ],
     "deny": [],
     "ask": []

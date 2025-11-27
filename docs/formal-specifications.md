@@ -1,8 +1,8 @@
-# Formal Specifications for Tesseract Cryptographic Primitives
+# Formal Specifications for Tesseract Vault Vault Cryptographic Primitives
 
 ## Overview
 
-This document defines the formal correctness properties, security invariants, and behavioral specifications for Tesseract's cryptographic core. These specifications serve as:
+This document defines the formal correctness properties, security invariants, and behavioral specifications for Tesseract Vault's cryptographic core. These specifications serve as:
 
 1. **Verification targets** for Kani and Prusti
 2. **Security documentation** for auditors

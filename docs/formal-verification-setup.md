@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the installation and configuration of formal verification tools for Tesseract. Based on the tool analysis, we are deploying Kani (primary) and Prusti (complementary).
+This document describes the installation and configuration of formal verification tools for Tesseract Vault. Based on the tool analysis, we are deploying Kani (primary) and Prusti (complementary).
 
 ## Platform Considerations
 

@@ -1,4 +1,4 @@
-# Prusti Verification Configuration for Tesseract
+# Prusti Verification Configuration for Tesseract Vault
 
 [prusti]
 # Enable overflow checking for cryptographic operations

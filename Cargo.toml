@@ -1,9 +1,9 @@
 [package]
-name = "tesseract"
+name = "tesseract-vault"
 version = "1.2.0"
 edition = "2021"
 license = "MIT"
-description = "Tesseract - Advanced encryption suite with post-quantum cryptography"
+description = "Tesseract Vault - Advanced encryption suite with post-quantum cryptography"
 repository = "https://github.com/dollspace-gay/Tesseract"
 keywords = ["encryption", "cryptography", "aes-gcm", "argon2", "security"]
 categories = ["cryptography"]
@@ -33,15 +33,15 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "tesseract"
+name = "tesseract-vault"
 path = "src/main.rs"
 
 [[bin]]
-name = "tesseract-gui"
+name = "tesseract-vault-gui"
 path = "src/bin/gui/main.rs"
 
 [[bin]]
-name = "tesseract-register"
+name = "tesseract-vault-register"
 path = "src/bin/register/mod.rs"
 
 [dependencies]

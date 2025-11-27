@@ -96,13 +96,15 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/C2SP/wycheproof.git tests/wycheproof
 
-      - name: Build library (skip Windows-only binaries)
-        run: cargo build --lib
+      - name: Build library and main binary
+        run: |
+          cargo build --lib
+          cargo build --bin tesseract-vault
 
       - name: Run Wycheproof AES-GCM tests
         run: |
           echo "::group::Wycheproof AES-GCM Tests"
-          cargo test --test wycheproof_tests -- --nocapture
+          cargo test --test wycheproof_tests --lib -- --nocapture
           echo "::endgroup::"
 
   prusti-verify:

@@ -93,6 +93,10 @@ tempfile = "3.23"
 eframe = "0.29"
 rfd = "0.15"
 tokio = { version = "1", features = ["full"] }
+dirs = "5.0"
+notify-rust = "4.11"
+tray-icon = "0.18"
+image = "0.25"
 
 # Hardware Security Module support
 # Direct USB HID implementation for YubiKey
@@ -107,10 +111,6 @@ ctrlc = { version = "3.4", optional = true }
 winapi = { version = "0.3", features = ["memoryapi", "winnt", "debugapi", "processthreadsapi", "winbase"] }
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 windows-service = "0.7"
-dirs = "5.0"
-notify-rust = "4.11"
-tray-icon = "0.18"
-image = "0.25"
 winreg = "0.52"
 winfsp = { version = "0.12", optional = true }
 

@@ -1000,21 +1000,12 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
                         std::io::Error::other(e.to_string())
                     ))?;
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(not(windows))]
             {
-                use tesseract_lib::daemon::service;
-                service::install_service()
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-                    ))?;
-            }
-            #[cfg(target_os = "macos")]
-            {
-                use tesseract_lib::daemon::service;
-                service::install_service()
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-                    ))?;
+                eprintln!("Service installation is only supported on Windows");
+                return Err(CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Unsupported, "Service installation not supported on this platform")
+                ));
             }
         }
         DaemonCommands::UninstallService => {
@@ -1026,21 +1017,12 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
                         std::io::Error::other(e.to_string())
                     ))?;
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(not(windows))]
             {
-                use tesseract_lib::daemon::service;
-                service::uninstall_service()
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-                    ))?;
-            }
-            #[cfg(target_os = "macos")]
-            {
-                use tesseract_lib::daemon::service;
-                service::uninstall_service()
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-                    ))?;
+                eprintln!("Service uninstallation is only supported on Windows");
+                return Err(CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Unsupported, "Service uninstallation not supported on this platform")
+                ));
             }
         }
         DaemonCommands::StartService => {
@@ -1061,21 +1043,12 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
                     ));
                 }
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(not(windows))]
             {
-                use tesseract_lib::daemon::service;
-                service::start_service()
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-                    ))?;
-            }
-            #[cfg(target_os = "macos")]
-            {
-                use tesseract_lib::daemon::service;
-                service::load_service()
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-                    ))?;
+                eprintln!("Service start is only supported on Windows");
+                return Err(CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Unsupported, "Service start not supported on this platform")
+                ));
             }
         }
         DaemonCommands::StopService => {
@@ -1096,21 +1069,12 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
                     ));
                 }
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(not(windows))]
             {
-                use tesseract_lib::daemon::service;
-                service::stop_service()
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-                    ))?;
-            }
-            #[cfg(target_os = "macos")]
-            {
-                use tesseract_lib::daemon::service;
-                service::unload_service()
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-                    ))?;
+                eprintln!("Service stop is only supported on Windows");
+                return Err(CryptorError::Io(
+                    std::io::Error::new(std::io::ErrorKind::Unsupported, "Service stop not supported on this platform")
+                ));
             }
         }
     }

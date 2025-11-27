@@ -96,6 +96,9 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/C2SP/wycheproof.git tests/wycheproof
 
+      - name: Build library (skip Windows-only binaries)
+        run: cargo build --lib
+
       - name: Run Wycheproof AES-GCM tests
         run: |
           echo "::group::Wycheproof AES-GCM Tests"
@@ -147,9 +150,52 @@ jobs:
           cargo prusti || echo "Prusti verification requires specifications to be added"
           echo "::endgroup::"
 
+  miri-check:
+    name: Miri Undefined Behavior Detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly with Miri
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup Miri
+        run: cargo miri setup
+
+      - name: Run Miri on library tests
+        run: |
+          echo "::group::Miri UB Detection"
+          cargo miri test --lib -- --nocapture
+          echo "::endgroup::"
+
+  security-audit:
+    name: Supply Chain Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run cargo-audit
+        uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   verification-summary:
     name: Verification Summary
-    needs: [kani-verify, wycheproof-verify, prusti-verify]
+    needs: [kani-verify, wycheproof-verify, prusti-verify, miri-check, security-audit]
     runs-on: ubuntu-latest
     if: always()
 
@@ -165,13 +211,18 @@ jobs:
           echo "- Kani Verification: ${{ needs.kani-verify.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Wycheproof Test Vectors: ${{ needs.wycheproof-verify.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Prusti Verification: ${{ needs.prusti-verify.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Miri UB Detection: ${{ needs.miri-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security Audit: ${{ needs.security-audit.result }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Coverage" >> $GITHUB_STEP_SUMMARY
           echo "- **Kani**: 21 proof harnesses (10 AES-GCM + 11 Argon2id)" >> $GITHUB_STEP_SUMMARY
           echo "- **Wycheproof**: 66 AES-256-GCM test vectors from C2SP" >> $GITHUB_STEP_SUMMARY
           echo "- **Prusti**: Contract annotations (in progress)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Miri**: Undefined behavior detection on library tests" >> $GITHUB_STEP_SUMMARY
+          echo "- **cargo-audit**: Supply chain vulnerability scanning" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "1. Add Prusti contract annotations to public APIs" >> $GITHUB_STEP_SUMMARY
           echo "2. Expand Wycheproof coverage to other algorithms" >> $GITHUB_STEP_SUMMARY
-          echo "3. Add more Kani harnesses for edge cases" >> $GITHUB_STEP_SUMMARY
+          echo "3. Add constant-time verification with dudect" >> $GITHUB_STEP_SUMMARY
+          echo "4. Add fuzzing for volume header and crypto parsing" >> $GITHUB_STEP_SUMMARY

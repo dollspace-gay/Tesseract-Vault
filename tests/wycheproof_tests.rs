@@ -5,7 +5,7 @@
 //!
 //! Test vectors repository: https://github.com/C2SP/wycheproof
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 use aes_gcm::{
@@ -18,6 +18,7 @@ use aes_gcm::{
 #[serde(rename_all = "camelCase")]
 struct TestGroup {
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     test_type: String,
     key_size: usize,
     iv_size: usize,
@@ -54,6 +55,7 @@ enum TestResult {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WycheproofTestFile {
+    #[allow(dead_code)]
     algorithm: String,
     number_of_tests: usize,
     test_groups: Vec<TestGroup>,

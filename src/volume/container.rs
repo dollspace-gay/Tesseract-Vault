@@ -804,6 +804,11 @@ impl Container {
         self.header.sector_size()
     }
 
+    /// Returns the offset to the data area in the container file
+    pub fn data_offset(&self) -> u64 {
+        DATA_AREA_OFFSET
+    }
+
     /// Creates and initializes a new in-memory filesystem for this container
     ///
     /// # Returns

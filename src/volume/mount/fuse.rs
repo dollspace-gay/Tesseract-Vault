@@ -2,6 +2,8 @@
 ///
 /// This module implements a FUSE (Filesystem in Userspace) adapter that
 /// allows mounting encrypted containers as regular filesystems.
+///
+/// Uses VolumeIOFilesystem for persistent, encrypted storage.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -14,52 +16,78 @@ use fuser::{
 use libc::{EEXIST, EINVAL, EIO, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY};
 
 use super::super::container::Container;
-use super::super::filesystem::{EncryptedFilesystem, FileType, FilesystemError};
-use super::super::operations::InMemoryFilesystem;
+use super::super::filesystem::FilesystemError;
+use super::super::format::{Inode, InodeType, FS_BLOCK_SIZE};
+use super::super::io::{FileBackend, StorageBackend};
+use super::super::volumeio_fs::{VolumeIOFilesystem, VolumeIOFsError};
 use super::{MountError, MountOptions, Result};
 
-/// FUSE filesystem adapter
-struct FuseAdapter {
-    fs: InMemoryFilesystem,
+/// FUSE filesystem adapter using VolumeIOFilesystem
+///
+/// This adapter works directly with inodes, providing efficient access
+/// to the encrypted filesystem without path resolution overhead.
+struct PersistentFuseAdapter {
+    fs: VolumeIOFilesystem,
 }
 
-impl FuseAdapter {
-    fn new(fs: InMemoryFilesystem) -> Self {
+impl PersistentFuseAdapter {
+    fn new(fs: VolumeIOFilesystem) -> Self {
         Self { fs }
     }
 
-    /// Converts our FileType to FUSE FileType
-    fn file_type_to_fuse(ft: FileType) -> FuseFileType {
-        match ft {
-            FileType::RegularFile => FuseFileType::RegularFile,
-            FileType::Directory => FuseFileType::Directory,
-            FileType::Symlink => FuseFileType::Symlink,
+    /// Converts InodeType to FUSE FileType
+    fn inode_type_to_fuse(it: InodeType) -> FuseFileType {
+        match it {
+            InodeType::File => FuseFileType::RegularFile,
+            InodeType::Directory => FuseFileType::Directory,
+            InodeType::Symlink => FuseFileType::Symlink,
         }
     }
 
-    /// Converts our FileAttr to FUSE FileAttr
-    fn attr_to_fuse(&self, attr: &super::super::filesystem::FileAttr, ino: u64) -> FuseFileAttr {
+    /// Converts an Inode to FUSE FileAttr
+    fn inode_to_fuse_attr(&self, inode: &Inode, ino: u64) -> FuseFileAttr {
+        let kind = if inode.is_dir() {
+            FuseFileType::Directory
+        } else if inode.is_symlink() {
+            FuseFileType::Symlink
+        } else {
+            FuseFileType::RegularFile
+        };
+
         FuseFileAttr {
             ino,
-            size: attr.size,
-            blocks: (attr.size + 511) / 512, // Round up to 512-byte blocks
-            atime: attr.atime,
-            mtime: attr.mtime,
-            ctime: attr.ctime,
-            crtime: attr.ctime, // Use ctime as creation time
-            kind: Self::file_type_to_fuse(attr.file_type),
-            perm: attr.perm,
-            nlink: attr.nlink,
-            uid: attr.uid,
-            gid: attr.gid,
+            size: inode.size,
+            blocks: inode.blocks,
+            atime: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(inode.atime),
+            mtime: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(inode.mtime),
+            ctime: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(inode.ctime),
+            crtime: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(inode.ctime),
+            kind,
+            perm: inode.mode,
+            nlink: inode.nlink as u32,
+            uid: inode.uid,
+            gid: inode.gid,
             rdev: 0,
-            blksize: 4096,
+            blksize: FS_BLOCK_SIZE as u32,
             flags: 0,
         }
     }
 
-    /// Converts filesystem error to errno
-    fn error_to_errno(err: FilesystemError) -> libc::c_int {
+    /// Converts VolumeIOFsError to errno
+    fn error_to_errno(err: VolumeIOFsError) -> libc::c_int {
+        match err {
+            VolumeIOFsError::Filesystem(fe) => Self::fs_error_to_errno(fe),
+            VolumeIOFsError::VolumeIO(_) => EIO,
+            VolumeIOFsError::Format(_) => EIO,
+            VolumeIOFsError::Serialization(_) => EIO,
+            VolumeIOFsError::InvalidOperation(_) => EINVAL,
+            VolumeIOFsError::LockPoisoned => EIO,
+            VolumeIOFsError::NotInitialized => EIO,
+        }
+    }
+
+    /// Converts FilesystemError to errno
+    fn fs_error_to_errno(err: FilesystemError) -> libc::c_int {
         match err {
             FilesystemError::NotFound(_) => ENOENT,
             FilesystemError::AlreadyExists(_) => EEXIST,
@@ -74,46 +102,33 @@ impl FuseAdapter {
             FilesystemError::Other(_) => EIO,
         }
     }
-
-    /// Gets inode number from path (simplified - just hash the path)
-    fn path_to_ino(&self, path: &Path) -> u64 {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        if path == Path::new("/") {
-            return 1;
-        }
-
-        let mut hasher = DefaultHasher::new();
-        path.hash(&mut hasher);
-        let hash = hasher.finish();
-        // Ensure we don't collide with root inode
-        if hash == 1 { 2 } else { hash }
-    }
-
-    /// Converts inode to path (simplified - we'll need to track this properly)
-    fn ino_to_path(&self, ino: u64) -> PathBuf {
-        if ino == 1 {
-            PathBuf::from("/")
-        } else {
-            // This is a limitation - in a real implementation we'd maintain
-            // an inode-to-path mapping
-            PathBuf::from("/")
-        }
-    }
 }
 
-impl Filesystem for FuseAdapter {
+impl Filesystem for PersistentFuseAdapter {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
-        let parent_path = self.ino_to_path(parent);
-        let path = parent_path.join(name);
+        let name_str = match name.to_str() {
+            Some(s) => s,
+            None => {
+                reply.error(EINVAL);
+                return;
+            }
+        };
 
-        match self.fs.getattr(&path) {
-            Ok(attr) => {
-                let ino = self.path_to_ino(&path);
-                let fuse_attr = self.attr_to_fuse(&attr, ino);
-                let ttl = Duration::from_secs(1);
-                reply.entry(&ttl, &fuse_attr, 0);
+        match self.fs.lookup(parent as u32, name_str) {
+            Ok(Some(inode_num)) => {
+                match self.fs.get_inode(inode_num) {
+                    Ok(inode) => {
+                        let fuse_attr = self.inode_to_fuse_attr(&inode, inode_num as u64);
+                        let ttl = Duration::from_secs(1);
+                        reply.entry(&ttl, &fuse_attr, 0);
+                    }
+                    Err(e) => {
+                        reply.error(Self::error_to_errno(e));
+                    }
+                }
+            }
+            Ok(None) => {
+                reply.error(ENOENT);
             }
             Err(e) => {
                 reply.error(Self::error_to_errno(e));
@@ -121,12 +136,10 @@ impl Filesystem for FuseAdapter {
         }
     }
 
-    fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
-        let path = self.ino_to_path(ino);
-
-        match self.fs.getattr(&path) {
-            Ok(attr) => {
-                let fuse_attr = self.attr_to_fuse(&attr, ino);
+    fn getattr(&mut self, _req: &Request, ino: u64, _fh: Option<u64>, reply: ReplyAttr) {
+        match self.fs.get_inode(ino as u32) {
+            Ok(inode) => {
+                let fuse_attr = self.inode_to_fuse_attr(&inode, ino);
                 let ttl = Duration::from_secs(1);
                 reply.attr(&ttl, &fuse_attr);
             }
@@ -147,9 +160,7 @@ impl Filesystem for FuseAdapter {
         _lock_owner: Option<u64>,
         reply: ReplyData,
     ) {
-        let path = self.ino_to_path(ino);
-
-        match self.fs.read(&path, offset as u64, size) {
+        match self.fs.read_by_inode(ino as u32, offset as u64, size) {
             Ok(data) => {
                 reply.data(&data);
             }
@@ -171,9 +182,7 @@ impl Filesystem for FuseAdapter {
         _lock_owner: Option<u64>,
         reply: ReplyWrite,
     ) {
-        let path = self.ino_to_path(ino);
-
-        match self.fs.write(&path, offset as u64, data) {
+        match self.fs.write_by_inode(ino as u32, offset as u64, data) {
             Ok(written) => {
                 reply.written(written);
             }
@@ -191,41 +200,23 @@ impl Filesystem for FuseAdapter {
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
-        let path = self.ino_to_path(ino);
-
-        match self.fs.readdir(&path) {
+        match self.fs.readdir_by_inode(ino as u32) {
             Ok(entries) => {
-                let mut index = offset as usize;
+                // Skip entries based on offset
+                for (i, entry) in entries.iter().enumerate().skip(offset as usize) {
+                    let name = match entry.name_str() {
+                        Ok(n) => n,
+                        Err(_) => continue,
+                    };
 
-                // Add . and .. entries
-                if index == 0 {
-                    if reply.add(ino, 1, FuseFileType::Directory, ".") {
-                        reply.ok();
-                        return;
-                    }
-                    index += 1;
-                }
+                    let file_type = Self::inode_type_to_fuse(InodeType::from(entry.file_type));
 
-                if index == 1 {
-                    let parent_ino = if ino == 1 { 1 } else { 1 }; // Simplified
-                    if reply.add(parent_ino, 2, FuseFileType::Directory, "..") {
-                        reply.ok();
-                        return;
-                    }
-                    index += 1;
-                }
-
-                // Add actual entries
-                for (i, entry) in entries.iter().enumerate().skip(index.saturating_sub(2)) {
-                    let entry_path = path.join(&entry.name);
-                    let entry_ino = self.path_to_ino(&entry_path);
-                    let entry_type = Self::file_type_to_fuse(entry.file_type);
-
-                    if reply.add(entry_ino, (i + 3) as i64, entry_type, &entry.name) {
+                    // The offset is the index of the next entry
+                    if reply.add(entry.inode as u64, (i + 1) as i64, file_type, name) {
+                        // Buffer is full
                         break;
                     }
                 }
-
                 reply.ok();
             }
             Err(e) => {
@@ -243,15 +234,19 @@ impl Filesystem for FuseAdapter {
         _umask: u32,
         reply: ReplyEntry,
     ) {
-        let parent_path = self.ino_to_path(parent);
-        let path = parent_path.join(name);
+        let name_str = match name.to_str() {
+            Some(s) => s,
+            None => {
+                reply.error(EINVAL);
+                return;
+            }
+        };
 
-        match self.fs.mkdir(&path, mode as u16) {
-            Ok(()) => {
-                match self.fs.getattr(&path) {
-                    Ok(attr) => {
-                        let ino = self.path_to_ino(&path);
-                        let fuse_attr = self.attr_to_fuse(&attr, ino);
+        match self.fs.create_directory(parent as u32, name_str, mode as u16) {
+            Ok(inode_num) => {
+                match self.fs.get_inode(inode_num) {
+                    Ok(inode) => {
+                        let fuse_attr = self.inode_to_fuse_attr(&inode, inode_num as u64);
                         let ttl = Duration::from_secs(1);
                         reply.entry(&ttl, &fuse_attr, 0);
                     }
@@ -267,10 +262,15 @@ impl Filesystem for FuseAdapter {
     }
 
     fn unlink(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: fuser::ReplyEmpty) {
-        let parent_path = self.ino_to_path(parent);
-        let path = parent_path.join(name);
+        let name_str = match name.to_str() {
+            Some(s) => s,
+            None => {
+                reply.error(EINVAL);
+                return;
+            }
+        };
 
-        match self.fs.unlink(&path) {
+        match self.fs.remove_file(parent as u32, name_str) {
             Ok(()) => {
                 reply.ok();
             }
@@ -281,10 +281,15 @@ impl Filesystem for FuseAdapter {
     }
 
     fn rmdir(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: fuser::ReplyEmpty) {
-        let parent_path = self.ino_to_path(parent);
-        let path = parent_path.join(name);
+        let name_str = match name.to_str() {
+            Some(s) => s,
+            None => {
+                reply.error(EINVAL);
+                return;
+            }
+        };
 
-        match self.fs.rmdir(&path) {
+        match self.fs.remove_directory(parent as u32, name_str) {
             Ok(()) => {
                 reply.ok();
             }
@@ -304,12 +309,23 @@ impl Filesystem for FuseAdapter {
         _flags: u32,
         reply: fuser::ReplyEmpty,
     ) {
-        let old_parent = self.ino_to_path(parent);
-        let new_parent = self.ino_to_path(newparent);
-        let old_path = old_parent.join(name);
-        let new_path = new_parent.join(newname);
+        let old_name = match name.to_str() {
+            Some(s) => s,
+            None => {
+                reply.error(EINVAL);
+                return;
+            }
+        };
 
-        match self.fs.rename(&old_path, &new_path) {
+        let new_name = match newname.to_str() {
+            Some(s) => s,
+            None => {
+                reply.error(EINVAL);
+                return;
+            }
+        };
+
+        match self.fs.rename_entry(parent as u32, old_name, newparent as u32, new_name) {
             Ok(()) => {
                 reply.ok();
             }
@@ -329,17 +345,28 @@ impl Filesystem for FuseAdapter {
         _flags: i32,
         reply: fuser::ReplyCreate,
     ) {
-        let parent_path = self.ino_to_path(parent);
-        let path = parent_path.join(name);
+        let name_str = match name.to_str() {
+            Some(s) => s,
+            None => {
+                reply.error(EINVAL);
+                return;
+            }
+        };
 
-        match self.fs.create(&path, mode as u16) {
-            Ok(attr) => {
-                let ino = self.path_to_ino(&path);
-                let fuse_attr = self.attr_to_fuse(&attr, ino);
-                let ttl = Duration::from_secs(1);
-                let fh = 0; // File handle (we don't track these)
-                let flags = 0;
-                reply.created(&ttl, &fuse_attr, 0, fh, flags);
+        match self.fs.create_file(parent as u32, name_str, mode as u16) {
+            Ok(inode_num) => {
+                match self.fs.get_inode(inode_num) {
+                    Ok(inode) => {
+                        let fuse_attr = self.inode_to_fuse_attr(&inode, inode_num as u64);
+                        let ttl = Duration::from_secs(1);
+                        let fh = 0; // File handle (we don't track these)
+                        let flags = 0;
+                        reply.created(&ttl, &fuse_attr, 0, fh, flags);
+                    }
+                    Err(e) => {
+                        reply.error(Self::error_to_errno(e));
+                    }
+                }
             }
             Err(e) => {
                 reply.error(Self::error_to_errno(e));
@@ -365,62 +392,125 @@ impl Filesystem for FuseAdapter {
         _flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        let path = self.ino_to_path(ino);
+        // Get current inode
+        let mut inode = match self.fs.get_inode(ino as u32) {
+            Ok(i) => i,
+            Err(e) => {
+                reply.error(Self::error_to_errno(e));
+                return;
+            }
+        };
 
-        // Apply changes
+        // Apply mode change
         if let Some(mode) = mode {
-            if let Err(e) = self.fs.chmod(&path, mode as u16) {
-                reply.error(Self::error_to_errno(e));
-                return;
-            }
+            inode.mode = mode as u16;
         }
 
-        if uid.is_some() || gid.is_some() {
-            let uid = uid.unwrap_or(0);
-            let gid = gid.unwrap_or(0);
-            if let Err(e) = self.fs.chown(&path, uid, gid) {
-                reply.error(Self::error_to_errno(e));
-                return;
-            }
+        // Apply uid/gid change
+        if let Some(uid) = uid {
+            inode.uid = uid;
+        }
+        if let Some(gid) = gid {
+            inode.gid = gid;
         }
 
+        // Apply size change (truncate)
         if let Some(size) = size {
-            if let Err(e) = self.fs.truncate(&path, size) {
+            if let Err(e) = self.fs.truncate_file(ino as u32, size) {
                 reply.error(Self::error_to_errno(e));
                 return;
             }
+            // Re-read inode after truncate
+            inode = match self.fs.get_inode(ino as u32) {
+                Ok(i) => i,
+                Err(e) => {
+                    reply.error(Self::error_to_errno(e));
+                    return;
+                }
+            };
         }
 
-        if atime.is_some() || mtime.is_some() {
-            let atime_val = match atime {
-                Some(TimeOrNow::SpecificTime(t)) => Some(t),
-                Some(TimeOrNow::Now) => Some(SystemTime::now()),
-                None => None,
-            };
+        // Apply time changes
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
 
-            let mtime_val = match mtime {
-                Some(TimeOrNow::SpecificTime(t)) => Some(t),
-                Some(TimeOrNow::Now) => Some(SystemTime::now()),
-                None => None,
+        if let Some(atime_val) = atime {
+            inode.atime = match atime_val {
+                TimeOrNow::SpecificTime(t) => t
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                TimeOrNow::Now => now,
             };
+        }
 
-            if let Err(e) = self.fs.utimens(&path, atime_val, mtime_val) {
+        if let Some(mtime_val) = mtime {
+            inode.mtime = match mtime_val {
+                TimeOrNow::SpecificTime(t) => t
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                TimeOrNow::Now => now,
+            };
+        }
+
+        // Write updated inode (only if we made changes other than size)
+        if mode.is_some() || uid.is_some() || gid.is_some() || atime.is_some() || mtime.is_some() {
+            if let Err(e) = self.fs.set_inode(ino as u32, &inode) {
                 reply.error(Self::error_to_errno(e));
                 return;
             }
         }
 
         // Return updated attributes
-        match self.fs.getattr(&path) {
-            Ok(attr) => {
-                let fuse_attr = self.attr_to_fuse(&attr, ino);
-                let ttl = Duration::from_secs(1);
-                reply.attr(&ttl, &fuse_attr);
+        let fuse_attr = self.inode_to_fuse_attr(&inode, ino);
+        let ttl = Duration::from_secs(1);
+        reply.attr(&ttl, &fuse_attr);
+    }
+
+    fn fsync(
+        &mut self,
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _datasync: bool,
+        reply: fuser::ReplyEmpty,
+    ) {
+        match self.fs.sync() {
+            Ok(()) => reply.ok(),
+            Err(e) => reply.error(Self::error_to_errno(e)),
+        }
+    }
+
+    fn statfs(&mut self, _req: &Request, _ino: u64, reply: fuser::ReplyStatfs) {
+        match self.fs.get_statfs() {
+            Ok((total_bytes, free_bytes, _available)) => {
+                let block_size = FS_BLOCK_SIZE as u64;
+                let total_blocks = total_bytes / block_size;
+                let free_blocks = free_bytes / block_size;
+
+                reply.statfs(
+                    total_blocks,  // Total blocks
+                    free_blocks,   // Free blocks
+                    free_blocks,   // Available blocks (same as free for now)
+                    0,             // Total inodes (0 = unlimited)
+                    0,             // Free inodes
+                    block_size as u32, // Block size
+                    255,           // Max filename length
+                    block_size as u32, // Fragment size
+                );
             }
             Err(e) => {
                 reply.error(Self::error_to_errno(e));
             }
         }
+    }
+
+    fn destroy(&mut self) {
+        // Sync filesystem on unmount
+        let _ = self.fs.sync();
     }
 }
 
@@ -451,31 +541,69 @@ impl Drop for FuseMountHandle {
     }
 }
 
-/// Mounts a container using FUSE
+/// Mounts a container using FUSE with persistent VolumeIOFilesystem
 pub fn mount(
     container_path: impl AsRef<Path>,
     password: &str,
     options: MountOptions,
 ) -> Result<FuseMountHandle> {
-    // Open container (normal or hidden)
+    use std::fs::OpenOptions;
+
+    let container_path = container_path.as_ref();
+
+    // Open container to get the master key
     let container = if let Some(hidden_offset) = options.hidden_offset {
-        // For hidden volumes, password is the outer password
-        // and hidden_password is the hidden volume password
         let hidden_pwd = options.hidden_password
             .as_deref()
             .ok_or_else(|| MountError::Other("Hidden password required for hidden volume mount".to_string()))?;
 
-        let outer = Container::open(&container_path, password)?;
+        let outer = Container::open(container_path, password)?;
         outer.open_hidden_volume(hidden_pwd, hidden_offset)?
     } else {
         Container::open(container_path, password)?
     };
 
-    // Get filesystem
-    let fs = container.mount_filesystem()?;
+    // Get master key from container
+    let master_key = container.master_key()
+        .ok_or_else(|| MountError::Other("Container is locked".to_string()))?
+        .clone();
+
+    // Get data offset and size from container header
+    let data_offset = container.data_offset();
+    let data_size = container.data_size();
+
+    // Open file for filesystem backend
+    let file = OpenOptions::new()
+        .read(true)
+        .write(!options.read_only)
+        .open(container_path)
+        .map_err(|e| MountError::Io(e))?;
+
+    // Create backend with proper offset
+    let backend: Box<dyn StorageBackend> = Box::new(FileBackend::new(file, data_offset));
+
+    // Try to open existing filesystem or create new one
+    let fs = match VolumeIOFilesystem::open(&master_key, data_size, backend) {
+        Ok(fs) => fs,
+        Err(_) => {
+            // Filesystem doesn't exist, create a new one
+            // Need to re-open the file for the new backend
+            let file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(container_path)
+                .map_err(|e| MountError::Io(e))?;
+
+            let backend: Box<dyn StorageBackend> = Box::new(FileBackend::new(file, data_offset));
+
+            let volume_name = options.fs_name.as_deref().unwrap_or("Tesseract");
+            VolumeIOFilesystem::mkfs(&master_key, data_size, backend, volume_name)
+                .map_err(|e| MountError::Other(format!("Failed to create filesystem: {}", e)))?
+        }
+    };
 
     // Create FUSE adapter
-    let adapter = FuseAdapter::new(fs);
+    let adapter = PersistentFuseAdapter::new(fs);
 
     // Build mount options
     let mut mount_opts = vec![

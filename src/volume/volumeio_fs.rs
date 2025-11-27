@@ -1115,6 +1115,331 @@ impl VolumeIOFilesystem {
         let free_bytes = sb.free_blocks * sb.block_size as u64;
         Ok((total_bytes, free_bytes, free_bytes))
     }
+
+    // ========================================================================
+    // Public inode-based API for FUSE/WinFsp integration
+    // ========================================================================
+
+    /// Gets an inode by number (public API for FUSE)
+    pub fn get_inode(&self, inode_num: u32) -> Result<Inode> {
+        self.read_inode(inode_num)
+    }
+
+    /// Updates an inode (public API for FUSE)
+    pub fn set_inode(&self, inode_num: u32, inode: &Inode) -> Result<()> {
+        self.write_inode(inode_num, inode)
+    }
+
+    /// Looks up a name in a directory, returning the inode number if found
+    pub fn lookup(&self, dir_inode: u32, name: &str) -> Result<Option<u32>> {
+        self.dir_lookup(dir_inode, name)
+    }
+
+    /// Reads directory entries for an inode
+    pub fn readdir_by_inode(&self, inode_num: u32) -> Result<Vec<DirEntry>> {
+        self.read_dir_entries(inode_num)
+    }
+
+    /// Reads file data by inode number
+    pub fn read_by_inode(&self, inode_num: u32, offset: u64, size: u32) -> Result<Vec<u8>> {
+        self.read_file_data(inode_num, offset, size)
+    }
+
+    /// Writes file data by inode number
+    pub fn write_by_inode(&self, inode_num: u32, offset: u64, data: &[u8]) -> Result<u32> {
+        self.write_file_data(inode_num, offset, data)
+    }
+
+    /// Creates a new file in a directory, returning the new inode number
+    pub fn create_file(&self, parent_inode: u32, name: &str, mode: u16) -> Result<u32> {
+        // Check if already exists
+        if self.dir_lookup(parent_inode, name)?.is_some() {
+            return Err(VolumeIOFsError::Filesystem(FilesystemError::AlreadyExists(
+                PathBuf::from(name),
+            )));
+        }
+
+        // Allocate inode
+        let inode_num = self.alloc_inode()?;
+
+        // Create inode
+        let inode = Inode::new_file(mode);
+        self.write_inode(inode_num, &inode)?;
+
+        // Add to parent directory
+        self.dir_add_entry(parent_inode, name, inode_num, InodeType::File)?;
+
+        Ok(inode_num)
+    }
+
+    /// Creates a new directory, returning the new inode number
+    pub fn create_directory(&self, parent_inode: u32, name: &str, mode: u16) -> Result<u32> {
+        // Check if already exists
+        if self.dir_lookup(parent_inode, name)?.is_some() {
+            return Err(VolumeIOFsError::Filesystem(FilesystemError::AlreadyExists(
+                PathBuf::from(name),
+            )));
+        }
+
+        // Allocate inode
+        let inode_num = self.alloc_inode()?;
+
+        // Create directory inode
+        let mut inode = Inode::new_directory(mode);
+
+        // Allocate a data block for the directory
+        let data_block = self.alloc_block()?;
+        inode.direct[0] = data_block;
+        inode.size = FS_BLOCK_SIZE as u64;
+        inode.blocks = (FS_BLOCK_SIZE / 512) as u64;
+
+        self.write_inode(inode_num, &inode)?;
+
+        // Initialize directory with . and .. entries
+        let entries = vec![
+            DirEntry::new(inode_num, ".", InodeType::Directory),
+            DirEntry::new(parent_inode, "..", InodeType::Directory),
+        ];
+        self.write_dir_entries(inode_num, &entries)?;
+
+        // Add to parent directory
+        self.dir_add_entry(parent_inode, name, inode_num, InodeType::Directory)?;
+
+        // Update parent nlink (for ..)
+        let mut parent = self.read_inode(parent_inode)?;
+        parent.nlink += 1;
+        self.write_inode(parent_inode, &parent)?;
+
+        Ok(inode_num)
+    }
+
+    /// Removes a file from a directory
+    pub fn remove_file(&self, parent_inode: u32, name: &str) -> Result<()> {
+        // Look up the inode
+        let inode_num = self.dir_lookup(parent_inode, name)?
+            .ok_or_else(|| VolumeIOFsError::Filesystem(FilesystemError::NotFound(
+                PathBuf::from(name),
+            )))?;
+
+        let inode = self.read_inode(inode_num)?;
+
+        if inode.is_dir() {
+            return Err(VolumeIOFsError::Filesystem(FilesystemError::IsADirectory(
+                PathBuf::from(name),
+            )));
+        }
+
+        // Remove from parent directory
+        self.dir_remove_entry(parent_inode, name)?;
+
+        // Free data blocks
+        for &block in &inode.direct {
+            if block != 0 {
+                self.free_block(block)?;
+            }
+        }
+        // TODO: Free indirect blocks
+
+        // Free inode
+        self.free_inode(inode_num)?;
+
+        Ok(())
+    }
+
+    /// Removes a directory
+    pub fn remove_directory(&self, parent_inode: u32, name: &str) -> Result<()> {
+        // Look up the inode
+        let inode_num = self.dir_lookup(parent_inode, name)?
+            .ok_or_else(|| VolumeIOFsError::Filesystem(FilesystemError::NotFound(
+                PathBuf::from(name),
+            )))?;
+
+        let inode = self.read_inode(inode_num)?;
+
+        if !inode.is_dir() {
+            return Err(VolumeIOFsError::Filesystem(FilesystemError::NotADirectory(
+                PathBuf::from(name),
+            )));
+        }
+
+        // Check if directory is empty (only . and ..)
+        let entries = self.read_dir_entries(inode_num)?;
+        let non_dot_entries: Vec<_> = entries
+            .iter()
+            .filter(|e| {
+                e.name_str()
+                    .map(|n| n != "." && n != "..")
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        if !non_dot_entries.is_empty() {
+            return Err(VolumeIOFsError::Filesystem(FilesystemError::DirectoryNotEmpty(
+                PathBuf::from(name),
+            )));
+        }
+
+        // Remove from parent directory
+        self.dir_remove_entry(parent_inode, name)?;
+
+        // Free data blocks
+        for &block in &inode.direct {
+            if block != 0 {
+                self.free_block(block)?;
+            }
+        }
+
+        // Free inode
+        self.free_inode(inode_num)?;
+
+        // Update parent nlink
+        let mut parent = self.read_inode(parent_inode)?;
+        parent.nlink = parent.nlink.saturating_sub(1);
+        self.write_inode(parent_inode, &parent)?;
+
+        Ok(())
+    }
+
+    /// Renames a file or directory
+    pub fn rename_entry(
+        &self,
+        old_parent: u32,
+        old_name: &str,
+        new_parent: u32,
+        new_name: &str,
+    ) -> Result<()> {
+        // Look up the source inode
+        let inode_num = self.dir_lookup(old_parent, old_name)?
+            .ok_or_else(|| VolumeIOFsError::Filesystem(FilesystemError::NotFound(
+                PathBuf::from(old_name),
+            )))?;
+
+        let inode = self.read_inode(inode_num)?;
+        let file_type = if inode.is_dir() {
+            InodeType::Directory
+        } else if inode.is_symlink() {
+            InodeType::Symlink
+        } else {
+            InodeType::File
+        };
+
+        // Check if destination exists
+        if let Some(existing) = self.dir_lookup(new_parent, new_name)? {
+            // Remove existing entry
+            let existing_inode = self.read_inode(existing)?;
+            if existing_inode.is_dir() {
+                // For directories, check if empty
+                let entries = self.read_dir_entries(existing)?;
+                let non_dot_entries: Vec<_> = entries
+                    .iter()
+                    .filter(|e| {
+                        e.name_str()
+                            .map(|n| n != "." && n != "..")
+                            .unwrap_or(false)
+                    })
+                    .collect();
+
+                if !non_dot_entries.is_empty() {
+                    return Err(VolumeIOFsError::Filesystem(FilesystemError::DirectoryNotEmpty(
+                        PathBuf::from(new_name),
+                    )));
+                }
+            }
+
+            // Remove the existing entry
+            self.dir_remove_entry(new_parent, new_name)?;
+
+            // Free the old inode and its data
+            for &block in &existing_inode.direct {
+                if block != 0 {
+                    self.free_block(block)?;
+                }
+            }
+            self.free_inode(existing)?;
+        }
+
+        // Remove from old parent
+        self.dir_remove_entry(old_parent, old_name)?;
+
+        // Add to new parent
+        self.dir_add_entry(new_parent, new_name, inode_num, file_type)?;
+
+        // If it's a directory and parents changed, update .. entry
+        if inode.is_dir() && old_parent != new_parent {
+            let mut entries = self.read_dir_entries(inode_num)?;
+            for entry in &mut entries {
+                if entry.name_str().map(|n| n == "..").unwrap_or(false) {
+                    *entry = DirEntry::new(new_parent, "..", InodeType::Directory);
+                    break;
+                }
+            }
+            self.write_dir_entries(inode_num, &entries)?;
+
+            // Update link counts
+            let mut old_parent_inode = self.read_inode(old_parent)?;
+            old_parent_inode.nlink = old_parent_inode.nlink.saturating_sub(1);
+            self.write_inode(old_parent, &old_parent_inode)?;
+
+            let mut new_parent_inode = self.read_inode(new_parent)?;
+            new_parent_inode.nlink += 1;
+            self.write_inode(new_parent, &new_parent_inode)?;
+        }
+
+        Ok(())
+    }
+
+    /// Truncates a file to the specified size
+    pub fn truncate_file(&self, inode_num: u32, size: u64) -> Result<()> {
+        let mut inode = self.read_inode(inode_num)?;
+
+        if inode.is_dir() {
+            return Err(VolumeIOFsError::Filesystem(FilesystemError::IsADirectory(
+                PathBuf::from(format!("inode {}", inode_num)),
+            )));
+        }
+
+        let old_size = inode.size;
+        let block_size = FS_BLOCK_SIZE as u64;
+
+        if size < old_size {
+            // Shrinking - free unused blocks
+            let old_blocks = (old_size + block_size - 1) / block_size;
+            let new_blocks = (size + block_size - 1) / block_size;
+
+            for block_idx in new_blocks..old_blocks {
+                if block_idx < DIRECT_BLOCKS as u64 {
+                    let block_num = inode.direct[block_idx as usize];
+                    if block_num != 0 {
+                        self.free_block(block_num)?;
+                        inode.direct[block_idx as usize] = 0;
+                    }
+                }
+                // TODO: Handle indirect blocks
+            }
+        }
+        // When growing, blocks are allocated on write
+
+        inode.size = size;
+        inode.blocks = ((size + block_size - 1) / block_size) * (block_size / 512);
+        inode.mtime = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        self.write_inode(inode_num, &inode)?;
+
+        Ok(())
+    }
+
+    /// Converts an Inode to FileAttr (public for FUSE)
+    pub fn inode_to_attr(&self, inode: &Inode) -> FileAttr {
+        self.inode_to_file_attr(inode)
+    }
+
+    /// Returns the root inode number
+    pub fn root_inode(&self) -> u32 {
+        ROOT_INODE
+    }
 }
 
 // ============================================================================

@@ -77,7 +77,11 @@
       "Bash(./target/release/tesseract.exe:*)",
       "Bash(for:*)",
       "Bash(do sed -i 's/use tesseract::/use tesseract_lib::/g' \"$f\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(wsl -d fedora -- bash -c \"cd /mnt/c/Users/texas/Tesseract/Tesseract && cargo check --lib 2>&1\":*)",
+      "Bash(wsl -l -v:*)",
+      "Bash(wsl -d FedoraLinux-42 -- bash -c \"cd /mnt/c/Users/texas/Tesseract/Tesseract && cargo check --lib 2>&1\":*)",
+      "Bash(wsl:*)"
     ],
     "deny": [],
     "ask": []

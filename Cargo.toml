@@ -12,8 +12,9 @@ categories = ["cryptography"]
 wasm-opt = ["-O4", "--enable-bulk-memory"]
 
 [features]
-default = ["post-quantum", "compression"]
+default = ["post-quantum", "compression", "ctrlc"]
 encrypted-volumes = ["dep:fuser", "dep:winfsp"]
+ctrlc = ["dep:ctrlc"]
 
 # WASM build profiles
 wasm-minimal = []  # Only AES-256-GCM + Argon2id (smallest)
@@ -99,6 +100,9 @@ hidapi = { version = "2.6", optional = true }
 sha1 = { version = "0.10", optional = true }
 hmac = { version = "0.12", optional = true }
 
+# Cross-platform optional dependencies
+ctrlc = { version = "3.4", optional = true }
+
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["memoryapi", "winnt", "debugapi", "processthreadsapi", "winbase"] }
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
@@ -107,7 +111,6 @@ dirs = "5.0"
 notify-rust = "4.11"
 tray-icon = "0.18"
 image = "0.25"
-ctrlc = "3.4"
 winreg = "0.52"
 winfsp = { version = "0.12", optional = true }
 

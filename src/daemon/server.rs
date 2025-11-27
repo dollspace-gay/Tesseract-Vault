@@ -339,6 +339,7 @@ impl DaemonServer {
     }
 
     /// Set up signal handlers for graceful shutdown
+    #[cfg(feature = "ctrlc")]
     fn setup_signal_handlers() {
         // Use ctrlc crate for cross-platform Ctrl+C handling
         ctrlc::set_handler(move || {
@@ -346,6 +347,12 @@ impl DaemonServer {
             std::process::exit(0);
         })
         .expect("Error setting Ctrl-C handler");
+    }
+
+    /// Fallback when ctrlc feature is not available
+    #[cfg(not(feature = "ctrlc"))]
+    fn setup_signal_handlers() {
+        // Signal handling not available without ctrlc feature
     }
 }
 

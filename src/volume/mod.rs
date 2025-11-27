@@ -8,6 +8,7 @@ pub mod automount;
 pub mod chunk;
 pub mod container;
 pub mod filesystem;
+pub mod format;
 pub mod header;
 pub mod io;
 pub mod keyslot;
@@ -31,6 +32,12 @@ pub use sector::{SectorCipher, SECTOR_SIZE_512, SECTOR_SIZE_4K};
 pub use io::{
     VolumeIO, VolumeIOError, StorageBackend, FileBackend, MemoryBackend, CacheStats, DEFAULT_CACHE_CAPACITY,
     AsyncStorageBackend, AsyncResult, BlockingAdapter, S3Backend, DropboxBackend, AsyncMemoryBackend,
+};
+pub use format::{
+    Superblock, Inode, InodeType, DirEntry as FsDirEntry, Bitmap,
+    JournalEntry, JournalHeader, JournalOpType, FsState, FormatError,
+    FS_BLOCK_SIZE, FS_MAGIC, FS_VERSION, ROOT_INODE, MAX_FILENAME_LEN,
+    DIRECT_BLOCKS, DATA_BLOCKS_START, INODE_SIZE, INODES_PER_BLOCK,
 };
 
 #[cfg(feature = "encrypted-volumes")]

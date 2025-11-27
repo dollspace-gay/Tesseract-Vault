@@ -6,7 +6,7 @@
 //! # Supported Devices
 //!
 //! - YubiKey (HMAC-SHA1 challenge-response)
-//! - TPM 2.0 (planned)
+//! - TPM 2.0 (key sealing with PCR binding)
 //! - FIDO2/WebAuthn (planned)
 //! - Intel SGX (planned)
 //!
@@ -14,6 +14,7 @@
 //!
 //! - Two-factor authentication for encryption keys
 //! - Hardware-backed key derivation
+//! - TPM-based key sealing with platform integrity verification
 //! - Backup key mechanisms
 //! - Multi-device support
 
@@ -22,6 +23,10 @@ pub mod yubikey;
 
 #[cfg(feature = "yubikey")]
 pub use yubikey::*;
+
+// TPM 2.0 support (always available, detection at runtime)
+#[cfg(not(target_arch = "wasm32"))]
+pub mod tpm;
 
 use crate::error::Result;
 use zeroize::Zeroizing;

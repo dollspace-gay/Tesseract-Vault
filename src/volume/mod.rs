@@ -9,6 +9,7 @@ pub mod chunk;
 pub mod container;
 pub mod filesystem;
 pub mod header;
+pub mod io;
 pub mod keyslot;
 pub mod manager;
 pub mod migration;
@@ -27,6 +28,7 @@ pub use migration::{VolumeMigration, MigrationBackup, MigrationError};
 pub use mount::{MountOptions, MountError};
 pub use operations::InMemoryFilesystem;
 pub use sector::{SectorCipher, SECTOR_SIZE_512, SECTOR_SIZE_4K};
+pub use io::{VolumeIO, VolumeIOError, StorageBackend, FileBackend, MemoryBackend, CacheStats, DEFAULT_CACHE_CAPACITY};
 
 #[cfg(feature = "encrypted-volumes")]
 pub use mount::{mount, MountHandle};

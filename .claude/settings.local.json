@@ -81,7 +81,12 @@
       "Bash(wsl -d fedora -- bash -c \"cd /mnt/c/Users/texas/Tesseract/Tesseract && cargo check --lib 2>&1\":*)",
       "Bash(wsl -l -v:*)",
       "Bash(wsl -d FedoraLinux-42 -- bash -c \"cd /mnt/c/Users/texas/Tesseract/Tesseract && cargo check --lib 2>&1\":*)",
-      "Bash(wsl:*)"
+      "Bash(wsl:*)",
+      "Bash(bd sync:*)",
+      "Bash(cargo install:*)",
+      "Bash(java:*)",
+      "Bash(winget install:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,5 +1,7 @@
 # Tesseract
 
+![Formal Verification](https://github.com/dollspace-gay/Tesseract/actions/workflows/formal-verification.yml/badge.svg)
+
 **Tesseract** is an advanced encryption suite providing military-grade file and volume encryption with post-quantum cryptography support.
 
 Built in Rust for performance and memory safety, Tesseract employs state-of-the-art cryptographic practices to ensure your data remains confidential, tamper-proof, and secure against future quantum computing threats.

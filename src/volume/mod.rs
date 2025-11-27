@@ -17,6 +17,7 @@ pub mod migration;
 pub mod mount;
 pub mod operations;
 pub mod sector;
+pub mod volumeio_fs;
 
 pub use automount::{AutoMountConfig, AutoMountService, AutoMountAuth, VolumeConfig, VolumeConfigBuilder};
 pub use chunk::{ChunkMapper, ChunkLocation, ChunkRange, ChunkError, DEFAULT_CHUNK_SIZE};
@@ -39,6 +40,7 @@ pub use format::{
     FS_BLOCK_SIZE, FS_MAGIC, FS_VERSION, ROOT_INODE, MAX_FILENAME_LEN,
     DIRECT_BLOCKS, DATA_BLOCKS_START, INODE_SIZE, INODES_PER_BLOCK,
 };
+pub use volumeio_fs::{VolumeIOFilesystem, VolumeIOFsError};
 
 #[cfg(feature = "encrypted-volumes")]
 pub use mount::{mount, MountHandle};

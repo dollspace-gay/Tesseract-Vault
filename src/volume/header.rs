@@ -24,12 +24,15 @@ const VERSION: u32 = VERSION_V2;
 /// Size of the volume header in bytes (4KB aligned)
 pub const HEADER_SIZE: usize = 4096;
 
-/// Cipher algorithm identifier
+/// Cipher algorithm identifier for volume encryption
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum CipherAlgorithm {
-    /// AES-256-GCM (default)
+    /// AES-256-GCM - Used for key slot encryption and metadata
     Aes256Gcm = 1,
+    /// XTS-AES-256 - Used for sector/disk encryption (IEEE P1619)
+    /// This is the primary cipher for encrypting volume data
+    Aes256Xts = 2,
 }
 
 /// Post-quantum cryptography algorithm identifier
@@ -189,7 +192,7 @@ impl VolumeHeader {
         let mut header = Self {
             magic: MAGIC,
             version: VERSION,
-            cipher: CipherAlgorithm::Aes256Gcm,
+            cipher: CipherAlgorithm::Aes256Xts, // XTS for sector encryption
             salt,
             header_iv,
             volume_size,
@@ -236,7 +239,7 @@ impl VolumeHeader {
         let mut header = Self {
             magic: MAGIC,
             version: VERSION_V2,
-            cipher: CipherAlgorithm::Aes256Gcm,
+            cipher: CipherAlgorithm::Aes256Xts, // XTS for sector encryption
             salt,
             header_iv,
             volume_size,
@@ -593,7 +596,7 @@ mod tests {
 
         assert_eq!(header.magic, MAGIC);
         assert_eq!(header.version, VERSION);
-        assert_eq!(header.cipher, CipherAlgorithm::Aes256Gcm);
+        assert_eq!(header.cipher, CipherAlgorithm::Aes256Xts); // XTS for sector encryption
         assert_eq!(header.salt, salt);
         assert_eq!(header.header_iv, iv);
         assert_eq!(header.volume_size, 1024 * 1024 * 1024);

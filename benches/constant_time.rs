@@ -29,6 +29,7 @@
 //! - dudect-bencher: https://crates.io/crates/dudect-bencher
 
 use dudect_bencher::{ctbench_main, BenchRng, Class, CtRunner};
+use dudect_bencher::rand::RngCore;
 
 use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
@@ -52,16 +53,12 @@ fn aes_gcm_encrypt_ct(runner: &mut CtRunner, rng: &mut BenchRng) {
     // Fixed plaintext (Class A) vs Random plaintext (Class B)
     let fixed_plaintext = [0u8; 64];
     let mut random_plaintext = [0u8; 64];
+    rng.fill_bytes(&mut random_plaintext);
 
     runner.run_one(Class::Left, || {
         // Class A: Encrypt fixed (all-zero) plaintext
         let _ = cipher.encrypt(&nonce, fixed_plaintext.as_ref());
     });
-
-    // Generate random plaintext for Class B
-    for byte in random_plaintext.iter_mut() {
-        *byte = rng.rand_u8();
-    }
 
     runner.run_one(Class::Right, || {
         // Class B: Encrypt random plaintext
@@ -73,7 +70,7 @@ fn aes_gcm_encrypt_ct(runner: &mut CtRunner, rng: &mut BenchRng) {
 ///
 /// CRITICAL: This tests whether decryption takes the same time for valid vs invalid
 /// tags. Timing differences here could allow tag-guessing attacks.
-fn aes_gcm_decrypt_ct(runner: &mut CtRunner, rng: &mut BenchRng) {
+fn aes_gcm_decrypt_ct(runner: &mut CtRunner, _rng: &mut BenchRng) {
     let key = [0x42u8; 32];
     let nonce_bytes = [0x24u8; 12];
 
@@ -143,10 +140,9 @@ fn aes_gcm_tag_position_ct(runner: &mut CtRunner, _rng: &mut BenchRng) {
 /// Test that constant-time byte comparison works correctly.
 ///
 /// Uses the `subtle` crate's ConstantTimeEq which should have no timing leaks.
-fn subtle_compare_ct(runner: &mut CtRunner, rng: &mut BenchRng) {
+fn subtle_compare_ct(runner: &mut CtRunner, _rng: &mut BenchRng) {
     // Two identical arrays
     let fixed_a = [0x42u8; 32];
-    let fixed_b = [0x42u8; 32];
 
     // Array that differs at first byte
     let mut differ_first = fixed_a;
@@ -156,27 +152,15 @@ fn subtle_compare_ct(runner: &mut CtRunner, rng: &mut BenchRng) {
     let mut differ_last = fixed_a;
     differ_last[31] = 0x00;
 
-    // Randomly pick between "differs at first" and "differs at last"
-    let class = if rng.rand_u8() & 1 == 0 {
-        runner.run_one(Class::Left, || {
-            // Compare where mismatch is at the beginning
-            let _ = fixed_a.ct_eq(&differ_first);
-        });
-        Class::Left
-    } else {
-        runner.run_one(Class::Right, || {
-            // Compare where mismatch is at the end
-            let _ = fixed_a.ct_eq(&differ_last);
-        });
-        Class::Right
-    };
+    runner.run_one(Class::Left, || {
+        // Compare where mismatch is at the beginning
+        let _ = fixed_a.ct_eq(&differ_first);
+    });
 
-    // Also run the equal case to ensure it's not optimized away
-    if class == Class::Left {
-        runner.run_one(Class::Right, || {
-            let _ = fixed_a.ct_eq(&fixed_b);
-        });
-    }
+    runner.run_one(Class::Right, || {
+        // Compare where mismatch is at the end
+        let _ = fixed_a.ct_eq(&differ_last);
+    });
 }
 
 /// Test that Argon2 key derivation is constant-time with respect to password content.
@@ -204,8 +188,10 @@ fn argon2_derive_ct(runner: &mut CtRunner, rng: &mut BenchRng) {
 
     // Random password
     let mut random_password = [0u8; 16];
+    rng.fill_bytes(&mut random_password);
+    // Ensure printable ASCII
     for byte in random_password.iter_mut() {
-        *byte = rng.rand_u8() | 0x20; // Ensure printable ASCII
+        *byte = (*byte % 95) + 32; // ASCII 32-126
     }
 
     runner.run_one(Class::Left, || {
@@ -234,9 +220,7 @@ fn aes_gcm_aad_ct(runner: &mut CtRunner, rng: &mut BenchRng) {
 
     // Random AAD
     let mut random_aad = [0u8; 32];
-    for byte in random_aad.iter_mut() {
-        *byte = rng.rand_u8();
-    }
+    rng.fill_bytes(&mut random_aad);
 
     runner.run_one(Class::Left, || {
         let payload = Payload {
@@ -269,9 +253,7 @@ fn aes_gcm_key_ct(runner: &mut CtRunner, rng: &mut BenchRng) {
 
     // Random key
     let mut random_key = [0u8; 32];
-    for byte in random_key.iter_mut() {
-        *byte = rng.rand_u8();
-    }
+    rng.fill_bytes(&mut random_key);
     let cipher_random = Aes256Gcm::new(&random_key.into());
 
     runner.run_one(Class::Left, || {

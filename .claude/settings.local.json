@@ -89,7 +89,9 @@
       "Bash(git push:*)",
       "Bash(bd stats:*)",
       "Bash(cargo +nightly miri test:*)",
-      "Bash(cargo audit:*)"
+      "Bash(cargo audit:*)",
+      "Bash(timeout 30 cargo bench:*)",
+      "Bash(timeout 60 wsl:*)"
     ],
     "deny": [],
     "ask": []

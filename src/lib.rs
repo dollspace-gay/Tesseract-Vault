@@ -313,7 +313,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Miri is too slow for Argon2 (64MB memory, 3 iterations)
     fn test_encrypt_decrypt_file_roundtrip() {
         let temp_dir = tempfile::tempdir().unwrap();
         let input_path = temp_dir.path().join("input.txt");
@@ -333,7 +332,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Miri is too slow for Argon2 (64MB memory, 3 iterations)
     fn test_decrypt_wrong_password() {
         let temp_dir = tempfile::tempdir().unwrap();
         let input_path = temp_dir.path().join("input.txt");
@@ -350,7 +348,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Miri is too slow for Argon2 (64MB memory, 3 iterations)
     fn test_encrypt_bytes_decrypt_bytes() {
         let plaintext = b"Memory encryption test";
         let password = "TestPassword123!";
@@ -362,7 +359,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Miri is too slow for Argon2 (64MB memory, 3 iterations)
     fn test_encrypt_file_validated() {
         let temp_dir = tempfile::tempdir().unwrap();
         let input_path = temp_dir.path().join("input.txt");

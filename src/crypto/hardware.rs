@@ -1083,7 +1083,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Miri doesn't support inline assembly (cpuid)
     fn test_detect_capabilities() {
         let caps = detect_capabilities();
 
@@ -1095,7 +1094,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Miri doesn't support inline assembly (cpuid)
     fn test_security_assessment() {
         let caps = detect_capabilities();
         let assessment = caps.security_assessment();
@@ -1110,7 +1108,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Miri doesn't support inline assembly (cpuid)
     fn test_throughput_estimate() {
         let caps = detect_capabilities();
         let throughput = caps.estimated_aes_gcm_throughput();
@@ -1119,7 +1116,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Miri doesn't support inline assembly (cpuid)
     fn test_available_features() {
         let caps = detect_capabilities();
         let features = caps.available_features();
@@ -1140,7 +1136,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Miri doesn't support inline assembly (cpuid)
     fn test_has_hardware_acceleration() {
         let result = has_hardware_acceleration();
         println!("Has hardware acceleration: {}", result);

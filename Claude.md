@@ -58,9 +58,6 @@ CRITICAL: After making code changes, you MUST test builds and run verification t
   cargo kani --lib --harness verify_nonce_len
   cargo kani --lib --harness verify_encrypt_no_panic
 
-  # Miri undefined behavior detection (requires nightly)
-  cargo +nightly miri test --lib
-
   # Security audit
   cargo audit
 

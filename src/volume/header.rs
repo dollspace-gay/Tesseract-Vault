@@ -25,23 +25,12 @@ const VERSION: u32 = VERSION_V2;
 pub const HEADER_SIZE: usize = 4096;
 
 /// Returns the current Unix timestamp in seconds.
-///
-/// When running under Miri (for testing), returns a fixed mock timestamp
-/// since Miri doesn't support real-time clocks with isolation enabled.
 #[inline]
 fn current_unix_timestamp() -> u64 {
-    #[cfg(miri)]
-    {
-        // Fixed timestamp for Miri tests: 2024-01-01 00:00:00 UTC
-        1704067200
-    }
-    #[cfg(not(miri))]
-    {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("System time before Unix epoch")
-            .as_secs()
-    }
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("System time before Unix epoch")
+        .as_secs()
 }
 
 /// Cipher algorithm identifier for volume encryption

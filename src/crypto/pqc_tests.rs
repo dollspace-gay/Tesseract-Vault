@@ -236,7 +236,6 @@ mod hybrid_mode_tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // Miri is too slow for Argon2 (64MB memory, 3 iterations)
     fn test_hybrid_mode_full_flow() {
         use crate::crypto::pqc::{encapsulate, decapsulate};
         use crate::crypto::kdf::Argon2Kdf;

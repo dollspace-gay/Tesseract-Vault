@@ -24,6 +24,26 @@ const VERSION: u32 = VERSION_V2;
 /// Size of the volume header in bytes (4KB aligned)
 pub const HEADER_SIZE: usize = 4096;
 
+/// Returns the current Unix timestamp in seconds.
+///
+/// When running under Miri (for testing), returns a fixed mock timestamp
+/// since Miri doesn't support real-time clocks with isolation enabled.
+#[inline]
+fn current_unix_timestamp() -> u64 {
+    #[cfg(miri)]
+    {
+        // Fixed timestamp for Miri tests: 2024-01-01 00:00:00 UTC
+        1704067200
+    }
+    #[cfg(not(miri))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("System time before Unix epoch")
+            .as_secs()
+    }
+}
+
 /// Cipher algorithm identifier for volume encryption
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
@@ -217,10 +237,7 @@ impl VolumeHeader {
         salt: [u8; 32],
         header_iv: [u8; 12],
     ) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("System time before Unix epoch")
-            .as_secs();
+        let now = current_unix_timestamp();
 
         let mut header = Self {
             magic: MAGIC,
@@ -264,10 +281,7 @@ impl VolumeHeader {
         header_iv: [u8; 12],
         pq_metadata_size: u32,
     ) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("System time before Unix epoch")
-            .as_secs();
+        let now = current_unix_timestamp();
 
         let mut header = Self {
             magic: MAGIC,
@@ -395,10 +409,7 @@ impl VolumeHeader {
 
     /// Updates the modification timestamp to the current time
     pub fn touch(&mut self) {
-        self.modified_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("System time before Unix epoch")
-            .as_secs();
+        self.modified_at = current_unix_timestamp();
     }
 
     /// Returns the salt used for key derivation
@@ -527,10 +538,7 @@ impl VolumeHeader {
     /// Call this whenever header fields are modified to keep the checksum valid.
     pub fn update_checksum(&mut self) {
         // Update modification timestamp
-        self.modified_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("System time before Unix epoch")
-            .as_secs();
+        self.modified_at = current_unix_timestamp();
 
         // Recompute checksum
         self.checksum = self.compute_checksum();

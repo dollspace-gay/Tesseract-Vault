@@ -259,10 +259,6 @@ impl Container {
         let password_key = Zeroizing::new(kdf.derive_key(password.as_bytes(), &salt)
             .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?);
 
-        #[cfg(test)]
-        eprintln!("DEBUG CREATE: salt first 4: {:?}, password_key first 4: {:?}",
-            &salt[..4], &password_key[..4]);
-
         // Encrypt ML-KEM decapsulation key with password key
         let encryptor = AesGcmEncryptor::new();
         let mut nonce = [0u8; 12];
@@ -288,10 +284,6 @@ impl Container {
         // Verify sizes match exactly
         debug_assert_eq!(encrypted_dk_with_nonce.len(), 3196,
             "encrypted_dk_with_nonce should be exactly 3196 bytes: nonce(12) + ciphertext(3168+16)");
-
-        #[cfg(test)]
-        eprintln!("DEBUG WRITE: nonce: {:?}, edk_with_nonce len: {}, edk first 4: {:?}",
-            &nonce[..4], encrypted_dk_with_nonce.len(), &encrypted_dk[..4]);
 
         edk_bytes.copy_from_slice(&encrypted_dk_with_nonce);
 
@@ -438,10 +430,6 @@ impl Container {
             let password_key = Zeroizing::new(kdf.derive_key(password.as_bytes(), header.salt())
                 .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?);
 
-            #[cfg(test)]
-            eprintln!("DEBUG READ: salt first 4: {:?}, password_key first 4: {:?}",
-                &header.salt()[..4], &password_key[..4]);
-
             // Decrypt ML-KEM decapsulation key with password key
             // encrypted_decapsulation_key format: nonce (12 bytes) + encrypted_dk (3168) + auth tag (16)
             let encrypted_dk = &pq_metadata.encrypted_decapsulation_key;
@@ -451,10 +439,6 @@ impl Container {
             let nonce = &encrypted_dk[0..12];
             // ciphertext = encrypted_dk (3168) + tag (16) = 3184 bytes
             let ciphertext = &encrypted_dk[12..];
-
-            #[cfg(test)]
-            eprintln!("DEBUG: encrypted_dk total len: {}, nonce: {:?}, ciphertext len: {}",
-                encrypted_dk.len(), &nonce[..4], ciphertext.len());
 
             let dk_bytes = encryptor.decrypt(&password_key, nonce, ciphertext)
                 .map_err(|_| ContainerError::KeySlot(super::keyslot::KeySlotError::DecryptionFailed))?;

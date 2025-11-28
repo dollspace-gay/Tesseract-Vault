@@ -206,10 +206,13 @@ jobs:
           cargo miri test --lib crypto::tests::test_nonce_uniqueness -- --nocapture
           echo "::endgroup::"
 
-      # NOTE: KDF tests are skipped because Argon2 is intentionally computationally
-      # expensive (memory-hard KDF), and Miri interprets every instruction making
-      # these tests take hours. The Argon2 crate itself is well-audited.
-      # See: https://github.com/RustCrypto/password-hashes
+      - name: Run Miri on KDF tests
+        run: |
+          echo "::group::Miri UB Detection - KDF"
+          # Test Argon2 key derivation for memory safety
+          cargo miri test --lib kdf::tests::test_derive_key -- --nocapture
+          cargo miri test --lib kdf::tests::test_salt_generation -- --nocapture
+          echo "::endgroup::"
 
       - name: Run Miri on memory pool tests
         run: |
@@ -257,7 +260,7 @@ jobs:
           echo "- **Kani**: 21 proof harnesses (10 AES-GCM + 11 Argon2id)" >> $GITHUB_STEP_SUMMARY
           echo "- **Wycheproof**: 66 AES-256-GCM test vectors from C2SP" >> $GITHUB_STEP_SUMMARY
           echo "- **Prusti**: Contract annotations (in progress)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Miri**: Targeted UB detection on crypto and memory tests (KDF skipped - Argon2 too slow)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Miri**: Targeted UB detection on crypto, KDF, and memory tests" >> $GITHUB_STEP_SUMMARY
           echo "- **cargo-audit**: Supply chain vulnerability scanning" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Next Steps" >> $GITHUB_STEP_SUMMARY

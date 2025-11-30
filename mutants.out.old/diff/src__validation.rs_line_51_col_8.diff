@@ -1,0 +1,21 @@
+--- src/validation.rs
++++ delete ! in get_and_validate_password
+@@ -43,17 +43,17 @@
+     let pass1 = Zeroizing::new(read_password()?);
+ 
+     validate_password(&pass1)?;
+ 
+     print!("Confirm password: ");
+     std::io::stdout().flush()?;
+     let pass2 = Zeroizing::new(read_password()?);
+ 
+-    if !bool::from(pass1.as_bytes().ct_eq(pass2.as_bytes())) {
++    if  /* ~ changed by cargo-mutants ~ */bool::from(pass1.as_bytes().ct_eq(pass2.as_bytes())) {
+         return Err(CryptorError::PasswordValidation(
+             "Passwords do not match.".to_string(),
+         ));
+     }
+ 
+     Ok(pass1)
+ }
+ 

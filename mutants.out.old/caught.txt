@@ -1,0 +1,8 @@
+src/validation.rs:113:25: replace < with > in validate_password
+src/validation.rs:111:29: replace + with * in validate_password
+src/validation.rs:111:51: replace + with - in validate_password
+src/validation.rs:98:23: replace < with <= in validate_password
+src/validation.rs:98:5: replace validate_password -> Result<()> with Ok(())
+src/validation.rs:98:23: replace < with > in validate_password
+src/validation.rs:98:23: replace < with == in validate_password
+src/validation.rs:113:25: replace < with <= in validate_password

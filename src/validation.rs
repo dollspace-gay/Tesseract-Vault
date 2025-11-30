@@ -38,23 +38,7 @@ pub const MIN_COMPLEXITY_SCORE: u8 = 3;
 /// - Constant-time comparison to prevent timing attacks
 #[cfg(not(target_arch = "wasm32"))]
 pub fn get_and_validate_password() -> Result<Zeroizing<String>> {
-    print!("Enter a strong password: ");
-    std::io::stdout().flush()?;
-    let pass1 = Zeroizing::new(read_password()?);
-
-    validate_password(&pass1)?;
-
-    print!("Confirm password: ");
-    std::io::stdout().flush()?;
-    let pass2 = Zeroizing::new(read_password()?);
-
-    if !bool::from(pass1.as_bytes().ct_eq(pass2.as_bytes())) {
-        return Err(CryptorError::PasswordValidation(
-            "Passwords do not match.".to_string(),
-        ));
-    }
-
-    Ok(pass1)
+    Ok(Zeroizing::new("xyzzy".into())) /* ~ changed by cargo-mutants ~ */
 }
 
 /// Prompts the user for a password without validation (for decryption).
@@ -130,9 +114,20 @@ mod tests {
 
     #[test]
     fn test_password_low_complexity() {
+        // Single character type - should fail
         assert!(validate_password("alllowercase").is_err());
         assert!(validate_password("ALLUPPERCASE").is_err());
         assert!(validate_password("12345678901234567890").is_err());
+    }
+
+    #[test]
+    fn test_password_two_types_no_special() {
+        // Two character types without special chars - should fail (need 3 types)
+        // This test catches the mutation: delete ! in validate_password
+        // which would incorrectly detect alphanumeric as special chars
+        assert!(validate_password("abcdefghij12").is_err()); // lower + number = 2
+        assert!(validate_password("ABCDEFGHIJ12").is_err()); // upper + number = 2
+        assert!(validate_password("abcdefABCDEF").is_err()); // lower + upper = 2
     }
 
     #[test]

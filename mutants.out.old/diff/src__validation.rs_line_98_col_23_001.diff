@@ -1,0 +1,21 @@
+--- src/validation.rs
++++ replace < with > in validate_password
+@@ -90,17 +90,17 @@
+ /// # Examples
+ ///
+ /// ```
+ /// # use tesseract_lib::validation::validate_password;
+ /// assert!(validate_password("Abcdef123!@#").is_ok());
+ /// assert!(validate_password("weak").is_err());
+ /// ```
+ pub fn validate_password(password: &str) -> Result<()> {
+-    if password.len() < MIN_PASSWORD_LENGTH {
++    if password.len() > /* ~ changed by cargo-mutants ~ */ MIN_PASSWORD_LENGTH {
+         return Err(CryptorError::PasswordValidation(format!(
+             "Password must be at least {} characters long.",
+             MIN_PASSWORD_LENGTH
+         )));
+     }
+ 
+     let has_uppercase = password.chars().any(char::is_uppercase);
+     let has_lowercase = password.chars().any(char::is_lowercase);

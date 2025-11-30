@@ -1,0 +1,62 @@
+# Mutation Testing Configuration for Tesseract Vault
+# https://mutants.rs/
+
+# Focus on security-critical modules
+[filters]
+# Only mutate these security-critical source files
+examine_globs = [
+    "src/crypto/**/*.rs",
+    "src/volume/header.rs",
+    "src/volume/keyslot.rs",
+    "src/volume/sector.rs",
+    "src/validation.rs",
+]
+
+# Exclude test code, benchmarks, and non-critical modules
+exclude_globs = [
+    "src/**/*_test*.rs",
+    "src/**/*_tests*.rs",
+    "benches/**/*.rs",
+    "tests/**/*.rs",
+    "fuzz/**/*.rs",
+    # Exclude GUI and daemon code (not security-critical)
+    "src/daemon/**/*.rs",
+    # Exclude Kani/Prusti verification harnesses
+    "src/**/*_kani.rs",
+]
+
+# Copy-exclude patterns for temp directory (prevents lock file issues)
+copy_exclude = [
+    ".beads/**",
+    ".git/**",
+    "target/**",
+    "mutants.out/**",
+]
+
+# Skip mutating functions that are hard to test or low-value
+exclude_regex = [
+    # Debug/display implementations
+    "^impl.*Debug",
+    "^impl.*Display",
+    "^impl.*Default",
+    # Error conversion impls
+    "^impl.*From<.*Error>",
+    # Tracing/logging
+    "tracing::",
+    "log::",
+    # Test utilities
+    "#\\[cfg\\(test\\)\\]",
+]
+
+[timeouts]
+# Extend timeout for crypto operations (key derivation is slow)
+test = "120s"
+# Build timeout
+build = "300s"
+
+[options]
+# Run library tests only (they're the most comprehensive)
+test_args = ["--lib"]
+
+# Show all mutants, even caught ones, for better visibility
+show_line_coverage = true

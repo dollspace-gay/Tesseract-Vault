@@ -23,7 +23,10 @@ pub use automount::{AutoMountConfig, AutoMountService, AutoMountAuth, VolumeConf
 pub use chunk::{ChunkMapper, ChunkLocation, ChunkRange, ChunkError, DEFAULT_CHUNK_SIZE};
 pub use container::{Container, METADATA_SIZE, KEYSLOTS_SIZE};
 pub use filesystem::{EncryptedFilesystem, FileAttr, FileType, FilesystemError, DirEntry};
-pub use header::VolumeHeader;
+pub use header::{
+    VolumeHeader, PqVolumeMetadata, PqAlgorithm, CipherAlgorithm, HeaderError,
+    HEADER_SIZE, PQ_METADATA_SIZE,
+};
 pub use keyslot::{KeySlots, MasterKey, MAX_KEY_SLOTS};
 pub use manager::{VolumeManager, VolumeManagerError, MountedVolumeInfo};
 pub use migration::{VolumeMigration, MigrationBackup, MigrationError};

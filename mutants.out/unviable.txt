@@ -1,0 +1,1 @@
+src/validation.rs:67:5: replace get_password -> Result<Zeroizing<String>> with Ok(Zeroizing::from("xyzzy".into()))

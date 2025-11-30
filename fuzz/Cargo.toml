@@ -1,0 +1,93 @@
+[package]
+name = "tesseract-vault-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+bincode = "1.3"
+
+[dependencies.tesseract_lib]
+package = "tesseract-vault"
+path = ".."
+# Disable default features that aren't needed for fuzzing
+default-features = false
+features = ["post-quantum", "compression"]
+
+# ============================================================================
+# Fuzz Targets
+# ============================================================================
+
+[[bin]]
+name = "fuzz_volume_header"
+path = "fuzz_targets/fuzz_volume_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_pq_metadata"
+path = "fuzz_targets/fuzz_pq_metadata.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_superblock"
+path = "fuzz_targets/fuzz_superblock.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_inode"
+path = "fuzz_targets/fuzz_inode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_keyslots"
+path = "fuzz_targets/fuzz_keyslots.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_stream_header"
+path = "fuzz_targets/fuzz_stream_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_bitmap"
+path = "fuzz_targets/fuzz_bitmap.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_dir_entry"
+path = "fuzz_targets/fuzz_dir_entry.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_chunk_mapper"
+path = "fuzz_targets/fuzz_chunk_mapper.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_aes_gcm_decrypt"
+path = "fuzz_targets/fuzz_aes_gcm_decrypt.rs"
+test = false
+doc = false
+bench = false

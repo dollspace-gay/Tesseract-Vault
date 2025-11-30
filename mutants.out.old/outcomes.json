@@ -1,0 +1,1437 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 957.239033056,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 468.921762392,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "validate_password",
+            "return_type": "-> Result<()>",
+            "span": {
+              "start": {
+                "line": 72,
+                "column": 1
+              },
+              "end": {
+                "line": 120,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 113,
+              "column": 25
+            },
+            "end": {
+              "line": 113,
+              "column": 26
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__validation.rs_line_113_col_25.log",
+      "diff_path": "diff/src__validation.rs_line_113_col_25.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1096.770031379,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 345.638636389,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_and_validate_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 20,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 41,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 14
+            }
+          },
+          "replacement": "Ok(Zeroizing::new(String::new()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/src__validation.rs_line_41_col_5.log",
+      "diff_path": "diff/src__validation.rs_line_41_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1091.968351889,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 344.994391777,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "validate_password",
+            "return_type": "-> Result<()>",
+            "span": {
+              "start": {
+                "line": 72,
+                "column": 1
+              },
+              "end": {
+                "line": 120,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 111,
+              "column": 29
+            },
+            "end": {
+              "line": 111,
+              "column": 30
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__validation.rs_line_111_col_29.log",
+      "diff_path": "diff/src__validation.rs_line_111_col_29.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1013.054405334,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 340.962206703,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_and_validate_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 20,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 41,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 14
+            }
+          },
+          "replacement": "Ok(Zeroizing::from_iter([\"xyzzy\".into()]))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__validation.rs_line_41_col_5_001.log",
+      "diff_path": "diff/src__validation.rs_line_41_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 45.199052969,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 60,
+                "column": 1
+              },
+              "end": {
+                "line": 70,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 67,
+              "column": 5
+            },
+            "end": {
+              "line": 69,
+              "column": 41
+            }
+          },
+          "replacement": "Ok(Zeroizing::new(String::new()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/src__validation.rs_line_67_col_5.log",
+      "diff_path": "diff/src__validation.rs_line_67_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1043.07861135,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 353.580431565,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "validate_password",
+            "return_type": "-> Result<()>",
+            "span": {
+              "start": {
+                "line": 72,
+                "column": 1
+              },
+              "end": {
+                "line": 120,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 111,
+              "column": 51
+            },
+            "end": {
+              "line": 111,
+              "column": 52
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__validation.rs_line_111_col_51.log",
+      "diff_path": "diff/src__validation.rs_line_111_col_51.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1030.397279288,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 407.683844998,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 60,
+                "column": 1
+              },
+              "end": {
+                "line": 70,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 67,
+              "column": 5
+            },
+            "end": {
+              "line": 69,
+              "column": 41
+            }
+          },
+          "replacement": "Ok(Zeroizing::from_iter([\"xyzzy\".into()]))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__validation.rs_line_67_col_5_001.log",
+      "diff_path": "diff/src__validation.rs_line_67_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 50.638144147,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 60,
+                "column": 1
+              },
+              "end": {
+                "line": 70,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 67,
+              "column": 5
+            },
+            "end": {
+              "line": 69,
+              "column": 41
+            }
+          },
+          "replacement": "Ok(Zeroizing::from(String::new()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/src__validation.rs_line_67_col_5_002.log",
+      "diff_path": "diff/src__validation.rs_line_67_col_5_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 900.569671387,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 231.409928281,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 60,
+                "column": 1
+              },
+              "end": {
+                "line": 70,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 67,
+              "column": 5
+            },
+            "end": {
+              "line": 69,
+              "column": 41
+            }
+          },
+          "replacement": "Ok(Zeroizing::new())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__validation.rs_line_67_col_5_003.log",
+      "diff_path": "diff/src__validation.rs_line_67_col_5_003.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 44.69472999,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "validate_password",
+            "return_type": "-> Result<()>",
+            "span": {
+              "start": {
+                "line": 72,
+                "column": 1
+              },
+              "end": {
+                "line": 120,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 108,
+              "column": 48
+            },
+            "end": {
+              "line": 108,
+              "column": 49
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/src__validation.rs_line_108_col_48.log",
+      "diff_path": "diff/src__validation.rs_line_108_col_48.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 797.645533472,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 342.532980256,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "validate_password",
+            "return_type": "-> Result<()>",
+            "span": {
+              "start": {
+                "line": 72,
+                "column": 1
+              },
+              "end": {
+                "line": 120,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 98,
+              "column": 23
+            },
+            "end": {
+              "line": 98,
+              "column": 24
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__validation.rs_line_98_col_23.log",
+      "diff_path": "diff/src__validation.rs_line_98_col_23.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1157.121207193,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 299.770264499,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "validate_password",
+            "return_type": "-> Result<()>",
+            "span": {
+              "start": {
+                "line": 72,
+                "column": 1
+              },
+              "end": {
+                "line": 120,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 98,
+              "column": 5
+            },
+            "end": {
+              "line": 119,
+              "column": 11
+            }
+          },
+          "replacement": "Ok(())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__validation.rs_line_98_col_5.log",
+      "diff_path": "diff/src__validation.rs_line_98_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1136.339537143,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 274.080319963,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 60,
+                "column": 1
+              },
+              "end": {
+                "line": 70,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 67,
+              "column": 5
+            },
+            "end": {
+              "line": 69,
+              "column": 41
+            }
+          },
+          "replacement": "Ok(Zeroizing::new(\"xyzzy\".into()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/src__validation.rs_line_67_col_5_004.log",
+      "diff_path": "diff/src__validation.rs_line_67_col_5_004.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1172.118346492,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 404.531887224,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_and_validate_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 20,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 41,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 14
+            }
+          },
+          "replacement": "Ok(Zeroizing::from(\"xyzzy\".into()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__validation.rs_line_41_col_5_002.log",
+      "diff_path": "diff/src__validation.rs_line_41_col_5_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 51.684949641,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_and_validate_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 20,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 51,
+              "column": 8
+            },
+            "end": {
+              "line": 51,
+              "column": 9
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/src__validation.rs_line_51_col_8.log",
+      "diff_path": "diff/src__validation.rs_line_51_col_8.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1303.775975233,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 358.321262793,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_and_validate_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 20,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 41,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 14
+            }
+          },
+          "replacement": "Ok(Zeroizing::from(String::new()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/src__validation.rs_line_41_col_5_003.log",
+      "diff_path": "diff/src__validation.rs_line_41_col_5_003.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 993.832079157,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 345.856923185,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_and_validate_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 20,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 41,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 14
+            }
+          },
+          "replacement": "Ok(Zeroizing::new())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__validation.rs_line_41_col_5_004.log",
+      "diff_path": "diff/src__validation.rs_line_41_col_5_004.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 21.189184407,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 60,
+                "column": 1
+              },
+              "end": {
+                "line": 70,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 67,
+              "column": 5
+            },
+            "end": {
+              "line": 69,
+              "column": 41
+            }
+          },
+          "replacement": "Ok(Zeroizing::from(\"xyzzy\".into()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__validation.rs_line_67_col_5_005.log",
+      "diff_path": "diff/src__validation.rs_line_67_col_5_005.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 19.483344983,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "validate_password",
+            "return_type": "-> Result<()>",
+            "span": {
+              "start": {
+                "line": 72,
+                "column": 1
+              },
+              "end": {
+                "line": 120,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 98,
+              "column": 23
+            },
+            "end": {
+              "line": 98,
+              "column": 24
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__validation.rs_line_98_col_23_001.log",
+      "diff_path": "diff/src__validation.rs_line_98_col_23_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1018.445435544,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 371.947086035,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_and_validate_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 20,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 41,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 14
+            }
+          },
+          "replacement": "Ok(Zeroizing::from_iter([String::new()]))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__validation.rs_line_41_col_5_005.log",
+      "diff_path": "diff/src__validation.rs_line_41_col_5_005.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 53.917258575,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "validate_password",
+            "return_type": "-> Result<()>",
+            "span": {
+              "start": {
+                "line": 72,
+                "column": 1
+              },
+              "end": {
+                "line": 120,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 98,
+              "column": 23
+            },
+            "end": {
+              "line": 98,
+              "column": 24
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__validation.rs_line_98_col_23_002.log",
+      "diff_path": "diff/src__validation.rs_line_98_col_23_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1173.466469382,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 323.523137829,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "get_and_validate_password",
+            "return_type": "-> Result<Zeroizing<String>>",
+            "span": {
+              "start": {
+                "line": 20,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 41,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 14
+            }
+          },
+          "replacement": "Ok(Zeroizing::new(\"xyzzy\".into()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/src__validation.rs_line_41_col_5_006.log",
+      "diff_path": "diff/src__validation.rs_line_41_col_5_006.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1146.432451772,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 202.955123815,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "package": "tesseract-vault",
+          "file": "src/validation.rs",
+          "function": {
+            "function_name": "validate_password",
+            "return_type": "-> Result<()>",
+            "span": {
+              "start": {
+                "line": 72,
+                "column": 1
+              },
+              "end": {
+                "line": 120,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 113,
+              "column": 25
+            },
+            "end": {
+              "line": 113,
+              "column": 26
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__validation.rs_line_113_col_25_001.log",
+      "diff_path": "diff/src__validation.rs_line_113_col_25_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 807.39115498,
+          "process_status": "Success",
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 295.34192529,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/usr/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tesseract-vault@1.2.0",
+            "--lib"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 23,
+  "missed": 8,
+  "caught": 8,
+  "timeout": 0,
+  "unviable": 7,
+  "success": 0
+}

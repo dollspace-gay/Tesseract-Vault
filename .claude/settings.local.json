@@ -101,7 +101,8 @@
       "Bash(cargo +nightly miri setup:*)",
       "Bash(timeout:*)",
       "Bash(git revert:*)",
-      "Bash(bd:*)"
+      "Bash(bd:*)",
+      "Bash(del \"c:\\Users\\texas\\Tesseract\\Tesseract\\fuzz\\fuzz_targets\\fuzz_target_1.rs\")"
     ],
     "deny": [],
     "ask": []

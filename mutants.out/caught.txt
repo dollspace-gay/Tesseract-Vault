@@ -1,0 +1,2 @@
+src/validation.rs:111:51: replace + with - in validate_password
+src/validation.rs:111:71: replace + with - in validate_password

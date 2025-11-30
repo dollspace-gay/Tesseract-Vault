@@ -1,0 +1,7 @@
+src/validation.rs:41:5: replace get_and_validate_password -> Result<Zeroizing<String>> with Ok(Zeroizing::from_iter(["xyzzy".into()]))
+src/validation.rs:67:5: replace get_password -> Result<Zeroizing<String>> with Ok(Zeroizing::from_iter(["xyzzy".into()]))
+src/validation.rs:67:5: replace get_password -> Result<Zeroizing<String>> with Ok(Zeroizing::new())
+src/validation.rs:41:5: replace get_and_validate_password -> Result<Zeroizing<String>> with Ok(Zeroizing::from("xyzzy".into()))
+src/validation.rs:41:5: replace get_and_validate_password -> Result<Zeroizing<String>> with Ok(Zeroizing::new())
+src/validation.rs:67:5: replace get_password -> Result<Zeroizing<String>> with Ok(Zeroizing::from("xyzzy".into()))
+src/validation.rs:41:5: replace get_and_validate_password -> Result<Zeroizing<String>> with Ok(Zeroizing::from_iter([String::new()]))

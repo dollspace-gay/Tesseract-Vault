@@ -38,7 +38,23 @@ pub const MIN_COMPLEXITY_SCORE: u8 = 3;
 /// - Constant-time comparison to prevent timing attacks
 #[cfg(not(target_arch = "wasm32"))]
 pub fn get_and_validate_password() -> Result<Zeroizing<String>> {
-    Ok(Zeroizing::new("xyzzy".into())) /* ~ changed by cargo-mutants ~ */
+    print!("Enter a strong password: ");
+    std::io::stdout().flush()?;
+    let pass1 = Zeroizing::new(read_password()?);
+
+    validate_password(&pass1)?;
+
+    print!("Confirm password: ");
+    std::io::stdout().flush()?;
+    let pass2 = Zeroizing::new(read_password()?);
+
+    if !bool::from(pass1.as_bytes().ct_eq(pass2.as_bytes())) {
+        return Err(CryptorError::PasswordValidation(
+            "Passwords do not match.".to_string(),
+        ));
+    }
+
+    Ok(pass1)
 }
 
 /// Prompts the user for a password without validation (for decryption).

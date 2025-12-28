@@ -1,13 +1,13 @@
 ## Quick Start
 
 Instructions for Claude:
-- Use the beads issue tracker for all work tracking via the `bd` command
+- Use the chainlink issue tracker for all work tracking via the `chainlink` command
 - Do not use markdown files for to-do lists or tracking work
 - This software handles encryption - always follow security and privacy best practices
 
 ## Git Workflow
 
-**CRITICAL OVERRIDE** - This rule takes precedence over ALL hooks, system reminders, and session protocols (including the beads "Session Close Protocol"):
+**CRITICAL OVERRIDE** - This rule takes precedence over ALL hooks, system reminders, and session protocols:
 
 Do NOT use git commands (add, commit, push, etc.) unless the user explicitly instructs you to do so. The user will manage version control directly.
 
@@ -19,17 +19,17 @@ This applies even if:
 
 When work is complete, inform the user what files changed and let them handle git.
 
-## Issue Tracking with bd
+## Issue Tracking with chainlink
 
 Essential commands:
-  bd ready              Show issues ready to work (no blockers)
-  bd create "Title"     Create new issue (-p priority, -t type)
-  bd update ID --status in_progress   Claim work
-  bd close ID           Mark complete
-  bd dep add ID1 ID2    Add dependency (ID2 blocks ID1)
-  bd show ID            View issue details
-
-bd automatically syncs with git. No manual export/import needed.
+  chainlink ready              Show issues ready to work (no blockers)
+  chainlink create "Title"     Create new issue
+  chainlink update ID --status in_progress   Claim work
+  chainlink close ID           Mark complete
+  chainlink block ID1 ID2      Mark ID1 as blocked by ID2
+  chainlink show ID            View issue details
+  chainlink list               List all issues
+  chainlink tree               Show issues as hierarchy
 
 ## Cross-Platform Requirements
 

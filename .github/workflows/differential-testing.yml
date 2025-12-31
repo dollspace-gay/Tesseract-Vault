@@ -79,6 +79,7 @@ jobs:
 
       - name: Run differential tests
         run: |
-          cargo test --test differential_tests --release -- --nocapture
+          # Use --no-default-features to avoid GUI dependencies (requires Windows SDK setup)
+          cargo test --test differential_tests --release --no-default-features -- --nocapture
         env:
           PROPTEST_CASES: 50

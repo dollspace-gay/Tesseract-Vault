@@ -80,6 +80,7 @@ jobs:
 
       - name: Run proptest encryption tests
         run: |
-          cargo test --test proptest_encryption --release -- --nocapture
+          # Use --no-default-features to avoid GUI dependencies (requires Windows SDK setup)
+          cargo test --test proptest_encryption --release --no-default-features -- --nocapture
         env:
           PROPTEST_CASES: 100

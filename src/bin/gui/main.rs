@@ -183,20 +183,15 @@ fn notify_queue_complete(total: usize, succeeded: usize, failed: usize, enabled:
 enum Mode {
     Encrypt,
     Decrypt,
-    #[allow(dead_code)]
     Volume,
 }
 
 #[derive(PartialEq, Clone)]
 enum VolumeTab {
     Create,
-    #[allow(dead_code)]
     Mount,
-    #[allow(dead_code)]
     Info,
-    #[allow(dead_code)]
     Password,
-    #[allow(dead_code)]
     Security,
 }
 
@@ -254,34 +249,21 @@ struct CryptorApp {
     // Volume management fields
     #[cfg(feature = "encrypted-volumes")]
     volume_manager: Option<tesseract_lib::volume::VolumeManager>,
-    #[allow(dead_code)]
     volume_tab: VolumeTab,
-    #[allow(dead_code)]
     volume_container_path: String,
-    #[allow(dead_code)]
     volume_mount_point: String,
-    #[allow(dead_code)]
     volume_size: String,
-    #[allow(dead_code)]
     volume_password: String,
-    #[allow(dead_code)]
     volume_password_confirm: String,
-    #[allow(dead_code)]
     volume_read_only: bool,
-    #[allow(dead_code)]
     volume_status: String,
-    #[allow(dead_code)]
     mounted_volumes: Vec<tesseract_lib::volume::MountedVolumeInfo>,
-    #[allow(dead_code)]
     volume_info: Option<String>,
     // Duress password fields
-    #[allow(dead_code)]
+    enable_duress_password: bool,
     duress_password: String,
-    #[allow(dead_code)]
     duress_password_confirm: String,
-    #[allow(dead_code)]
     duress_status: String,
-    #[allow(dead_code)]
     has_duress_password: bool,
 }
 
@@ -340,6 +322,7 @@ impl CryptorApp {
             mounted_volumes: Vec::new(),
             volume_info: None,
             // Duress password fields
+            enable_duress_password: false,
             duress_password: String::new(),
             duress_password_confirm: String::new(),
             duress_status: String::new(),
@@ -1099,14 +1082,79 @@ impl CryptorApp {
                         .desired_width(450.0));
                 });
 
-                ui.add_space(30.0);
+                ui.add_space(20.0);
+
+                // Duress password section
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.enable_duress_password, "");
+                    ui.label(egui::RichText::new("Enable Duress Password (Self-Destruct)").size(14.0));
+                });
+
+                if self.enable_duress_password {
+                    ui.add_space(8.0);
+
+                    // Warning box
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(60, 30, 30))
+                        .rounding(egui::Rounding::same(8.0))
+                        .inner_margin(egui::Margin::same(12.0))
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("⚠️ WARNING: If you enter the duress password when opening this volume, ALL encryption keys will be permanently destroyed. The volume will become unrecoverable.")
+                                .size(12.0)
+                                .color(egui::Color32::from_rgb(255, 180, 180)));
+                        });
+
+                    ui.add_space(10.0);
+
+                    // Duress password
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Duress Password").size(14.0));
+                        ui.add_space(22.0);
+                        ui.add(egui::TextEdit::singleline(&mut self.duress_password)
+                            .password(true)
+                            .desired_width(450.0));
+                    });
+
+                    ui.add_space(10.0);
+
+                    // Confirm duress password
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Confirm Duress").size(14.0));
+                        ui.add_space(30.0);
+                        ui.add(egui::TextEdit::singleline(&mut self.duress_password_confirm)
+                            .password(true)
+                            .desired_width(450.0));
+                    });
+
+                    // Validation
+                    if !self.duress_password.is_empty() && self.duress_password == self.volume_password {
+                        ui.add_space(5.0);
+                        ui.label(egui::RichText::new("✗ Duress password must be different from main password")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(255, 100, 100)));
+                    }
+                }
+
+                ui.add_space(20.0);
 
                 // Create button
                 ui.vertical_centered(|ui| {
-                    let can_create = !self.volume_container_path.is_empty()
+                    // Basic validation
+                    let basic_valid = !self.volume_container_path.is_empty()
                         && !self.volume_size.is_empty()
                         && !self.volume_password.is_empty()
                         && self.volume_password == self.volume_password_confirm;
+
+                    // Duress password validation (if enabled)
+                    let duress_valid = if self.enable_duress_password {
+                        !self.duress_password.is_empty()
+                            && self.duress_password == self.duress_password_confirm
+                            && self.duress_password != self.volume_password
+                    } else {
+                        true
+                    };
+
+                    let can_create = basic_valid && duress_valid;
 
                     if ui.add_enabled(can_create, egui::Button::new(
                         egui::RichText::new("📦 Create Volume").size(16.0).color(egui::Color32::WHITE))
@@ -1125,9 +1173,35 @@ impl CryptorApp {
                                     4096,
                                 ) {
                                     Ok(_) => {
-                                        self.volume_status = format!("✓ Volume created successfully: {} bytes", size_bytes);
+                                        // Set duress password if enabled
+                                        if self.enable_duress_password && !self.duress_password.is_empty() {
+                                            // Open the container to set duress password
+                                            match Container::open(
+                                                std::path::Path::new(&self.volume_container_path),
+                                                &self.volume_password,
+                                            ) {
+                                                Ok(mut container) => {
+                                                    match container.set_duress_password(&self.duress_password) {
+                                                        Ok(_) => {
+                                                            self.volume_status = format!("✓ Volume created with duress password: {} bytes", size_bytes);
+                                                        }
+                                                        Err(e) => {
+                                                            self.volume_status = format!("✓ Volume created but duress password failed: {}", e);
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    self.volume_status = format!("✓ Volume created but couldn't set duress password: {}", e);
+                                                }
+                                            }
+                                        } else {
+                                            self.volume_status = format!("✓ Volume created successfully: {} bytes", size_bytes);
+                                        }
                                         self.volume_password.clear();
                                         self.volume_password_confirm.clear();
+                                        self.duress_password.clear();
+                                        self.duress_password_confirm.clear();
+                                        self.enable_duress_password = false;
                                     }
                                     Err(e) => {
                                         self.volume_status = format!("✗ Error: {}", e);

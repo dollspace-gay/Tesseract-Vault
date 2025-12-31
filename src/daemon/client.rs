@@ -15,7 +15,6 @@ use super::protocol::{DaemonCommand, DaemonResponse};
 
 /// Client for communicating with the daemon
 pub struct DaemonClient {
-    #[allow(dead_code)]
     socket_path: PathBuf,
 }
 
@@ -68,7 +67,8 @@ impl DaemonClient {
 
     #[cfg(windows)]
     fn send_command_windows(&self, command: DaemonCommand) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
-        let mut stream = TcpStream::connect("127.0.0.1:37284")?;
+        let addr = self.socket_path.to_string_lossy();
+        let mut stream = TcpStream::connect(addr.as_ref())?;
         Self::send_command_impl(&mut stream, command)
     }
 
@@ -108,6 +108,7 @@ impl DaemonClient {
         password: String,
         read_only: bool,
         hidden_offset: Option<u64>,
+        hidden_password: Option<String>,
     ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
         let command = DaemonCommand::Mount {
             container_path,
@@ -115,6 +116,7 @@ impl DaemonClient {
             password,
             read_only,
             hidden_offset,
+            hidden_password,
         };
 
         self.send_command(command)

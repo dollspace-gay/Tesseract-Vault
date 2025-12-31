@@ -6,7 +6,14 @@
 
 pub mod automount;
 pub mod chunk;
+pub mod cloud_sync;
 pub mod container;
+
+#[cfg(feature = "cloud-storage")]
+pub mod s3_client;
+
+#[cfg(feature = "cloud-storage")]
+pub mod dropbox_client;
 pub mod filesystem;
 pub mod format;
 pub mod header;
@@ -44,6 +51,10 @@ pub use format::{
     DIRECT_BLOCKS, DATA_BLOCKS_START, INODE_SIZE, INODES_PER_BLOCK,
 };
 pub use volumeio_fs::{VolumeIOFilesystem, VolumeIOFsError};
+pub use cloud_sync::{
+    ChunkHash, ChunkState, SyncManifest, ChunkTracker, SyncStats, SyncConfig, SyncError, SyncResult,
+    CloudSyncManager, EncryptionParams,
+};
 
 #[cfg(feature = "encrypted-volumes")]
 pub use mount::{mount, MountHandle};

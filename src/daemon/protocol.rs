@@ -20,6 +20,8 @@ pub enum DaemonCommand {
         read_only: bool,
         /// Optional: Hidden volume offset
         hidden_offset: Option<u64>,
+        /// Optional: Hidden volume password (required if hidden_offset is set)
+        hidden_password: Option<String>,
     },
 
     /// Unmount a volume by container path
@@ -160,6 +162,7 @@ mod tests {
             password: "test123".to_string(),
             read_only: false,
             hidden_offset: None,
+            hidden_password: None,
         };
 
         let bytes = cmd.to_bytes().unwrap();

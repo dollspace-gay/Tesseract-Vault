@@ -27,7 +27,6 @@ pub struct DaemonServer {
     mounts: Arc<Mutex<HashMap<PathBuf, MountInfo>>>,
 
     /// Socket path for IPC
-    #[allow(dead_code)]
     socket_path: PathBuf,
 }
 
@@ -111,8 +110,9 @@ impl DaemonServer {
 
     #[cfg(windows)]
     fn run_windows(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let listener = TcpListener::bind("127.0.0.1:37284")?;
-        println!("Daemon listening on 127.0.0.1:37284");
+        let addr = self.socket_path.to_string_lossy();
+        let listener = TcpListener::bind(addr.as_ref())?;
+        println!("Daemon listening on {}", addr);
 
         // Set up Ctrl+C handler for graceful shutdown
         Self::setup_signal_handlers();
@@ -201,6 +201,7 @@ impl DaemonServer {
                 password,
                 read_only,
                 hidden_offset,
+                hidden_password,
             } => {
                 // Check if already mounted
                 {
@@ -220,7 +221,7 @@ impl DaemonServer {
                     auto_unmount: true,
                     fs_name: Some("SecureCryptor".to_string()),
                     hidden_offset,
-                    hidden_password: None, // TODO: Add hidden password support to daemon protocol
+                    hidden_password,
                 };
 
                 match mgr.mount(&container_path, &password, options) {

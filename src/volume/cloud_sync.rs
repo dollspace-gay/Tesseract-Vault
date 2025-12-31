@@ -1,0 +1,849 @@
+//! Cloud synchronization with incremental chunk tracking
+//!
+//! This module provides intelligent sync for cloud-backed encrypted volumes.
+//! Instead of re-uploading the entire volume when files change, it tracks
+//! which chunks have been modified and only syncs those.
+//!
+//! ## Architecture
+//!
+//! ```text
+//! +------------------+
+//! |  VolumeIO        |
+//! +--------+---------+
+//!          |
+//! +--------v---------+
+//! | CloudSyncManager |  <- This module
+//! |  +------------+  |
+//! |  |ChunkTracker|  |  (hash-based change detection)
+//! |  +-----+------+  |
+//! |        |         |
+//! |  +-----v------+  |
+//! |  |SyncManifest|  |  (persisted sync state)
+//! |  +-----+------+  |
+//! +--------+---------+
+//!          |
+//! +--------v---------+
+//! | AsyncStorage     |  (S3, Dropbox, etc.)
+//! +------------------+
+//! ```
+//!
+//! ## How Incremental Sync Works
+//!
+//! 1. Each chunk is hashed with Blake3 when written locally
+//! 2. The hash is compared against the last synced hash
+//! 3. Only chunks with different hashes are uploaded
+//! 4. A manifest file tracks all chunk hashes and sync timestamps
+
+use std::collections::HashMap;
+use std::io;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use blake3::Hasher;
+use serde::{Deserialize, Serialize};
+
+/// Size of a Blake3 hash in bytes
+pub const HASH_SIZE: usize = 32;
+
+/// Blake3 hash of chunk content for change detection
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ChunkHash([u8; HASH_SIZE]);
+
+impl ChunkHash {
+    /// Creates a new ChunkHash from raw bytes
+    pub fn from_bytes(bytes: [u8; HASH_SIZE]) -> Self {
+        Self(bytes)
+    }
+
+    /// Computes the hash of chunk data
+    pub fn compute(data: &[u8]) -> Self {
+        let mut hasher = Hasher::new();
+        hasher.update(data);
+        let hash = hasher.finalize();
+        Self(*hash.as_bytes())
+    }
+
+    /// Returns the hash as a hex string
+    pub fn to_hex(&self) -> String {
+        hex::encode(self.0)
+    }
+
+    /// Returns the raw bytes
+    pub fn as_bytes(&self) -> &[u8; HASH_SIZE] {
+        &self.0
+    }
+
+    /// Creates a zero hash (for empty/uninitialized chunks)
+    pub fn zero() -> Self {
+        Self([0u8; HASH_SIZE])
+    }
+}
+
+impl Default for ChunkHash {
+    fn default() -> Self {
+        Self::zero()
+    }
+}
+
+/// State of a single chunk in the sync system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChunkState {
+    /// Blake3 hash of the local chunk content
+    pub local_hash: ChunkHash,
+
+    /// Blake3 hash of the last synced version (in cloud)
+    pub synced_hash: ChunkHash,
+
+    /// Unix timestamp of last local modification
+    pub local_modified: u64,
+
+    /// Unix timestamp of last successful sync
+    pub last_synced: u64,
+
+    /// Whether this chunk exists in cloud storage
+    pub exists_in_cloud: bool,
+}
+
+impl ChunkState {
+    /// Creates a new ChunkState for a freshly written chunk
+    pub fn new(hash: ChunkHash) -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        Self {
+            local_hash: hash,
+            synced_hash: ChunkHash::zero(),
+            local_modified: now,
+            last_synced: 0,
+            exists_in_cloud: false,
+        }
+    }
+
+    /// Returns true if this chunk needs to be synced to cloud
+    pub fn needs_sync(&self) -> bool {
+        self.local_hash != self.synced_hash
+    }
+
+    /// Marks this chunk as successfully synced
+    pub fn mark_synced(&mut self) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        self.synced_hash = self.local_hash;
+        self.last_synced = now;
+        self.exists_in_cloud = true;
+    }
+
+    /// Updates the local hash (called when chunk is written)
+    pub fn update_local(&mut self, hash: ChunkHash) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        self.local_hash = hash;
+        self.local_modified = now;
+    }
+}
+
+/// Sync manifest containing all chunk states and volume metadata
+///
+/// This is serialized and stored in cloud storage to track sync state
+/// across sessions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncManifest {
+    /// Version of the manifest format
+    pub version: u32,
+
+    /// Unique identifier for this volume
+    pub volume_id: String,
+
+    /// Total size of the volume in bytes
+    pub volume_size: u64,
+
+    /// Size of each chunk in bytes
+    pub chunk_size: u64,
+
+    /// Total number of chunks
+    pub total_chunks: u64,
+
+    /// State of each chunk, keyed by chunk index
+    pub chunks: HashMap<u64, ChunkState>,
+
+    /// Unix timestamp when manifest was last updated
+    pub last_updated: u64,
+
+    /// Encryption parameters (stored for validation, not the key!)
+    pub encryption_params: EncryptionParams,
+}
+
+/// Encryption parameters stored in manifest (NO KEYS!)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EncryptionParams {
+    /// Sector size used for XTS encryption
+    pub sector_size: u32,
+
+    /// Salt for key derivation (not the key itself)
+    pub kdf_salt_hash: ChunkHash,
+}
+
+impl SyncManifest {
+    /// Creates a new manifest for a volume
+    pub fn new(
+        volume_id: String,
+        volume_size: u64,
+        chunk_size: u64,
+        sector_size: u32,
+        kdf_salt: &[u8],
+    ) -> Self {
+        let total_chunks = volume_size.div_ceil(chunk_size);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        Self {
+            version: 1,
+            volume_id,
+            volume_size,
+            chunk_size,
+            total_chunks,
+            chunks: HashMap::new(),
+            last_updated: now,
+            encryption_params: EncryptionParams {
+                sector_size,
+                kdf_salt_hash: ChunkHash::compute(kdf_salt),
+            },
+        }
+    }
+
+    /// Gets the state of a chunk, creating default if not exists
+    pub fn get_chunk(&self, chunk_index: u64) -> Option<&ChunkState> {
+        self.chunks.get(&chunk_index)
+    }
+
+    /// Updates or creates chunk state
+    pub fn update_chunk(&mut self, chunk_index: u64, hash: ChunkHash) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        self.chunks
+            .entry(chunk_index)
+            .and_modify(|state| state.update_local(hash))
+            .or_insert_with(|| ChunkState::new(hash));
+
+        self.last_updated = now;
+    }
+
+    /// Marks a chunk as synced
+    pub fn mark_chunk_synced(&mut self, chunk_index: u64) {
+        if let Some(state) = self.chunks.get_mut(&chunk_index) {
+            state.mark_synced();
+        }
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.last_updated = now;
+    }
+
+    /// Returns list of chunk indices that need syncing
+    pub fn chunks_needing_sync(&self) -> Vec<u64> {
+        self.chunks
+            .iter()
+            .filter(|(_, state)| state.needs_sync())
+            .map(|(idx, _)| *idx)
+            .collect()
+    }
+
+    /// Returns the number of dirty (unsynced) chunks
+    pub fn dirty_count(&self) -> usize {
+        self.chunks.values().filter(|s| s.needs_sync()).count()
+    }
+
+    /// Serializes manifest to JSON bytes
+    pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
+        serde_json::to_vec_pretty(self)
+    }
+
+    /// Deserializes manifest from JSON bytes
+    pub fn from_bytes(data: &[u8]) -> Result<Self, serde_json::Error> {
+        serde_json::from_slice(data)
+    }
+
+    /// Validates that encryption params match (security check)
+    pub fn validate_params(&self, sector_size: u32, kdf_salt: &[u8]) -> bool {
+        self.encryption_params.sector_size == sector_size
+            && self.encryption_params.kdf_salt_hash == ChunkHash::compute(kdf_salt)
+    }
+}
+
+/// Chunk tracker for local change detection
+///
+/// This is the in-memory tracker that monitors chunk modifications
+/// and updates the manifest accordingly.
+pub struct ChunkTracker {
+    /// The sync manifest
+    manifest: SyncManifest,
+
+    /// Whether the manifest itself has unsaved changes
+    manifest_dirty: bool,
+}
+
+impl ChunkTracker {
+    /// Creates a new chunk tracker with a fresh manifest
+    pub fn new(
+        volume_id: String,
+        volume_size: u64,
+        chunk_size: u64,
+        sector_size: u32,
+        kdf_salt: &[u8],
+    ) -> Self {
+        Self {
+            manifest: SyncManifest::new(volume_id, volume_size, chunk_size, sector_size, kdf_salt),
+            manifest_dirty: true,
+        }
+    }
+
+    /// Creates a tracker from an existing manifest
+    pub fn from_manifest(manifest: SyncManifest) -> Self {
+        Self {
+            manifest,
+            manifest_dirty: false,
+        }
+    }
+
+    /// Records that a chunk was written with the given data
+    pub fn record_write(&mut self, chunk_index: u64, data: &[u8]) {
+        let hash = ChunkHash::compute(data);
+        self.manifest.update_chunk(chunk_index, hash);
+        self.manifest_dirty = true;
+    }
+
+    /// Records that a chunk was successfully synced to cloud
+    pub fn record_synced(&mut self, chunk_index: u64) {
+        self.manifest.mark_chunk_synced(chunk_index);
+        self.manifest_dirty = true;
+    }
+
+    /// Returns chunks that need to be synced
+    pub fn get_dirty_chunks(&self) -> Vec<u64> {
+        self.manifest.chunks_needing_sync()
+    }
+
+    /// Returns the number of dirty chunks
+    pub fn dirty_count(&self) -> usize {
+        self.manifest.dirty_count()
+    }
+
+    /// Returns whether the manifest needs to be saved
+    pub fn is_manifest_dirty(&self) -> bool {
+        self.manifest_dirty
+    }
+
+    /// Gets the manifest for serialization
+    pub fn manifest(&self) -> &SyncManifest {
+        &self.manifest
+    }
+
+    /// Marks the manifest as saved
+    pub fn mark_manifest_saved(&mut self) {
+        self.manifest_dirty = false;
+    }
+
+    /// Gets the hash of a chunk if tracked
+    pub fn get_chunk_hash(&self, chunk_index: u64) -> Option<ChunkHash> {
+        self.manifest.get_chunk(chunk_index).map(|s| s.local_hash)
+    }
+
+    /// Checks if a chunk needs sync
+    pub fn chunk_needs_sync(&self, chunk_index: u64) -> bool {
+        self.manifest
+            .get_chunk(chunk_index)
+            .is_some_and(|s| s.needs_sync())
+    }
+}
+
+/// Sync statistics returned after a sync operation
+#[derive(Debug, Clone, Default)]
+pub struct SyncStats {
+    /// Number of chunks uploaded
+    pub chunks_uploaded: u64,
+
+    /// Number of chunks that were already synced
+    pub chunks_skipped: u64,
+
+    /// Total bytes uploaded
+    pub bytes_uploaded: u64,
+
+    /// Time taken in milliseconds
+    pub duration_ms: u64,
+
+    /// Any errors encountered (chunk_index, error message)
+    pub errors: Vec<(u64, String)>,
+}
+
+impl SyncStats {
+    /// Returns true if sync completed without errors
+    pub fn is_success(&self) -> bool {
+        self.errors.is_empty()
+    }
+
+    /// Returns the sync success rate as a percentage
+    pub fn success_rate(&self) -> f64 {
+        let total = self.chunks_uploaded + self.errors.len() as u64;
+        if total == 0 {
+            100.0
+        } else {
+            (self.chunks_uploaded as f64 / total as f64) * 100.0
+        }
+    }
+}
+
+/// Cloud sync configuration
+#[derive(Debug, Clone)]
+pub struct SyncConfig {
+    /// Maximum concurrent chunk uploads
+    pub max_concurrent_uploads: usize,
+
+    /// Whether to retry failed chunks
+    pub retry_failed: bool,
+
+    /// Maximum retry attempts per chunk
+    pub max_retries: u32,
+
+    /// Whether to compress chunks before upload
+    pub compress_chunks: bool,
+}
+
+impl Default for SyncConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_uploads: 4,
+            retry_failed: true,
+            max_retries: 3,
+            compress_chunks: false,
+        }
+    }
+}
+
+/// Error type for cloud sync operations
+#[derive(Debug, thiserror::Error)]
+pub enum SyncError {
+    #[error("I/O error: {0}")]
+    Io(#[from] io::Error),
+
+    #[error("Serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+
+    #[error("Manifest validation failed: encryption parameters mismatch")]
+    ManifestValidation,
+
+    #[error("Chunk {0} sync failed: {1}")]
+    ChunkSync(u64, String),
+
+    #[error("Backend error: {0}")]
+    Backend(String),
+
+    #[error("Manifest not found in cloud storage")]
+    ManifestNotFound,
+}
+
+pub type SyncResult<T> = Result<T, SyncError>;
+
+/// Cloud sync manager that orchestrates syncing between local and cloud storage
+///
+/// This manager integrates the ChunkTracker with an AsyncStorageBackend to
+/// provide complete incremental sync functionality.
+pub struct CloudSyncManager<B> {
+    /// The chunk tracker for change detection
+    tracker: ChunkTracker,
+
+    /// The cloud storage backend
+    backend: B,
+
+    /// Sync configuration
+    config: SyncConfig,
+
+    /// Path/key for the manifest in cloud storage
+    manifest_key: String,
+}
+
+impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
+    /// Creates a new CloudSyncManager with a fresh manifest
+    ///
+    /// Use this when creating a new cloud-backed volume.
+    pub fn new(
+        backend: B,
+        volume_id: String,
+        volume_size: u64,
+        chunk_size: u64,
+        sector_size: u32,
+        kdf_salt: &[u8],
+        manifest_key: String,
+    ) -> Self {
+        Self {
+            tracker: ChunkTracker::new(volume_id, volume_size, chunk_size, sector_size, kdf_salt),
+            backend,
+            config: SyncConfig::default(),
+            manifest_key,
+        }
+    }
+
+    /// Creates a CloudSyncManager from an existing manifest
+    ///
+    /// Use this when reopening an existing cloud-backed volume.
+    pub fn from_manifest(backend: B, manifest: SyncManifest, manifest_key: String) -> Self {
+        Self {
+            tracker: ChunkTracker::from_manifest(manifest),
+            backend,
+            config: SyncConfig::default(),
+            manifest_key,
+        }
+    }
+
+    /// Loads a manifest from cloud storage
+    ///
+    /// Returns None if the manifest doesn't exist (new volume).
+    /// The `_manifest_key` parameter is reserved for backends that support named objects.
+    pub async fn load_manifest_from_cloud(
+        backend: &B,
+        _manifest_key: &str,
+    ) -> SyncResult<Option<SyncManifest>> {
+        // The manifest is stored as a special "chunk" with index u64::MAX
+        // This reserved index is used consistently across all chunk-based backends
+        let manifest_chunk_index = u64::MAX;
+
+        match backend.read_chunk(manifest_chunk_index, 0).await {
+            Ok(Some(data)) => {
+                let manifest = SyncManifest::from_bytes(&data)?;
+                Ok(Some(manifest))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(SyncError::Io(e)),
+        }
+    }
+
+    /// Saves the manifest to cloud storage
+    pub async fn save_manifest(&mut self) -> SyncResult<()> {
+        let data = self.tracker.manifest().to_bytes()?;
+
+        // Store manifest as special chunk at u64::MAX
+        let manifest_chunk_index = u64::MAX;
+
+        self.backend
+            .write_chunk(manifest_chunk_index, &data)
+            .await
+            .map_err(SyncError::Io)?;
+
+        self.tracker.mark_manifest_saved();
+        Ok(())
+    }
+
+    /// Records a chunk write (call this when local chunk is modified)
+    pub fn record_write(&mut self, chunk_index: u64, data: &[u8]) {
+        self.tracker.record_write(chunk_index, data);
+    }
+
+    /// Returns the number of chunks that need syncing
+    pub fn pending_sync_count(&self) -> usize {
+        self.tracker.dirty_count()
+    }
+
+    /// Returns the list of chunk indices that need syncing
+    pub fn chunks_needing_sync(&self) -> Vec<u64> {
+        self.tracker.get_dirty_chunks()
+    }
+
+    /// Syncs a single chunk to cloud storage
+    ///
+    /// Returns true if the chunk was uploaded, false if it was already synced.
+    pub async fn sync_chunk(&mut self, chunk_index: u64, data: &[u8]) -> SyncResult<bool> {
+        // Check if chunk actually needs sync
+        if !self.tracker.chunk_needs_sync(chunk_index) {
+            return Ok(false);
+        }
+
+        // Verify the data hash matches what we're tracking
+        let current_hash = ChunkHash::compute(data);
+        if let Some(tracked_hash) = self.tracker.get_chunk_hash(chunk_index) {
+            if current_hash != tracked_hash {
+                // Data has changed since we recorded it, update the tracker
+                self.tracker.record_write(chunk_index, data);
+            }
+        }
+
+        // Upload the chunk
+        self.backend
+            .write_chunk(chunk_index, data)
+            .await
+            .map_err(|e| SyncError::ChunkSync(chunk_index, e.to_string()))?;
+
+        // Mark as synced
+        self.tracker.record_synced(chunk_index);
+
+        Ok(true)
+    }
+
+    /// Performs a full sync of all dirty chunks
+    ///
+    /// The `get_chunk_data` function is called for each dirty chunk to retrieve
+    /// its current data. This allows the sync manager to work without holding
+    /// all chunk data in memory.
+    pub async fn sync_all<F>(&mut self, get_chunk_data: F) -> SyncResult<SyncStats>
+    where
+        F: Fn(u64) -> Option<Vec<u8>>,
+    {
+        let start = std::time::Instant::now();
+        let mut stats = SyncStats::default();
+
+        let dirty_chunks = self.tracker.get_dirty_chunks();
+        let total_dirty = dirty_chunks.len() as u64;
+
+        for chunk_index in dirty_chunks {
+            match get_chunk_data(chunk_index) {
+                Some(data) => {
+                    match self.sync_chunk(chunk_index, &data).await {
+                        Ok(true) => {
+                            stats.chunks_uploaded += 1;
+                            stats.bytes_uploaded += data.len() as u64;
+                        }
+                        Ok(false) => {
+                            stats.chunks_skipped += 1;
+                        }
+                        Err(e) => {
+                            stats.errors.push((chunk_index, e.to_string()));
+                        }
+                    }
+                }
+                None => {
+                    stats.errors.push((chunk_index, "Failed to get chunk data".to_string()));
+                }
+            }
+        }
+
+        // Save manifest if we synced any chunks
+        if stats.chunks_uploaded > 0 || total_dirty > 0 {
+            if let Err(e) = self.save_manifest().await {
+                stats.errors.push((u64::MAX, format!("Failed to save manifest: {}", e)));
+            }
+        }
+
+        stats.duration_ms = start.elapsed().as_millis() as u64;
+        Ok(stats)
+    }
+
+    /// Downloads a chunk from cloud storage
+    pub async fn download_chunk(&self, chunk_index: u64) -> SyncResult<Option<Vec<u8>>> {
+        self.backend
+            .read_chunk(chunk_index, 0)
+            .await
+            .map_err(SyncError::Io)
+    }
+
+    /// Deletes a chunk from cloud storage
+    pub async fn delete_chunk(&mut self, chunk_index: u64) -> SyncResult<()> {
+        self.backend
+            .delete_chunk(chunk_index)
+            .await
+            .map_err(SyncError::Io)
+    }
+
+    /// Returns whether the manifest needs to be saved
+    pub fn is_manifest_dirty(&self) -> bool {
+        self.tracker.is_manifest_dirty()
+    }
+
+    /// Returns a reference to the manifest
+    pub fn manifest(&self) -> &SyncManifest {
+        self.tracker.manifest()
+    }
+
+    /// Returns a reference to the sync configuration
+    pub fn config(&self) -> &SyncConfig {
+        &self.config
+    }
+
+    /// Sets the sync configuration
+    pub fn set_config(&mut self, config: SyncConfig) {
+        self.config = config;
+    }
+
+    /// Returns the manifest key
+    pub fn manifest_key(&self) -> &str {
+        &self.manifest_key
+    }
+
+    /// Validates that the loaded manifest matches the expected parameters
+    pub fn validate_params(&self, sector_size: u32, kdf_salt: &[u8]) -> bool {
+        self.tracker.manifest().validate_params(sector_size, kdf_salt)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chunk_hash_compute() {
+        let data = b"Hello, world!";
+        let hash1 = ChunkHash::compute(data);
+        let hash2 = ChunkHash::compute(data);
+
+        assert_eq!(hash1, hash2);
+        assert_ne!(hash1, ChunkHash::zero());
+    }
+
+    #[test]
+    fn test_chunk_hash_different_data() {
+        let hash1 = ChunkHash::compute(b"data1");
+        let hash2 = ChunkHash::compute(b"data2");
+
+        assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_chunk_state_needs_sync() {
+        let hash = ChunkHash::compute(b"test data");
+        let mut state = ChunkState::new(hash);
+
+        // New chunk needs sync
+        assert!(state.needs_sync());
+
+        // After marking synced, should not need sync
+        state.mark_synced();
+        assert!(!state.needs_sync());
+
+        // After updating with same hash, still no sync needed
+        state.update_local(hash);
+        assert!(!state.needs_sync());
+
+        // After updating with different hash, needs sync again
+        let new_hash = ChunkHash::compute(b"modified data");
+        state.update_local(new_hash);
+        assert!(state.needs_sync());
+    }
+
+    #[test]
+    fn test_sync_manifest_creation() {
+        let manifest = SyncManifest::new(
+            "test-volume".to_string(),
+            1024 * 1024, // 1 MB
+            64 * 1024,   // 64 KB chunks
+            4096,
+            b"test-salt",
+        );
+
+        assert_eq!(manifest.volume_id, "test-volume");
+        assert_eq!(manifest.volume_size, 1024 * 1024);
+        assert_eq!(manifest.chunk_size, 64 * 1024);
+        assert_eq!(manifest.total_chunks, 16);
+        assert!(manifest.chunks.is_empty());
+    }
+
+    #[test]
+    fn test_sync_manifest_chunk_tracking() {
+        let mut manifest = SyncManifest::new(
+            "test".to_string(),
+            256 * 1024,
+            64 * 1024,
+            4096,
+            b"salt",
+        );
+
+        let hash1 = ChunkHash::compute(b"chunk 0 data");
+        let hash2 = ChunkHash::compute(b"chunk 1 data");
+
+        manifest.update_chunk(0, hash1);
+        manifest.update_chunk(1, hash2);
+
+        assert_eq!(manifest.chunks.len(), 2);
+        assert_eq!(manifest.dirty_count(), 2);
+
+        let dirty = manifest.chunks_needing_sync();
+        assert!(dirty.contains(&0));
+        assert!(dirty.contains(&1));
+
+        manifest.mark_chunk_synced(0);
+        assert_eq!(manifest.dirty_count(), 1);
+    }
+
+    #[test]
+    fn test_sync_manifest_serialization() {
+        let mut manifest = SyncManifest::new(
+            "test-vol".to_string(),
+            1024 * 1024,
+            64 * 1024,
+            4096,
+            b"test-salt",
+        );
+
+        manifest.update_chunk(0, ChunkHash::compute(b"data"));
+        manifest.mark_chunk_synced(0);
+
+        let bytes = manifest.to_bytes().unwrap();
+        let restored = SyncManifest::from_bytes(&bytes).unwrap();
+
+        assert_eq!(restored.volume_id, "test-vol");
+        assert_eq!(restored.chunks.len(), 1);
+        assert!(!restored.get_chunk(0).unwrap().needs_sync());
+    }
+
+    #[test]
+    fn test_sync_manifest_validation() {
+        let manifest = SyncManifest::new(
+            "test".to_string(),
+            1024 * 1024,
+            64 * 1024,
+            4096,
+            b"correct-salt",
+        );
+
+        assert!(manifest.validate_params(4096, b"correct-salt"));
+        assert!(!manifest.validate_params(512, b"correct-salt"));
+        assert!(!manifest.validate_params(4096, b"wrong-salt"));
+    }
+
+    #[test]
+    fn test_chunk_tracker() {
+        let mut tracker = ChunkTracker::new(
+            "vol1".to_string(),
+            256 * 1024,
+            64 * 1024,
+            4096,
+            b"salt",
+        );
+
+        assert!(tracker.is_manifest_dirty());
+        assert_eq!(tracker.dirty_count(), 0);
+
+        tracker.record_write(0, b"chunk data");
+        assert_eq!(tracker.dirty_count(), 1);
+        assert!(tracker.chunk_needs_sync(0));
+
+        tracker.record_synced(0);
+        assert_eq!(tracker.dirty_count(), 0);
+        assert!(!tracker.chunk_needs_sync(0));
+    }
+
+    #[test]
+    fn test_sync_stats() {
+        let mut stats = SyncStats::default();
+        assert!(stats.is_success());
+        assert_eq!(stats.success_rate(), 100.0);
+
+        stats.chunks_uploaded = 10;
+        assert_eq!(stats.success_rate(), 100.0);
+
+        stats.errors.push((5, "test error".to_string()));
+        assert!(!stats.is_success());
+        // 10 / 11 = ~90.9%
+        assert!(stats.success_rate() > 90.0 && stats.success_rate() < 91.0);
+    }
+}

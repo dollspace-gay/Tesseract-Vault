@@ -23,6 +23,7 @@ pub mod manager;
 pub mod migration;
 pub mod mount;
 pub mod operations;
+pub mod remote_wipe;
 pub mod sector;
 pub mod volumeio_fs;
 

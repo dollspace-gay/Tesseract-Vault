@@ -26,6 +26,8 @@
 //! ```
 
 pub mod config;
+#[cfg(kani)]
+mod config_kani;
 pub mod crypto;
 pub mod daemon;
 pub mod error;

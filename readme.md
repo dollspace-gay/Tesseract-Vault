@@ -5,6 +5,11 @@
 [![NIST CAVP Tests](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml)
 [![Security Audit](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml)
 [![Prusti Verification](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml)
+[![Property Testing](https://github.com/dollspace-gay/Tesseract/actions/workflows/proptest.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/proptest.yml)
+[![Timing Safety](https://github.com/dollspace-gay/Tesseract/actions/workflows/dudect.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/dudect.yml)
+[![Supply Chain](https://github.com/dollspace-gay/Tesseract/actions/workflows/cargo-deny.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/cargo-deny.yml)
+[![Differential Testing](https://github.com/dollspace-gay/Tesseract/actions/workflows/differential-testing.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/differential-testing.yml)
+[![Fuzzing](https://github.com/dollspace-gay/Tesseract/actions/workflows/fuzz.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/fuzz.yml)
 
 **Tesseract Vault** is an advanced encryption suite providing advanced file and volume encryption with post-quantum cryptography support.
 

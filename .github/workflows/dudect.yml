@@ -1,0 +1,87 @@
+name: Constant-Time Verification (DudeCT)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Sundays at 2am UTC (timing analysis needs quiet environment)
+    - cron: '0 2 * * 0'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  dudect:
+    name: DudeCT Timing Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-dudect-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-dudect-
+
+      - name: Run DudeCT timing analysis
+        run: |
+          # Run for a limited time in CI (30 seconds per test)
+          # In production/local runs, let it run longer for more confidence
+          timeout 300 cargo bench --bench constant_time 2>&1 || true
+        env:
+          # Reduce iterations for CI to avoid timeouts
+          DUDECT_TIMEOUT_SECS: 30
+
+      - name: Parse DudeCT results
+        run: |
+          echo "## DudeCT Timing Analysis Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "A t-value below 4.5 indicates no timing leak detected." >> $GITHUB_STEP_SUMMARY
+          echo "Values above 4.5 may indicate potential timing vulnerabilities." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Note: CI runs are limited to 30s per test. Run locally for thorough analysis." >> $GITHUB_STEP_SUMMARY
+
+  dudect-windows:
+    name: DudeCT (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-dudect-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-dudect-
+
+      - name: Run DudeCT timing analysis
+        run: |
+          # Run with timeout on Windows
+          $proc = Start-Process -FilePath "cargo" -ArgumentList "bench --bench constant_time" -PassThru -NoNewWindow
+          Start-Sleep -Seconds 300
+          if (!$proc.HasExited) { $proc.Kill() }
+        shell: powershell

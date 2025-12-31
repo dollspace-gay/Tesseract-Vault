@@ -1,0 +1,82 @@
+name: Property-Based Testing
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Sundays at midnight UTC
+    - cron: '0 0 * * 0'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  proptest:
+    name: Proptest Property-Based Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-proptest-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-proptest-
+
+      - name: Run proptest encryption tests
+        run: |
+          cargo test --test proptest_encryption --release -- --nocapture
+        env:
+          # Increase cases for CI (more thorough testing)
+          PROPTEST_CASES: 200
+
+      - name: Run proptest with extended cases (scheduled)
+        if: github.event_name == 'schedule'
+        run: |
+          cargo test --test proptest_encryption --release -- --nocapture
+        env:
+          # Even more cases for scheduled runs
+          PROPTEST_CASES: 1000
+
+  proptest-windows:
+    name: Proptest (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-proptest-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-proptest-
+
+      - name: Run proptest encryption tests
+        run: |
+          cargo test --test proptest_encryption --release -- --nocapture
+        env:
+          PROPTEST_CASES: 100

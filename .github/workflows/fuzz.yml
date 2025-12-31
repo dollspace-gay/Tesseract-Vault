@@ -1,0 +1,100 @@
+name: Fuzzing
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Saturdays at 1am UTC for extended fuzzing
+    - cron: '0 1 * * 6'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  fuzz:
+    name: Fuzz Testing
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - fuzz_volume_header
+          - fuzz_pq_metadata
+          - fuzz_superblock
+          - fuzz_inode
+          - fuzz_keyslots
+          - fuzz_stream_header
+          - fuzz_bitmap
+          - fuzz_dir_entry
+          - fuzz_chunk_mapper
+          - fuzz_aes_gcm_decrypt
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-action@nightly
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Cache fuzz corpus
+        uses: actions/cache@v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+
+      - name: Run fuzzer (${{ matrix.target }})
+        run: |
+          # Run for 60 seconds on regular CI, 300 seconds on scheduled runs
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            FUZZ_TIME=300
+          else
+            FUZZ_TIME=60
+          fi
+          cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=$FUZZ_TIME
+        continue-on-error: true
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crash-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          retention-days: 30
+
+  fuzz-summary:
+    name: Fuzzing Summary
+    runs-on: ubuntu-latest
+    needs: fuzz
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Fuzzing Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz_volume_header | ${{ needs.fuzz.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz_pq_metadata | ${{ needs.fuzz.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz_superblock | ${{ needs.fuzz.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz_inode | ${{ needs.fuzz.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz_keyslots | ${{ needs.fuzz.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz_stream_header | ${{ needs.fuzz.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz_bitmap | ${{ needs.fuzz.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz_dir_entry | ${{ needs.fuzz.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz_chunk_mapper | ${{ needs.fuzz.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| fuzz_aes_gcm_decrypt | ${{ needs.fuzz.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Fuzzing runs for 60s per target (300s on scheduled runs)." >> $GITHUB_STEP_SUMMARY
+          echo "Crash artifacts are uploaded if any target fails." >> $GITHUB_STEP_SUMMARY

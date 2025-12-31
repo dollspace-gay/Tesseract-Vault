@@ -65,6 +65,11 @@ confidence-threshold = 0.8
 exceptions = [
     # epaint_default_fonts has embedded fonts with UFL license
     { allow = ["MIT", "Apache-2.0", "OFL-1.1", "LicenseRef-UFL-1.0"], crate = "epaint_default_fonts" },
+    # WinFsp bindings are GPL-3.0 - used for Windows filesystem mounting (optional feature)
+    # The WinFsp driver itself is GPL-3.0 licensed, and the Rust bindings inherit this
+    # This is acceptable as we only link dynamically at runtime on Windows
+    { allow = ["GPL-3.0"], crate = "winfsp" },
+    { allow = ["GPL-3.0"], crate = "winfsp-sys" },
 ]
 
 [licenses.private]

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 /// WinFsp filesystem implementation for Windows
 ///
 /// This module implements a WinFsp adapter that allows mounting encrypted

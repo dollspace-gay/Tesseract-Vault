@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Kani formal verification harnesses for configuration and constants.
 //!
 //! These harnesses verify pure logic properties without calling crypto

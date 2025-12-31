@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! TPM 2.0 Hardware Security Module integration
 //!
 //! Provides TPM 2.0 support for key sealing and hardware-backed cryptographic operations.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Tesseract LUKS keyfile format
 //!
 //! Secure keyfile that wraps a LUKS passphrase with Tesseract's security features.

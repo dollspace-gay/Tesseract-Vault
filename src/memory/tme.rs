@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Intel Total Memory Encryption (TME) support
 //!
 //! This module provides detection and information about Intel Total Memory Encryption (TME),

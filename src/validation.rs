@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Password validation and input handling.
 //!
 //! This module provides functionality for validating password strength

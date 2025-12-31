@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Fuzzing target for ChunkMapper operations
 //!
 //! Tests chunk offset calculations and range mapping with arbitrary inputs

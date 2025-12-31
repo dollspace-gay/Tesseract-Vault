@@ -11,6 +11,8 @@
 [![Differential Testing](https://github.com/dollspace-gay/Tesseract/actions/workflows/differential-testing.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/differential-testing.yml)
 [![Fuzzing](https://github.com/dollspace-gay/Tesseract/actions/workflows/fuzz.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/fuzz.yml)
 [![ClusterFuzzLite](https://github.com/dollspace-gay/Tesseract/actions/workflows/cflite_batch.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/cflite_batch.yml)
+[![Code Coverage](https://github.com/dollspace-gay/Tesseract/actions/workflows/coverage.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/coverage.yml)
+[![codecov](https://codecov.io/gh/dollspace-gay/Tesseract/branch/main/graph/badge.svg)](https://codecov.io/gh/dollspace-gay/Tesseract)
 
 **Tesseract Vault** is an advanced encryption suite providing advanced file and volume encryption with post-quantum cryptography support.
 

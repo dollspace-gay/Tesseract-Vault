@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Volume-level chunk mapping for logical offset translation
 //!
 //! This module provides functionality to map logical byte offsets within an

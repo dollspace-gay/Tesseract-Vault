@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Wycheproof Test Suite Integration
 //!
 //! This module runs the C2SP Wycheproof test vectors against our cryptographic

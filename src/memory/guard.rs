@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Guard pages for buffer overflow detection
 //!
 //! This module provides guard pages that surround allocated memory to detect

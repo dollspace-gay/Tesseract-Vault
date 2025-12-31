@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Fuzzing target for Post-Quantum metadata deserialization
 //!
 //! Tests the parsing of PQ volume metadata (ML-KEM-1024 encapsulation keys,

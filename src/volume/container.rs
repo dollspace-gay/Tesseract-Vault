@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Encrypted container format
 //!
 //! This module defines the on-disk format for encrypted containers.

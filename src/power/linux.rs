@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Linux power state monitoring implementation
 //!
 //! Uses systemd-logind inhibitor mechanism to monitor system power events.

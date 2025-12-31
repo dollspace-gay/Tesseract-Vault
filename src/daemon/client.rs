@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Daemon client implementation
 //!
 //! Provides a client interface for communicating with the daemon server

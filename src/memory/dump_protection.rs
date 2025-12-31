@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Memory dump protection
 //!
 //! This module provides protection against memory dump attacks including crash dumps,

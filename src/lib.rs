@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Tesseract - A secure file encryption library
 //!
 //! This library provides secure file encryption and decryption using

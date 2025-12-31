@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Configuration management for Secure Cryptor.
 //!
 //! This module defines all configuration parameters for encryption,

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Volume management module
 //!
 //! Provides centralized management of mounted encrypted volumes, including

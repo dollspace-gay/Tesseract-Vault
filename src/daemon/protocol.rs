@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! IPC protocol for daemon communication
 //!
 //! Uses a simple JSON-based protocol over Unix domain sockets (or named pipes on Windows)

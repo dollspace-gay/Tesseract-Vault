@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Dropbox storage client for encrypted volume chunks
 //!
 //! This module provides a Dropbox client for storing encrypted volume chunks.

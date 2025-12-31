@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Daemon module for managing long-running volume mount operations
 //!
 //! The daemon provides:

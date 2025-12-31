@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Daemon server implementation
 //!
 //! Manages mounted volumes and handles IPC requests

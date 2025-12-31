@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Cross-platform filesystem abstraction for encrypted volumes
 //!
 //! This module provides a common interface for implementing encrypted filesystems

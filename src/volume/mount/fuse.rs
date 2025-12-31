@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! FUSE filesystem implementation for Linux
 //!
 //! This module implements a FUSE (Filesystem in Userspace) adapter that

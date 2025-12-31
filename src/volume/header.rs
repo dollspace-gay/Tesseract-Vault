@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Volume header format for encrypted volumes
 //!
 //! The header contains all metadata necessary to mount and decrypt an encrypted volume.

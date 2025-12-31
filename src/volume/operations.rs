@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! In-memory encrypted filesystem implementation
 //!
 //! This module provides a concrete implementation of the EncryptedFilesystem trait

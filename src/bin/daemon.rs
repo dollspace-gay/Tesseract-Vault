@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Secure Cryptor Daemon
 //!
 //! Long-running background service for managing encrypted volume mounts

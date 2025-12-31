@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Advanced memory scrubbing utilities.
 //!
 //! Provides secure memory wiping with multiple patterns and passes,

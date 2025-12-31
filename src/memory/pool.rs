@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Encrypted memory pool for sensitive data.
 //!
 //! Provides a memory pool with transparent encryption at rest using ChaCha20,

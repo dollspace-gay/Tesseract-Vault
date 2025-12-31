@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
 use tesseract_lib::crypto::streaming::{

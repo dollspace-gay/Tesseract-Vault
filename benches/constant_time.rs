@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Constant-Time Execution Verification using DudeCT
 //!
 //! This benchmark suite uses statistical analysis to detect timing leaks in

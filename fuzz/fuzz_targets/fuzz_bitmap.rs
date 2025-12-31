@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Fuzzing target for filesystem Bitmap operations
 //!
 //! Tests bitmap operations (block/inode allocation tracking) with

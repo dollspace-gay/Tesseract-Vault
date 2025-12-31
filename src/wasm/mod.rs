@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! WebAssembly bindings for Secure Cryptor
 //!
 //! This module provides WebAssembly bindings for the core cryptographic functionality,

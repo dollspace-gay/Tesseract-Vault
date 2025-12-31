@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Fuzzing target for VolumeHeader deserialization
 //!
 //! Tests the parsing of volume headers from arbitrary byte sequences to ensure

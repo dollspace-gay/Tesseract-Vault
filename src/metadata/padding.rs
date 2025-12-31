@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! File size padding for anti-forensics protection.
 //!
 //! This module provides utilities for adding random padding to files

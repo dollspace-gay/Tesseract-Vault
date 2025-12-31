@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! WASM Security Hardening
 //!
 //! This module provides security utilities and hardening measures for WebAssembly deployments.

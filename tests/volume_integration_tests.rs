@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Volume Integration Tests
 //!
 //! Comprehensive integration tests for encrypted volume operations including:

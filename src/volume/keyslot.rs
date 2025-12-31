@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Key slot system for encrypted volumes
 //!
 //! The key slot system encrypts the volume's master key using a user-derived key.

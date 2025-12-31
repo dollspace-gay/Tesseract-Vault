@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 /// Linux systemd service integration for Tesseract daemon
 ///
 /// Manages systemd unit file installation and service control

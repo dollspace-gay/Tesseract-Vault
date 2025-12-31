@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Cryptographic operations for encryption, decryption, and key derivation.
 //!
 //! This module provides trait-based abstractions for cryptographic operations,

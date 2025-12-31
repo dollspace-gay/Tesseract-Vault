@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! On-disk filesystem format for persistent encrypted volumes
 //!
 //! This module defines the binary layout for storing filesystem metadata

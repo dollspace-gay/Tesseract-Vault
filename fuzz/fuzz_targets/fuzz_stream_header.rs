@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Fuzzing target for StreamHeader deserialization
 //!
 //! Tests the parsing of streaming encryption headers (V3 format) from

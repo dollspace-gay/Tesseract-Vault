@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Hardware Security Module (HSM) integration
 //!
 //! This module provides integration with various hardware security devices for

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Remote wipe functionality for cloud-synced volumes
 //!
 //! Provides cloud-triggered destruction of encryption keys across all devices.

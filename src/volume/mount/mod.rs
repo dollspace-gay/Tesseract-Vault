@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Platform-specific volume mounting implementations
 //!
 //! This module provides cross-platform support for mounting encrypted volumes

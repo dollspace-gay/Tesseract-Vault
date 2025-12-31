@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Secure heap allocator with memory protection
 //!
 //! This module provides a custom allocator that combines multiple memory protection

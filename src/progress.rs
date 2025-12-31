@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Progress reporting for long-running operations.
 //!
 //! This module provides a trait-based interface for reporting progress during

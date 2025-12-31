@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Fuzzing target for KeySlots deserialization
 //!
 //! Tests the parsing of key slot data from arbitrary byte sequences.

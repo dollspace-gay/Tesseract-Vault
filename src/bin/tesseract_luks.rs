@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! tesseract-luks CLI - Secure LUKS keyfile management
 //!
 //! Provides Tesseract security features for LUKS full disk encryption:

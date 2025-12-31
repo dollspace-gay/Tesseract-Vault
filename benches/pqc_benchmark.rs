@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use tesseract_lib::crypto::pqc::{MlKemKeyPair, encapsulate};
 use tesseract_lib::crypto::kdf::Argon2Kdf;

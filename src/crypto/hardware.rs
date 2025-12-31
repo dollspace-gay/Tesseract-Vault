@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Hardware cryptographic acceleration detection and capabilities.
 //!
 //! This module detects and reports on hardware cryptographic acceleration features

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 // System tray integration for Tesseract
 // Cross-platform support for Windows and Linux
 

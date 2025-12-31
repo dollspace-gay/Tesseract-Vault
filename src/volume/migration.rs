@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Volume migration utilities
 //!
 //! This module provides functionality to migrate existing V1 volumes

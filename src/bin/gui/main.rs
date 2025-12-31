@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 // Native GUI for Tesseract using egui
 // Matches the exact design from mockup
 

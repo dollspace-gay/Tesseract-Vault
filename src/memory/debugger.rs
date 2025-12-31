@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Debugger detection and anti-debugging measures
 //!
 //! This module provides cross-platform debugger detection to protect sensitive

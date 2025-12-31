@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Windows Service implementation for Tesseract daemon
 //!
 //! Integrates with Windows Service Control Manager (SCM)

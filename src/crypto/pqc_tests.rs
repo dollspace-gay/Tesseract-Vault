@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Comprehensive Post-Quantum Cryptography test suite
 //!
 //! This module contains extensive tests for ML-KEM-1024 (Kyber) and ML-DSA

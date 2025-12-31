@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! AES-256-GCM encryption implementation.
 //!
 //! Provides authenticated encryption using AES-256 in Galois/Counter Mode.

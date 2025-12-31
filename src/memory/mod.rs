@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Memory protection utilities for preventing sensitive data from being swapped to disk.
 //!
 //! This module provides cross-platform memory locking using:

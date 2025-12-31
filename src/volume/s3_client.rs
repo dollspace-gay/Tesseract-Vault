@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! S3-compatible storage client with AWS Signature V4 authentication
 //!
 //! This module provides a minimal S3 client for storing encrypted volume chunks.

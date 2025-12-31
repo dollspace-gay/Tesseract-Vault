@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! NIST CAVP (Cryptographic Algorithm Validation Program) Test Suite
 //!
 //! This module runs the official NIST CAVP test vectors against our AES-256-GCM

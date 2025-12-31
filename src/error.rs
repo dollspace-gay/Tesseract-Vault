@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Error types for the Secure Cryptor library.
 //!
 //! This module defines all error types used throughout the application,

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 // Linux Desktop Integration for Tesseract
 // Handles file associations and desktop entries via XDG standards
 

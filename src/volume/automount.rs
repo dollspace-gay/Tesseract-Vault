@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Auto-mount service for encrypted volumes
 //!
 //! Provides functionality to automatically mount encrypted volumes during

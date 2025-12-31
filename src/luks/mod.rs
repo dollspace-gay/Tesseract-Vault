@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! LUKS2 integration for Tesseract
 //!
 //! This module provides Tesseract's advanced security features for Linux

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Property-based testing for encryption operations
 //!
 //! Uses proptest to verify cryptographic invariants with arbitrary inputs.

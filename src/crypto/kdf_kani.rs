@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Kani formal verification harnesses for Argon2id key derivation.
 //!
 //! This module contains proof harnesses that verify critical properties of

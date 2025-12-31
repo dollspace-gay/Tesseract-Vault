@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 // Windows Registry Integration for Tesseract
 // Handles file associations and context menu integration via Windows Registry
 

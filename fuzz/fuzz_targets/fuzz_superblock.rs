@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Fuzzing target for filesystem Superblock deserialization
 //!
 //! Tests the parsing of filesystem superblocks from arbitrary byte sequences.

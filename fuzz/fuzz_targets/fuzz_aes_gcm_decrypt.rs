@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Fuzzing target for AES-GCM decryption
 //!
 //! Tests the AES-GCM decryption path with arbitrary ciphertext to ensure

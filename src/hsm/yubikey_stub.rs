@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! YubiKey HMAC-SHA1 Challenge-Response Integration (Stub Implementation)
 //!
 //! This is a stub implementation providing the interface and structure for

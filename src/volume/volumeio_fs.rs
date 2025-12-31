@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! VolumeIO-backed filesystem implementation
 //!
 //! This module provides a filesystem implementation that stores both metadata

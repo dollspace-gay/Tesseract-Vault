@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Sector-based encryption using XTS-AES-256
 //!
 //! This module implements XTS-AES-256 (IEEE P1619) for transparent disk encryption.

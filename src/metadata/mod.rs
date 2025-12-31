@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Metadata sanitization for anti-forensics protection.
 //!
 //! This module provides secure sanitization of metadata to prevent forensic analysis

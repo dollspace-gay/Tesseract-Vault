@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Core metadata sanitization implementation.
 //!
 //! Provides the main `MetadataSanitizer` type and configuration options

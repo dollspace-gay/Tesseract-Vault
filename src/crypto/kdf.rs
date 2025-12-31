@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Key derivation functions for password-based cryptography.
 //!
 //! Provides Argon2id implementation for deriving encryption keys from passwords.

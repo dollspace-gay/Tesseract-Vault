@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Kani formal verification harnesses for streaming encryption nonce handling.
 //!
 //! These harnesses verify critical safety properties of the nonce derivation

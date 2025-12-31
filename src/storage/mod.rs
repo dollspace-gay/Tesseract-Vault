@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! File I/O and storage operations.
 //!
 //! This module provides functionality for safely reading and writing files,

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Cloud synchronization with incremental chunk tracking
 //!
 //! This module provides intelligent sync for cloud-backed encrypted volumes.

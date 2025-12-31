@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Windows power state monitoring implementation
 //!
 //! Uses Windows Power Management API to monitor system power events

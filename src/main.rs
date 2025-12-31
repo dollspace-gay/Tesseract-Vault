@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Tesseract - Command-line file encryption tool
 //!
 //! A secure file encryptor/decryptor using AES-256-GCM encryption

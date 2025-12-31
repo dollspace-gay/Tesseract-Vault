@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Power state monitoring module
 //!
 //! Monitors system power events (suspend, hibernate, shutdown) to ensure

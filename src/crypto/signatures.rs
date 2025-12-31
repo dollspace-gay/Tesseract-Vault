@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Post-quantum digital signatures module.
 //!
 //! Provides ML-DSA (formerly CRYSTALS-Dilithium) implementation for

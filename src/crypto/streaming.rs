@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Streaming encryption for large files.
 //!
 //! This module provides chunk-based encryption that allows processing files

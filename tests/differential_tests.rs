@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Differential Testing for Tesseract Encryption
 //!
 //! Compares behavior across different code paths and implementations to ensure

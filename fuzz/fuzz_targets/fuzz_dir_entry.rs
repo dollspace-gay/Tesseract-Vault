@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Fuzzing target for DirEntry deserialization
 //!
 //! Tests the parsing of directory entries from arbitrary byte sequences.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Volume I/O Engine with LRU caching and storage backend abstraction
 //!
 //! This module provides the core I/O layer for encrypted volumes. It handles:

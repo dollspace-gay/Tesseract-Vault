@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Post-quantum cryptography module.
 //!
 //! Provides ML-KEM-1024 (formerly CRYSTALS-Kyber) implementation for

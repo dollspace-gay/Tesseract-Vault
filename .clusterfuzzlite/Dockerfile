@@ -6,5 +6,8 @@ FROM gcr.io/oss-fuzz-base/base-builder-rust
 # Copy project source
 COPY . $SRC/tesseract-vault
 
+# Copy build script to expected location
+COPY .clusterfuzzlite/build.sh $SRC/build.sh
+
 # Set working directory
 WORKDIR $SRC/tesseract-vault

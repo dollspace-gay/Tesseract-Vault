@@ -41,8 +41,14 @@ Tesseract Vault is designed with a strong focus on defensive security and future
 
 ### File Safety
 - **Atomic File Writes**: Guarantees files are never left in corrupted or partially written states
-- **Strong Password Policy**: Enforces minimum 12 characters with mixed character types
+- **Entropy-Based Password Validation**: Uses zxcvbn for intelligent password strength estimation, rejecting common patterns like "Password123!" that pass naive complexity rules
 - **Streaming Encryption**: Memory-efficient chunked processing for files of any size
+
+### Advanced Features
+- **Remote Wipe**: Token-based remote destruction of encrypted volumes with HMAC authentication and replay protection
+- **Cloud Sync**: End-to-end encrypted cloud storage backends (S3, Dropbox) with incremental chunk-level sync
+- **LUKS Integration**: Post-quantum hybrid encryption for Linux full disk encryption with TPM auto-unlock and duress passwords
+- **Duress Passwords**: Trigger secure key destruction when entered under coercion (indistinguishable from wrong password)
 
 ## 🛠️ Build and Setup
 
@@ -62,7 +68,7 @@ Build the release binary:
 cargo build --release
 ```
 
-The compiled binary will be located at [target/release/tesseract](target/release/tesseract) (or `tesseract.exe` on Windows).
+The compiled binary will be located at [target/release/tesseract-vault](target/release/tesseract-vault) (or `tesseract-vault.exe` on Windows).
 
 ### Build Features
 
@@ -72,8 +78,10 @@ Tesseract Vault supports several optional feature flags:
 |---------|---------|-------------|
 | `post-quantum` | ✓ | ML-KEM-1024 and ML-DSA post-quantum cryptography |
 | `compression` | ✓ | DEFLATE compression support |
-| `encrypted-volumes` | ✗ | Virtual filesystem mounting (requires system dependencies) |
-| `yubikey` | ✗ | YubiKey hardware security module support |
+| `yubikey` | ✓ | YubiKey hardware security module support |
+| `encrypted-volumes` | ✓ | Virtual filesystem mounting (requires system dependencies) |
+| `gui` | ✓ | Native GUI application with system tray |
+| `cloud-storage` | ✗ | S3 and Dropbox cloud sync backends |
 | `wasm-minimal` | ✗ | Minimal WASM build (AES-256-GCM + Argon2id only) |
 | `wasm-full` | ✗ | Full WASM build with PQC and compression |
 
@@ -215,6 +223,49 @@ Hidden volumes:
 
 Mount hidden volume using its dedicated password when prompted.
 
+### LUKS Integration (Linux)
+
+Tesseract provides a dedicated tool for securing LUKS full disk encryption keyfiles with post-quantum cryptography.
+
+#### Creating a Tesseract LUKS Keyfile
+
+```bash
+tesseract-luks create /etc/tesseract/root.keyfile
+```
+
+#### Unlocking for cryptsetup
+
+```bash
+tesseract-luks unlock /etc/tesseract/root.keyfile | cryptsetup open /dev/sda2 root --key-file -
+```
+
+#### TPM 2.0 Auto-Unlock
+
+Enroll the TPM for passwordless boot (sealed to PCR state):
+
+```bash
+tesseract-luks enroll-tpm /etc/tesseract/root.keyfile --pcrs 0,7
+```
+
+Unlock using TPM:
+
+```bash
+tesseract-luks unlock-tpm /etc/tesseract/root.keyfile | cryptsetup open /dev/sda2 root --key-file -
+```
+
+#### Duress Password
+
+Set a duress password that destroys all keys when used:
+
+```bash
+tesseract-luks set-duress /etc/tesseract/root.keyfile
+```
+
+When the duress password is entered instead of the real password:
+- All key material is securely destroyed
+- The keyfile becomes permanently unusable
+- The error message is indistinguishable from a wrong password
+
 ### Daemon Service
 
 Tesseract includes a background daemon for automated volume management and power state monitoring.
@@ -257,6 +308,28 @@ The daemon provides:
 - Background encryption tasks
 - System integration
 
+### Cloud Storage Sync
+
+Tesseract supports encrypted cloud sync for volumes (requires `cloud-storage` feature):
+
+```bash
+cargo build --release --features cloud-storage
+```
+
+#### Supported Backends
+
+- **Amazon S3**: Compatible with any S3-compatible storage (AWS, MinIO, Backblaze B2)
+- **Dropbox**: OAuth2 authentication with Dropbox API
+
+#### How It Works
+
+1. Volume data is encrypted locally before upload
+2. Only modified chunks are synced (incremental)
+3. Manifest tracks chunk hashes for integrity
+4. Encryption keys never leave your device
+
+This provides true end-to-end encryption for cloud storage - the cloud provider cannot decrypt your data.
+
 ## 🖥️ GUI Application
 
 Tesseract includes a native cross-platform GUI application with a beautiful, user-friendly interface.
@@ -264,10 +337,10 @@ Tesseract includes a native cross-platform GUI application with a beautiful, use
 ### Building the GUI
 
 ```bash
-cargo build --release --bin tesseract-gui
+cargo build --release --bin tesseract-vault-gui
 ```
 
-The GUI executable will be located at [target/release/tesseract-gui](target/release/tesseract-gui) (or `tesseract-gui.exe` on Windows).
+The GUI executable will be located at [target/release/tesseract-vault-gui](target/release/tesseract-vault-gui) (or `tesseract-vault-gui.exe` on Windows).
 
 ### Features
 
@@ -292,7 +365,7 @@ Register file associations and context menu entries for seamless system integrat
 3. Run the registration utility:
 
 ```bash
-.\target\release\tesseract-register.exe install
+.\target\release\tesseract-vault-register.exe install
 ```
 
 This will register:
@@ -303,7 +376,7 @@ This will register:
 To uninstall:
 
 ```bash
-.\target\release\tesseract-register.exe uninstall
+.\target\release\tesseract-vault-register.exe uninstall
 ```
 
 #### Linux
@@ -311,7 +384,7 @@ To uninstall:
 Run the registration utility:
 
 ```bash
-./target/release/tesseract-register install
+./target/release/tesseract-vault-register install
 ```
 
 This will:
@@ -323,7 +396,7 @@ This will:
 To uninstall:
 
 ```bash
-./target/release/tesseract-register uninstall
+./target/release/tesseract-vault-register uninstall
 ```
 
 ## 🌐 WebAssembly Support
@@ -393,31 +466,35 @@ This provides hardware-backed two-factor authentication for your encrypted data.
 
 Tesseract is built with a modular architecture:
 
-- **`tesseract` (library)**: Core cryptographic primitives and algorithms
-- **`tesseract` (binary)**: Command-line interface for file and volume operations
-- **`tesseract-gui`**: Native GUI application using eframe/egui
-- **`tesseract-register`**: System integration utility for file associations
+- **`tesseract_lib` (library)**: Core cryptographic primitives and algorithms
+- **`tesseract-vault` (binary)**: Command-line interface for file and volume operations
+- **`tesseract-vault-gui`**: Native GUI application using eframe/egui
+- **`tesseract-vault-register`**: System integration utility for file associations
+- **`tesseract-luks`**: LUKS keyfile management with TPM and duress support (Linux)
 - **Daemon**: Background service for volume management and power monitoring
 
 ### Key Modules
 
 - **`crypto`**: AES-GCM, Argon2id, ML-KEM, ML-DSA implementations
-- **`volume`**: Encrypted container management and filesystem operations
-- **`memory`**: Secure allocator, memory pool, and scrubbing
+- **`volume`**: Encrypted container management, cloud sync, remote wipe
+- **`memory`**: Secure allocator, memory pool, guard pages, dump protection
 - **`storage`**: Streaming I/O with chunked encryption
 - **`power`**: Power state monitoring and callbacks
 - **`daemon`**: Background service and IPC protocol
 - **`hsm`**: Hardware security module integration (YubiKey)
+- **`luks`**: LUKS keyfile management with TPM binding (Linux)
 
 ## 🔒 Security Considerations
 
 ### Best Practices
 
-1. **Use strong passwords**: Minimum 12 characters with mixed types
+1. **Use strong passwords**: Minimum 12 characters with high entropy (passphrases like "correct-horse-battery-staple" are excellent)
 2. **Enable YubiKey**: Add hardware authentication when possible
 3. **Recovery keys**: Generate and securely store recovery keys for volumes
 4. **Hidden volumes**: Use for plausible deniability in high-risk scenarios
 5. **Daemon service**: Enable for automatic unmounting on system sleep
+6. **Remote wipe**: Configure wipe tokens for volumes containing sensitive data
+7. **Duress passwords**: Set up duress passwords for LUKS keyfiles in high-risk scenarios
 
 ### Threat Model
 
@@ -439,13 +516,30 @@ Tesseract does NOT protect against:
 
 Tesseract has not undergone a formal security audit. Use at your own risk for sensitive data. Community security reviews are welcome.
 
+### Verification and Testing
+
+Tesseract employs multiple layers of verification to ensure correctness:
+
+| Method | Purpose | CI Badge |
+|--------|---------|----------|
+| **Kani** | Formal verification of memory safety and panic-freedom | [![Kani](https://github.com/dollspace-gay/Tesseract/actions/workflows/kani.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/kani.yml) |
+| **Prusti** | Formal verification with pre/post conditions | [![Prusti](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml) |
+| **Wycheproof** | Google's cryptographic edge-case test vectors | [![Wycheproof](https://github.com/dollspace-gay/Tesseract/actions/workflows/wycheproof.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/wycheproof.yml) |
+| **NIST CAVP** | Official NIST cryptographic algorithm validation | [![NIST CAVP](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml) |
+| **Proptest** | Property-based testing for encrypt/decrypt roundtrips | [![Proptest](https://github.com/dollspace-gay/Tesseract/actions/workflows/proptest.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/proptest.yml) |
+| **Differential Testing** | Cross-validation against reference implementations | [![Differential](https://github.com/dollspace-gay/Tesseract/actions/workflows/differential-testing.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/differential-testing.yml) |
+| **dudect** | Timing attack detection via statistical analysis | [![dudect](https://github.com/dollspace-gay/Tesseract/actions/workflows/dudect.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/dudect.yml) |
+| **ClusterFuzzLite** | Continuous fuzzing with coverage-guided mutations | [![Fuzzing](https://github.com/dollspace-gay/Tesseract/actions/workflows/cflite_batch.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/cflite_batch.yml) |
+| **cargo-deny** | Supply chain security and license compliance | [![Supply Chain](https://github.com/dollspace-gay/Tesseract/actions/workflows/cargo-deny.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/cargo-deny.yml) |
+| **cargo-audit** | Known vulnerability scanning | [![Security Audit](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml) |
+
 ## 🌍 Platform Support
 
-| Platform | File Encryption | Volumes | Daemon | GUI | Status |
-|----------|----------------|---------|--------|-----|--------|
-| Windows 10/11 | ✅ | ✅ | ✅ | ✅ | Full support |
-| Linux (x64) | ✅ | ✅ | ✅ | ✅ | Full support |
-| WebAssembly | ✅ | ❌ | ❌ | ❌ | File encryption only |
+| Platform | File Encryption | Volumes | Daemon | GUI | LUKS | Status |
+|----------|----------------|---------|--------|-----|------|--------|
+| Windows 10/11 | ✅ | ✅ | ✅ | ✅ | ❌ | Full support |
+| Linux (x64) | ✅ | ✅ | ✅ | ✅ | ✅ | Full support |
+| WebAssembly | ✅ | ❌ | ❌ | ❌ | ❌ | File encryption only |
 
 ### Tested Platforms
 
@@ -478,10 +572,12 @@ This project is licensed under the MIT License. See the LICENSE file for details
 
 Tesseract builds upon excellent work from the Rust cryptography community:
 
-- **RustCrypto**: AES-GCM, Argon2, and other cryptographic primitives
-- **ml-kem/ml-dsa**: Post-quantum cryptography implementations
+- **RustCrypto**: AES-GCM, Argon2, Blake3, and other cryptographic primitives
+- **ml-kem/ml-dsa**: Post-quantum cryptography implementations (NIST FIPS 203/204)
+- **zxcvbn**: Dropbox's intelligent password strength estimator
 - **WinFsp/FUSE**: Virtual filesystem frameworks
 - **egui**: Immediate mode GUI framework
+- **Kani/Prusti**: Formal verification tools for Rust
 
 ## 🤝 Contributing
 

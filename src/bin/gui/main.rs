@@ -1460,9 +1460,9 @@ impl CryptorApp {
                             &self.volume_password,
                         ) {
                             Ok(mut container) => {
-                                match container.add_password(&self.volume_password_confirm) {
-                                    Ok(slot) => {
-                                        self.volume_status = format!("✓ Password added in slot {}", slot);
+                                match container.change_password(&self.volume_password_confirm) {
+                                    Ok(()) => {
+                                        self.volume_status = "✓ Password changed successfully".to_string();
                                         self.volume_password.clear();
                                         self.volume_password_confirm.clear();
                                     }

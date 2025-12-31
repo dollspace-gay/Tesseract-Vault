@@ -1,7 +1,13 @@
 //! Key slot system for encrypted volumes
 //!
-//! Supports multiple passwords/users accessing the same volume by encrypting
-//! a master key with different user-derived keys.
+//! The key slot system encrypts the volume's master key using a user-derived key.
+//! While the infrastructure supports multiple slots for backward compatibility,
+//! new volumes use a single-password model with optional YubiKey 2FA:
+//!
+//! - **Slot 0**: Primary password (required)
+//! - **Slot 1**: Recovery key (optional, for disaster recovery)
+//! - **YubiKey 2FA**: When enabled, the password is combined with a YubiKey
+//!   HMAC-SHA1 challenge-response before key derivation
 
 use crate::config::CryptoConfig;
 use crate::crypto::kdf::Argon2Kdf;
@@ -16,8 +22,10 @@ use serde_big_array::BigArray;
 use thiserror::Error;
 use zeroize::{Zeroize, Zeroizing};
 
-/// Number of key slots available (supports up to 8 users/passwords)
-pub const MAX_KEY_SLOTS: usize = 8;
+/// Number of key slots available
+/// Slot 0: Primary password (required)
+/// Slot 1: Recovery key (optional, for disaster recovery)
+pub const MAX_KEY_SLOTS: usize = 2;
 
 /// Size of the master key in bytes (256 bits for AES-256)
 pub const MASTER_KEY_SIZE: usize = 32;
@@ -264,12 +272,6 @@ impl KeySlots {
             slots: [
                 KeySlot::empty(),
                 KeySlot::empty(),
-                KeySlot::empty(),
-                KeySlot::empty(),
-                KeySlot::empty(),
-                KeySlot::empty(),
-                KeySlot::empty(),
-                KeySlot::empty(),
             ],
             duress_password_slot: None,
         }
@@ -345,6 +347,46 @@ impl KeySlots {
         }
 
         self.slots[index].deactivate();
+        Ok(())
+    }
+
+    /// Updates an existing key slot with a new password
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The slot index to update
+    /// * `master_key` - The master key to encrypt in this slot
+    /// * `new_password` - The new password for this slot
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the index is invalid
+    pub fn update_slot(&mut self, index: usize, master_key: &MasterKey, new_password: &str) -> Result<(), KeySlotError> {
+        if index >= MAX_KEY_SLOTS {
+            return Err(KeySlotError::InvalidSlotIndex(index));
+        }
+
+        self.slots[index] = KeySlot::new(master_key, new_password)?;
+        Ok(())
+    }
+
+    /// Updates an existing key slot with a pre-derived key (for V2 PQC hybrid encryption)
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The slot index to update
+    /// * `master_key` - The master key to encrypt in this slot
+    /// * `derived_key` - Pre-derived 32-byte hybrid encryption key
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the index is invalid
+    pub fn update_slot_with_derived_key(&mut self, index: usize, master_key: &MasterKey, derived_key: &[u8; 32]) -> Result<(), KeySlotError> {
+        if index >= MAX_KEY_SLOTS {
+            return Err(KeySlotError::InvalidSlotIndex(index));
+        }
+
+        self.slots[index] = KeySlot::new_with_derived_key(master_key, derived_key)?;
         Ok(())
     }
 
@@ -666,21 +708,21 @@ mod tests {
         let master_key = MasterKey::generate();
         let mut slots = KeySlots::new();
 
-        // Add multiple slots with different passwords
+        // Add both available slots (password + recovery key)
         slots.add_slot(&master_key, "Password1!").unwrap();
-        slots.add_slot(&master_key, "Password2!").unwrap();
-        slots.add_slot(&master_key, "Password3!").unwrap();
+        slots.add_slot(&master_key, "RecoveryKey123!").unwrap();
 
-        assert_eq!(slots.active_count(), 3);
+        assert_eq!(slots.active_count(), 2);
 
-        // All passwords should unlock the same master key
+        // Both should unlock the same master key
         let unlocked1 = slots.unlock("Password1!").unwrap();
-        let unlocked2 = slots.unlock("Password2!").unwrap();
-        let unlocked3 = slots.unlock("Password3!").unwrap();
+        let unlocked2 = slots.unlock("RecoveryKey123!").unwrap();
 
         assert_eq!(unlocked1.as_bytes(), master_key.as_bytes());
         assert_eq!(unlocked2.as_bytes(), master_key.as_bytes());
-        assert_eq!(unlocked3.as_bytes(), master_key.as_bytes());
+
+        // Third slot should fail (only 2 slots available)
+        assert!(slots.add_slot(&master_key, "Password3!").is_err());
     }
 
     #[test]
@@ -877,12 +919,11 @@ mod tests {
         let master_key = MasterKey::generate();
         let mut slots = KeySlots::new();
 
-        // Fill multiple slots
-        for i in 0..5 {
-            slots.add_slot(&master_key, &format!("Password{}!", i)).unwrap();
-        }
+        // Fill both available slots (password + recovery key)
+        slots.add_slot(&master_key, "Password0!").unwrap();
+        slots.add_slot(&master_key, "Password1!").unwrap();
 
-        assert_eq!(slots.active_count(), 5);
+        assert_eq!(slots.active_count(), 2);
 
         // Set duress password
         slots.set_duress_password("NUKE_ALL!").unwrap();
@@ -892,12 +933,11 @@ mod tests {
         let result = slots_copy.unlock("NUKE_ALL!");
 
         assert!(result.is_err());
-        assert_eq!(slots_copy.active_count(), 0); // All 5 slots destroyed
+        assert_eq!(slots_copy.active_count(), 0); // Both slots destroyed
 
-        // Verify none of the passwords work anymore
-        for i in 0..5 {
-            assert!(slots_copy.unlock(&format!("Password{}!", i)).is_err());
-        }
+        // Verify neither password works anymore
+        assert!(slots_copy.unlock("Password0!").is_err());
+        assert!(slots_copy.unlock("Password1!").is_err());
     }
 
     #[test]

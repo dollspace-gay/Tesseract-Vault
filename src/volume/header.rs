@@ -173,10 +173,15 @@ pub struct VolumeHeader {
     /// Used to detect corruption and tampering
     checksum: [u8; 32],
 
-    /// Reserved space for future use (203 bytes in V2)
-    /// Reduced from 235 bytes to accommodate checksum field
+    /// Feature flags (V2+)
+    /// Bit 0: YubiKey 2FA required for unlock
+    /// Bits 1-7: Reserved for future use
+    flags: u8,
+
+    /// Reserved space for future use (202 bytes in V2)
+    /// Reduced by 1 byte to accommodate flags field
     #[serde(with = "BigArray")]
-    reserved: [u8; 203],
+    reserved: [u8; 202],
 }
 
 /// Errors that can occur when working with volume headers
@@ -242,7 +247,8 @@ impl VolumeHeader {
             pq_metadata_offset: 0,
             pq_metadata_size: 0,
             checksum: [0u8; 32],  // Computed later
-            reserved: [0u8; 203],
+            flags: 0,
+            reserved: [0u8; 202],
         };
 
         // Compute and set checksum
@@ -286,7 +292,8 @@ impl VolumeHeader {
             pq_metadata_offset: HEADER_SIZE as u64,  // PQ metadata follows header
             pq_metadata_size,
             checksum: [0u8; 32],  // Computed later
-            reserved: [0u8; 203],
+            flags: 0,
+            reserved: [0u8; 202],
         };
 
         // Compute and set checksum
@@ -466,6 +473,30 @@ impl VolumeHeader {
         self.version == VERSION_V2
     }
 
+    /// Flag bit indicating YubiKey 2FA is required for unlock
+    pub const FLAG_YUBIKEY_2FA: u8 = 0x01;
+
+    /// Returns true if YubiKey 2FA is required to unlock this volume
+    pub fn requires_yubikey(&self) -> bool {
+        self.flags & Self::FLAG_YUBIKEY_2FA != 0
+    }
+
+    /// Sets or clears the YubiKey 2FA requirement flag
+    pub fn set_yubikey_required(&mut self, required: bool) {
+        if required {
+            self.flags |= Self::FLAG_YUBIKEY_2FA;
+        } else {
+            self.flags &= !Self::FLAG_YUBIKEY_2FA;
+        }
+        // Recompute checksum after flag change
+        self.checksum = self.compute_checksum();
+    }
+
+    /// Returns the raw flags byte
+    pub fn flags(&self) -> u8 {
+        self.flags
+    }
+
     /// Computes the BLAKE3 checksum of the header fields
     ///
     /// The checksum is computed over all fields except:
@@ -493,6 +524,7 @@ impl VolumeHeader {
         hasher.update(&[self.pq_algorithm as u8]);
         hasher.update(&self.pq_metadata_offset.to_le_bytes());
         hasher.update(&self.pq_metadata_size.to_le_bytes());
+        hasher.update(&[self.flags]);
 
         // Note: checksum and reserved fields are NOT included in the hash
 

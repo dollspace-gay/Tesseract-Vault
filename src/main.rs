@@ -604,38 +604,20 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                     std::io::Error::other(e.to_string())
                 ))?;
 
-            if let Some(slot_idx) = slot {
-                // Change password in specific slot
-                println!("Changing password in slot {}...", slot_idx);
-                let new_password = validation::get_and_validate_password()?;
-
-                // This would require a new method on Container
-                // For now, we remove and add
-                if cont.key_slots().is_slot_active(slot_idx) {
-                    cont.remove_password(slot_idx)
-                        .map_err(|e| CryptorError::Io(
-                            std::io::Error::other(e.to_string())
-                        ))?;
-                }
-
-                cont.add_password(&new_password)
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::other(e.to_string())
-                    ))?;
-
-                println!("✓ Password changed successfully in slot {}.", slot_idx);
-            } else {
-                // Add a new password slot
-                println!("Adding new password...");
-                let new_password = validation::get_and_validate_password()?;
-
-                let slot_idx = cont.add_password(&new_password)
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::other(e.to_string())
-                    ))?;
-
-                println!("✓ New password added in slot {}.", slot_idx);
+            // Single password model - ignore slot parameter, always update slot 0
+            if slot.is_some() {
+                println!("Note: Multi-password slots are deprecated. Changing the volume password.");
             }
+
+            println!("Enter new password:");
+            let new_password = validation::get_and_validate_password()?;
+
+            cont.change_password(&new_password)
+                .map_err(|e| CryptorError::Io(
+                    std::io::Error::other(e.to_string())
+                ))?;
+
+            println!("✓ Password changed successfully.");
         }
         VolumeCommands::GenerateRecoveryKey { output, name } => {
             println!("Generating recovery key...");

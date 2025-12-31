@@ -6,7 +6,7 @@
 [![Security Audit](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml)
 [![Prusti Verification](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml)
 
-**Tesseract Vault** is an advanced encryption suite providing military-grade file and volume encryption with post-quantum cryptography support.
+**Tesseract Vault** is an advanced encryption suite providing advanced file and volume encryption with post-quantum cryptography support.
 
 Built in Rust for performance and memory safety, Tesseract Vault employs state-of-the-art cryptographic practices to ensure your data remains confidential, tamper-proof, and secure against future quantum computing threats.
 

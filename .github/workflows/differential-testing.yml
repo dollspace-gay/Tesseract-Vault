@@ -40,7 +40,8 @@ jobs:
 
       - name: Run differential tests
         run: |
-          cargo test --test differential_tests --release -- --nocapture
+          # Use --no-default-features to avoid GUI dependencies (GTK on Linux)
+          cargo test --test differential_tests --release --no-default-features -- --nocapture
         env:
           # More test cases for thorough coverage
           PROPTEST_CASES: 100
@@ -48,7 +49,7 @@ jobs:
       - name: Extended differential testing (scheduled)
         if: github.event_name == 'schedule'
         run: |
-          cargo test --test differential_tests --release -- --nocapture
+          cargo test --test differential_tests --release --no-default-features -- --nocapture
         env:
           PROPTEST_CASES: 500
 

@@ -97,8 +97,8 @@ tempfile = "3.23"
 # Tokio with networking for cloud storage
 tokio = { version = "1", features = ["fs", "sync", "rt", "rt-multi-thread", "macros", "time", "net", "io-util"] }
 dirs = "5.0"
-# HTTP client for cloud storage backends
-reqwest = { version = "0.12", features = ["json", "stream"], optional = true }
+# HTTP client for cloud storage backends (rustls for security, no OpenSSL)
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"], optional = true }
 
 # GUI dependencies (optional - disabled for Kani due to rav1e nightly conflicts)
 eframe = { version = "0.29", optional = true }

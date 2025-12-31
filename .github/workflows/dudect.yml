@@ -42,7 +42,8 @@ jobs:
         run: |
           # Run for a limited time in CI (30 seconds per test)
           # In production/local runs, let it run longer for more confidence
-          timeout 300 cargo bench --bench constant_time 2>&1 || true
+          # Use --no-default-features to avoid GUI dependencies (GTK on Linux)
+          timeout 300 cargo bench --bench constant_time --no-default-features 2>&1 || true
         env:
           # Reduce iterations for CI to avoid timeouts
           DUDECT_TIMEOUT_SECS: 30
@@ -81,7 +82,8 @@ jobs:
       - name: Run DudeCT timing analysis
         run: |
           # Run with timeout on Windows
-          $proc = Start-Process -FilePath "cargo" -ArgumentList "bench --bench constant_time" -PassThru -NoNewWindow
+          # Use --no-default-features for consistency (no GUI needed for timing tests)
+          $proc = Start-Process -FilePath "cargo" -ArgumentList "bench --bench constant_time --no-default-features" -PassThru -NoNewWindow
           Start-Sleep -Seconds 300
           if (!$proc.HasExited) { $proc.Kill() }
         shell: powershell

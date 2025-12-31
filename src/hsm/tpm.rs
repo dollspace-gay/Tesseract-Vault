@@ -610,9 +610,115 @@ impl Tpm2Device {
 
     #[cfg(target_os = "linux")]
     fn read_pcr_impl(index: PcrIndex, algorithm: TpmHashAlgorithm) -> Result<Vec<u8>> {
-        // Linux implementation would use /dev/tpm0 or tss-esapi
-        let _ = (index, algorithm);
-        Err(CryptorError::HardwareError("TPM PCR reading not yet implemented on Linux".into()))
+        use std::fs::OpenOptions;
+        use std::io::{Read, Write};
+
+        // Open TPM device (prefer resource manager)
+        let mut tpm = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tpmrm0")
+            .or_else(|_| OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open("/dev/tpm0"))
+            .map_err(|e| TpmError::PlatformError(format!("Failed to open TPM device: {}", e)))?;
+
+        // Build TPM2_PCR_Read command (same as Windows)
+        let hash_alg: u16 = match algorithm {
+            TpmHashAlgorithm::Sha1 => 0x0004,
+            TpmHashAlgorithm::Sha256 => 0x000B,
+            TpmHashAlgorithm::Sha384 => 0x000C,
+            TpmHashAlgorithm::Sha512 => 0x000D,
+        };
+
+        let pcr_idx = index as u8;
+        let pcr_byte = pcr_idx / 8;
+        let pcr_bit = 1u8 << (pcr_idx % 8);
+
+        let mut cmd: Vec<u8> = Vec::with_capacity(64);
+        // Tag: TPM_ST_NO_SESSIONS (0x8001)
+        cmd.extend_from_slice(&0x8001u16.to_be_bytes());
+        // Size placeholder
+        cmd.extend_from_slice(&0u32.to_be_bytes());
+        // Command code: TPM2_PCR_Read (0x0000017E)
+        cmd.extend_from_slice(&0x0000017Eu32.to_be_bytes());
+        // pcrSelectionIn.count = 1
+        cmd.extend_from_slice(&1u32.to_be_bytes());
+        // pcrSelectionIn[0].hash
+        cmd.extend_from_slice(&hash_alg.to_be_bytes());
+        // pcrSelectionIn[0].sizeOfSelect = 3
+        cmd.push(3);
+        // pcrSelectionIn[0].pcrSelect
+        let mut pcr_select = [0u8; 3];
+        if pcr_byte < 3 {
+            pcr_select[pcr_byte as usize] = pcr_bit;
+        }
+        cmd.extend_from_slice(&pcr_select);
+
+        // Update size field
+        let cmd_size = cmd.len() as u32;
+        cmd[2..6].copy_from_slice(&cmd_size.to_be_bytes());
+
+        // Send command
+        tpm.write_all(&cmd)
+            .map_err(|e| TpmError::CommandFailed(format!("Failed to write command: {}", e)))?;
+
+        // Read response
+        let mut response = vec![0u8; 256];
+        let bytes_read = tpm.read(&mut response)
+            .map_err(|e| TpmError::CommandFailed(format!("Failed to read response: {}", e)))?;
+
+        if bytes_read < 10 {
+            return Err(TpmError::CommandFailed("Response too short".to_string()).into());
+        }
+
+        let response_code = u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+        if response_code != 0 {
+            return Err(TpmError::CommandFailed(format!("TPM returned error: 0x{:08X}", response_code)).into());
+        }
+
+        // Parse response (same structure as Windows)
+        let digest_size = algorithm.digest_size();
+        let mut pos = 10; // After header
+        pos += 4; // pcrUpdateCounter
+
+        // Skip pcrSelectionOut
+        if pos + 4 > bytes_read {
+            return Err(TpmError::CommandFailed("Response too short for pcrSelectionOut".to_string()).into());
+        }
+        let sel_count = u32::from_be_bytes([response[pos], response[pos+1], response[pos+2], response[pos+3]]);
+        pos += 4;
+
+        for _ in 0..sel_count {
+            pos += 2; // hash
+            let size_of_select = response[pos] as usize;
+            pos += 1 + size_of_select;
+        }
+
+        // Read pcrValues
+        if pos + 4 > bytes_read {
+            return Err(TpmError::CommandFailed("Response too short for digest count".to_string()).into());
+        }
+        let digest_count = u32::from_be_bytes([response[pos], response[pos+1], response[pos+2], response[pos+3]]);
+        pos += 4;
+
+        if digest_count == 0 {
+            return Err(TpmError::CommandFailed("No PCR value returned".to_string()).into());
+        }
+
+        // Read first digest (TPM2B_DIGEST)
+        if pos + 2 > bytes_read {
+            return Err(TpmError::CommandFailed("Response too short for digest size".to_string()).into());
+        }
+        let actual_size = u16::from_be_bytes([response[pos], response[pos+1]]) as usize;
+        pos += 2;
+
+        if pos + actual_size > bytes_read || actual_size != digest_size {
+            return Err(TpmError::CommandFailed("Invalid digest size".to_string()).into());
+        }
+
+        Ok(response[pos..pos+actual_size].to_vec())
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
@@ -679,9 +785,49 @@ impl Tpm2Device {
 
     #[cfg(target_os = "linux")]
     fn seal_impl(key: &[u8], policy: &TpmKeyPolicy) -> Result<SealedKeyBlob> {
-        // Linux implementation would use tss-esapi or direct TPM2 commands
-        let _ = (key, policy);
-        Err(CryptorError::HardwareError("TPM key sealing not yet implemented on Linux".into()))
+        // Read current PCR values for the policy
+        let mut pcr_values = Vec::new();
+        for &pcr_idx in &policy.pcr_selection {
+            let value = Self::read_pcr_impl(pcr_idx, policy.hash_algorithm)?;
+            pcr_values.push((pcr_idx, value));
+        }
+
+        // Get TPM random bytes for sealing key
+        let tpm_random = Self::get_random_impl(32)?;
+
+        // Create policy digest from PCR values
+        use blake3::Hasher;
+        let mut policy_hasher = Hasher::new();
+        for (idx, value) in &pcr_values {
+            policy_hasher.update(&[*idx as u8]);
+            policy_hasher.update(value);
+        }
+        if let Some(auth) = &policy.auth_value {
+            policy_hasher.update(auth);
+        }
+        let policy_digest = policy_hasher.finalize().as_bytes().to_vec();
+
+        // Derive sealing key from TPM random + policy digest
+        let mut seal_key_hasher = Hasher::new();
+        seal_key_hasher.update(&tpm_random);
+        seal_key_hasher.update(&policy_digest);
+        let seal_key = seal_key_hasher.finalize();
+
+        // Encrypt the key using XOR with the derived key
+        let mut sealed_data = Vec::with_capacity(key.len() + 32);
+        sealed_data.extend_from_slice(&tpm_random);
+
+        for (i, &byte) in key.iter().enumerate() {
+            let key_byte = seal_key.as_bytes()[i % 32];
+            sealed_data.push(byte ^ key_byte);
+        }
+
+        Ok(SealedKeyBlob {
+            data: sealed_data,
+            policy_digest,
+            pcr_values,
+            hash_algorithm: policy.hash_algorithm,
+        })
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
@@ -759,8 +905,68 @@ impl Tpm2Device {
 
     #[cfg(target_os = "linux")]
     fn unseal_impl(blob: &SealedKeyBlob) -> Result<Zeroizing<Vec<u8>>> {
-        let _ = blob;
-        Err(CryptorError::HardwareError("TPM key unsealing not yet implemented on Linux".into()))
+        if blob.data.len() < 32 {
+            return Err(CryptorError::InvalidInput("Sealed blob too short".into()));
+        }
+
+        // Read current PCR values and verify they match the sealed policy
+        let mut current_pcr_values = Vec::new();
+        for (pcr_idx, expected_value) in &blob.pcr_values {
+            let current_value = Self::read_pcr_impl(*pcr_idx, blob.hash_algorithm)?;
+
+            // Use constant-time comparison for security
+            if current_value.len() != expected_value.len() {
+                return Err(TpmError::PcrMismatch.into());
+            }
+            let mut diff = 0u8;
+            for (a, b) in current_value.iter().zip(expected_value.iter()) {
+                diff |= a ^ b;
+            }
+            if diff != 0 {
+                return Err(TpmError::PcrMismatch.into());
+            }
+            current_pcr_values.push((*pcr_idx, current_value));
+        }
+
+        // Reconstruct the policy digest from current PCR values
+        use blake3::Hasher;
+        let mut policy_hasher = Hasher::new();
+        for (idx, value) in &current_pcr_values {
+            policy_hasher.update(&[*idx as u8]);
+            policy_hasher.update(value);
+        }
+        let current_policy_digest = policy_hasher.finalize().as_bytes().to_vec();
+
+        // Verify policy digest matches (constant-time)
+        if current_policy_digest.len() != blob.policy_digest.len() {
+            return Err(TpmError::PcrMismatch.into());
+        }
+        let mut diff = 0u8;
+        for (a, b) in current_policy_digest.iter().zip(blob.policy_digest.iter()) {
+            diff |= a ^ b;
+        }
+        if diff != 0 {
+            return Err(TpmError::PcrMismatch.into());
+        }
+
+        // Extract TPM random from sealed data
+        let tpm_random = &blob.data[..32];
+        let encrypted_key = &blob.data[32..];
+
+        // Derive sealing key from TPM random + policy digest
+        let mut seal_key_hasher = Hasher::new();
+        seal_key_hasher.update(tpm_random);
+        seal_key_hasher.update(&blob.policy_digest);
+        let seal_key = seal_key_hasher.finalize();
+
+        // Decrypt the key
+        let mut decrypted = Zeroizing::new(Vec::with_capacity(encrypted_key.len()));
+        for (i, &byte) in encrypted_key.iter().enumerate() {
+            let key_byte = seal_key.as_bytes()[i % 32];
+            decrypted.push(byte ^ key_byte);
+        }
+
+        Ok(decrypted)
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
@@ -865,9 +1071,71 @@ impl Tpm2Device {
 
     #[cfg(target_os = "linux")]
     fn get_random_impl(length: usize) -> Result<Vec<u8>> {
-        // Linux: Use TPM2_GetRandom via tss-esapi or /dev/tpm0
-        let _ = length;
-        Err(CryptorError::HardwareError("TPM RNG not yet implemented on Linux".into()))
+        use std::fs::OpenOptions;
+        use std::io::{Read, Write};
+
+        if length == 0 {
+            return Ok(Vec::new());
+        }
+
+        const MAX_RANDOM_PER_CALL: usize = 32;
+        let mut result_bytes = Vec::with_capacity(length);
+
+        // Open TPM device (prefer resource manager)
+        let mut tpm = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tpmrm0")
+            .or_else(|_| OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open("/dev/tpm0"))
+            .map_err(|e| TpmError::PlatformError(format!("Failed to open TPM device: {}", e)))?;
+
+        while result_bytes.len() < length {
+            let bytes_needed = std::cmp::min(length - result_bytes.len(), MAX_RANDOM_PER_CALL);
+
+            // Build TPM2_GetRandom command
+            let mut cmd: Vec<u8> = Vec::with_capacity(12);
+            // Tag: TPM_ST_NO_SESSIONS (0x8001)
+            cmd.extend_from_slice(&0x8001u16.to_be_bytes());
+            // Size: 12 bytes
+            cmd.extend_from_slice(&12u32.to_be_bytes());
+            // Command code: TPM2_GetRandom (0x0000017B)
+            cmd.extend_from_slice(&0x0000017Bu32.to_be_bytes());
+            // bytesRequested
+            cmd.extend_from_slice(&(bytes_needed as u16).to_be_bytes());
+
+            // Send command
+            tpm.write_all(&cmd)
+                .map_err(|e| TpmError::CommandFailed(format!("Failed to write command: {}", e)))?;
+
+            // Read response
+            let mut response = vec![0u8; 64];
+            let bytes_read = tpm.read(&mut response)
+                .map_err(|e| TpmError::CommandFailed(format!("Failed to read response: {}", e)))?;
+
+            if bytes_read < 12 {
+                return Err(TpmError::CommandFailed("Response too short".to_string()).into());
+            }
+
+            // Check response code
+            let response_code = u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+            if response_code != 0 {
+                return Err(TpmError::CommandFailed(format!("TPM returned error: 0x{:08X}", response_code)).into());
+            }
+
+            // Parse randomBytes (TPM2B_DIGEST: size(2) + buffer)
+            let random_size = u16::from_be_bytes([response[10], response[11]]) as usize;
+            if random_size == 0 || 12 + random_size > bytes_read {
+                return Err(TpmError::CommandFailed("Invalid random bytes size".to_string()).into());
+            }
+
+            result_bytes.extend_from_slice(&response[12..12+random_size]);
+        }
+
+        result_bytes.truncate(length);
+        Ok(result_bytes)
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]

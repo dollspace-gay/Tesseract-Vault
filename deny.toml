@@ -58,6 +58,7 @@ allow = [
     "MPL-2.0",
     "BSL-1.0",      # Boost Software License (clipboard-win, error-code)
     "OFL-1.1",      # SIL Open Font License (epaint_default_fonts)
+    "CDLA-Permissive-2.0",  # Community Data License Agreement (webpki-roots)
 ]
 confidence-threshold = 0.8
 

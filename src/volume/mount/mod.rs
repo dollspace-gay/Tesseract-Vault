@@ -1,7 +1,7 @@
-/// Platform-specific volume mounting implementations
-///
-/// This module provides cross-platform support for mounting encrypted volumes
-/// as filesystems using FUSE (Linux/macOS) or WinFsp (Windows).
+//! Platform-specific volume mounting implementations
+//!
+//! This module provides cross-platform support for mounting encrypted volumes
+//! as filesystems using FUSE (Linux/macOS) or WinFsp (Windows).
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[cfg(feature = "encrypted-volumes")]

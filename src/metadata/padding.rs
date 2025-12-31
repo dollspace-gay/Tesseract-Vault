@@ -195,13 +195,7 @@ impl PaddingGenerator {
 
             PaddingStrategy::Fixed { size } => size,
 
-            PaddingStrategy::MinimumSize { min_size } => {
-                if original_size >= min_size {
-                    0
-                } else {
-                    min_size - original_size
-                }
-            }
+            PaddingStrategy::MinimumSize { min_size } => min_size.saturating_sub(original_size),
         };
 
         // Apply safety limit

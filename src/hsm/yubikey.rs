@@ -1,21 +1,20 @@
 //! YubiKey HMAC-SHA1 Challenge-Response Integration
 //!
-//! This module provides direct USB HID communication with YubiKey devices
-//! for HMAC-SHA1 challenge-response authentication.
+//! This module provides YubiKey HMAC-SHA1 challenge-response authentication
+//! using the `yubikey-hmac-otp` crate for reliable cross-platform support.
 //!
 //! # Features
 //!
-//! - Direct USB HID protocol implementation
 //! - HMAC-SHA1 challenge-response authentication
 //! - Dual slot support (slot 1 and slot 2)
 //! - Backup key mechanism
 //! - Multi-YubiKey support
-//! - Device enumeration and firmware detection
+//! - Device enumeration
 //!
 //! # Hardware Requirements
 //!
-//! - YubiKey 4, 5, or later with HMAC-SHA1 configured
-//! - USB HID drivers (libusb on Linux, native on Windows/macOS)
+//! - YubiKey 2.2 or later with HMAC-SHA1 configured
+//! - USB HID drivers (handled by the system)
 //!
 //! # Linux Permissions
 //!
@@ -46,110 +45,28 @@
 
 use crate::error::{CryptorError, Result};
 use crate::hsm::HardwareSecurityModule;
-use hidapi::{HidApi, HidDevice};
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use std::time::Duration;
+use yubikey_hmac_otp::config::{Config, Mode, Slot as YkSlot};
+use yubikey_hmac_otp::Yubico;
 use zeroize::{Zeroize, Zeroizing};
 
-/// YubiKey USB Vendor ID
-const YUBICO_VENDOR_ID: u16 = 0x1050;
-
-/// YubiKey USB Product IDs
-const YUBIKEY_PRODUCT_IDS: &[u16] = &[
-    0x0010, // YubiKey (original)
-    0x0110, // YubiKey NEO-n
-    0x0111, // YubiKey NEO OTP
-    0x0114, // YubiKey NEO OTP+CCID
-    0x0116, // YubiKey NEO OTP+FIDO
-    0x0401, // YubiKey 4 OTP
-    0x0402, // YubiKey 4 FIDO
-    0x0403, // YubiKey 4 OTP+FIDO
-    0x0404, // YubiKey 4 CCID
-    0x0405, // YubiKey 4 OTP+CCID
-    0x0406, // YubiKey 4 FIDO+CCID
-    0x0407, // YubiKey 4 OTP+FIDO+CCID
-    0x0410, // YubiKey Plus
-    0x0411, // YubiKey 5 NFC
-    0x0420, // Security Key NFC
-];
-
-/// YubiKey HID report slots
-const SLOT_CHAL_HMAC1: u8 = 0x30; // Challenge-response slot 1
-const SLOT_CHAL_HMAC2: u8 = 0x38; // Challenge-response slot 2
-
-/// YubiKey HID frame structure
-#[repr(C)]
-#[derive(Debug)]
-struct YubiKeyFrame {
-    payload: [u8; 64],
-    slot: u8,
-    crc: u16,
-}
-
-impl YubiKeyFrame {
-    fn new(slot: u8, data: &[u8]) -> Self {
-        let mut frame = YubiKeyFrame {
-            payload: [0u8; 64],
-            slot,
-            crc: 0,
-        };
-
-        // Copy data to payload
-        let len = data.len().min(64);
-        frame.payload[..len].copy_from_slice(&data[..len]);
-
-        // Calculate CRC16
-        frame.crc = Self::calculate_crc(&frame.payload);
-
-        frame
-    }
-
-    fn calculate_crc(data: &[u8]) -> u16 {
-        let mut crc: u16 = 0xFFFF;
-        for &byte in data {
-            crc ^= byte as u16;
-            for _ in 0..8 {
-                if crc & 1 != 0 {
-                    crc = (crc >> 1) ^ 0x8408;
-                } else {
-                    crc >>= 1;
-                }
-            }
-        }
-        !crc
-    }
-
-    fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(70);
-        bytes.extend_from_slice(&self.payload);
-        bytes.push(self.slot);
-        bytes.extend_from_slice(&self.crc.to_le_bytes());
-        bytes
-    }
-}
-
 /// YubiKey slot configuration
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum YubiKeySlot {
     /// Slot 1 (short press)
     Slot1,
     /// Slot 2 (long press)
+    #[default]
     Slot2,
 }
 
 impl YubiKeySlot {
-    fn to_hid_slot(self) -> u8 {
+    fn to_yk_slot(self) -> YkSlot {
         match self {
-            YubiKeySlot::Slot1 => SLOT_CHAL_HMAC1,
-            YubiKeySlot::Slot2 => SLOT_CHAL_HMAC2,
+            YubiKeySlot::Slot1 => YkSlot::Slot1,
+            YubiKeySlot::Slot2 => YkSlot::Slot2,
         }
-    }
-}
-
-impl Default for YubiKeySlot {
-    fn default() -> Self {
-        YubiKeySlot::Slot2
     }
 }
 
@@ -199,7 +116,6 @@ pub struct YubiKeyInfo {
 pub struct YubiKey {
     config: YubiKeyConfig,
     backup_key: Option<Zeroizing<Vec<u8>>>,
-    hid_api: RefCell<Option<HidApi>>,
 }
 
 impl YubiKey {
@@ -208,7 +124,6 @@ impl YubiKey {
         Ok(Self {
             config: YubiKeyConfig::default(),
             backup_key: None,
-            hid_api: RefCell::new(None),
         })
     }
 
@@ -217,50 +132,7 @@ impl YubiKey {
         Ok(Self {
             config,
             backup_key: None,
-            hid_api: RefCell::new(None),
         })
-    }
-
-    /// Initialize HID API (lazy initialization)
-    fn get_hid_api(&self) -> Result<HidApi> {
-        let mut api_ref = self.hid_api.borrow_mut();
-        if api_ref.is_none() {
-            let api = HidApi::new().map_err(|e| {
-                CryptorError::HardwareError(format!("Failed to initialize USB HID: {}", e))
-            })?;
-            *api_ref = Some(api);
-        }
-
-        // Clone the HidApi (it's relatively cheap)
-        HidApi::new().map_err(|e| {
-            CryptorError::HardwareError(format!("Failed to initialize USB HID: {}", e))
-        })
-    }
-
-    /// Find and open a YubiKey device
-    fn open_device(&self) -> Result<HidDevice> {
-        let api = self.get_hid_api()?;
-
-        // Find YubiKey device
-        for product_id in YUBIKEY_PRODUCT_IDS {
-            if let Ok(device) = api.open(YUBICO_VENDOR_ID, *product_id) {
-                // If specific serial requested, check it
-                if let Some(required_serial) = self.config.serial {
-                    if let Ok(Some(serial_str)) = device.get_serial_number_string() {
-                        if let Ok(serial) = serial_str.parse::<u32>() {
-                            if serial != required_serial {
-                                continue;
-                            }
-                        }
-                    }
-                }
-                return Ok(device);
-            }
-        }
-
-        Err(CryptorError::HardwareError(
-            "No YubiKey device found".to_string(),
-        ))
     }
 
     /// Set backup key for when YubiKey is unavailable
@@ -295,98 +167,50 @@ impl YubiKey {
             ));
         }
 
-        // Open device
-        let device = self.open_device()?;
-
-        // Prepare challenge frame
-        let frame = YubiKeyFrame::new(self.config.slot.to_hid_slot(), challenge);
-        let frame_bytes = frame.to_bytes();
-
-        // Send challenge to YubiKey
-        device
-            .write(&frame_bytes)
-            .map_err(|e| CryptorError::HardwareError(format!("Failed to write to YubiKey: {}", e)))?;
-
-        // Read response
-        let mut response_buf = [0u8; 70];
-        let timeout_ms = self.config.timeout.as_millis() as i32;
-
-        let bytes_read = device.read_timeout(&mut response_buf, timeout_ms).map_err(|e| {
-            CryptorError::HardwareError(format!("Failed to read from YubiKey: {}", e))
+        // Create Yubico instance and find device
+        let mut yubi = Yubico::new();
+        let device = yubi.find_yubikey().map_err(|e| {
+            CryptorError::HardwareError(format!("Failed to find YubiKey: {:?}", e))
         })?;
 
-        if bytes_read < 22 {
-            // Need at least 20 bytes of response + 2 bytes CRC
-            return Err(CryptorError::HardwareError(
-                "Invalid response from YubiKey (too short)".to_string(),
-            ));
-        }
+        // Configure for HMAC-SHA1 challenge-response
+        let config = Config::new_from(device)
+            .set_variable_size(true)
+            .set_mode(Mode::Sha1)
+            .set_slot(self.config.slot.to_yk_slot());
 
-        // Extract HMAC-SHA1 response (20 bytes)
-        let response = Zeroizing::new(response_buf[..20].to_vec());
+        // Perform challenge-response
+        let response = yubi.challenge_response_hmac(challenge, config).map_err(|e| {
+            CryptorError::HardwareError(format!("Challenge-response failed: {:?}", e))
+        })?;
 
-        Ok(response)
+        Ok(Zeroizing::new(response.to_vec()))
     }
 
     /// List all connected YubiKey devices
     pub fn list_devices() -> Result<Vec<YubiKeyInfo>> {
-        let api = HidApi::new().map_err(|e| {
-            CryptorError::HardwareError(format!("Failed to initialize USB HID: {}", e))
-        })?;
+        let mut yubi = Yubico::new();
 
-        let mut devices = Vec::new();
-
-        for device_info in api.device_list() {
-            if device_info.vendor_id() == YUBICO_VENDOR_ID
-                && YUBIKEY_PRODUCT_IDS.contains(&device_info.product_id())
-            {
-                // Try to open device to get more info
-                if let Ok(device) = device_info.open_device(&api) {
-                    let serial = device
-                        .get_serial_number_string()
-                        .ok()
-                        .flatten()
-                        .and_then(|s| s.parse().ok())
-                        .unwrap_or(0);
-
-                    let manufacturer = device
-                        .get_manufacturer_string()
-                        .ok()
-                        .flatten()
-                        .unwrap_or_else(|| "Yubico".to_string());
-
-                    let product = device
-                        .get_product_string()
-                        .ok()
-                        .flatten()
-                        .unwrap_or_else(|| "YubiKey".to_string());
-
-                    devices.push(YubiKeyInfo {
-                        serial,
-                        version: (0, 0, 0), // Would need additional protocol to get version
-                        product_id: device_info.product_id(),
-                        manufacturer,
-                        product,
-                    });
-                }
+        match yubi.find_yubikey() {
+            Ok(_device) => {
+                // yubikey-hmac-otp doesn't expose detailed device info
+                // Return a basic entry indicating a device was found
+                Ok(vec![YubiKeyInfo {
+                    serial: 0,
+                    version: (0, 0, 0),
+                    product_id: 0,
+                    manufacturer: "Yubico".to_string(),
+                    product: "YubiKey".to_string(),
+                }])
             }
+            Err(_) => Ok(vec![]),
         }
-
-        Ok(devices)
     }
 
-    /// Get YubiKey firmware version (simplified - actual version requires extended protocol)
+    /// Get YubiKey firmware version
     pub fn firmware_version(&self) -> Result<String> {
-        let device = self.open_device()?;
-
-        // Try to get product string which sometimes includes version
-        let product = device
-            .get_product_string()
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "YubiKey".to_string());
-
-        Ok(product)
+        // yubikey-hmac-otp doesn't expose firmware version
+        Ok("Unknown".to_string())
     }
 
     /// Generate a secure backup key
@@ -409,7 +233,7 @@ impl YubiKey {
         let hk = Hkdf::<Sha256>::new(Some(password_key), yubikey_response);
 
         let mut okm = Zeroizing::new(vec![0u8; 32]);
-        hk.expand(b"secure-cryptor-yubikey-kdf", &mut okm)
+        hk.expand(b"tesseract-yubikey-kdf", &mut okm)
             .map_err(|e| CryptorError::KeyDerivation(format!("HKDF expansion failed: {}", e)))?;
 
         Ok(okm)
@@ -428,8 +252,8 @@ impl HardwareSecurityModule for YubiKey {
     }
 
     fn is_available(&self) -> bool {
-        // Try to enumerate devices
-        Self::list_devices().map(|devs| !devs.is_empty()).unwrap_or(false)
+        let mut yubi = Yubico::new();
+        yubi.find_yubikey().is_ok()
     }
 
     fn derive_key(
@@ -495,8 +319,8 @@ mod tests {
 
     #[test]
     fn test_yubikey_slot_conversion() {
-        assert_eq!(YubiKeySlot::Slot1.to_hid_slot(), SLOT_CHAL_HMAC1);
-        assert_eq!(YubiKeySlot::Slot2.to_hid_slot(), SLOT_CHAL_HMAC2);
+        assert!(matches!(YubiKeySlot::Slot1.to_yk_slot(), YkSlot::Slot1));
+        assert!(matches!(YubiKeySlot::Slot2.to_yk_slot(), YkSlot::Slot2));
     }
 
     #[test]
@@ -538,13 +362,6 @@ mod tests {
         assert!(yubikey.challenge_response(&large_challenge).is_err());
     }
 
-    #[test]
-    fn test_crc_calculation() {
-        let data = [0x00, 0x01, 0x02, 0x03];
-        let crc = YubiKeyFrame::calculate_crc(&data);
-        assert_ne!(crc, 0); // Should calculate some non-zero CRC
-    }
-
     // Hardware tests (require actual YubiKey)
     #[test]
     #[ignore]
@@ -581,10 +398,13 @@ mod tests {
         let challenge = [0x42u8; 32];
         let response = yubikey.challenge_response(&challenge);
 
+        if let Err(ref e) = response {
+            println!("Challenge-response error: {:?}", e);
+        }
         assert!(response.is_ok());
         let response = response.unwrap();
         assert_eq!(response.len(), 20); // HMAC-SHA1 is 20 bytes
-        println!("Response: {:?}", &*response);
+        println!("Response: {:02X?}", &*response);
     }
 
     #[test]

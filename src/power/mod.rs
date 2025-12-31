@@ -11,9 +11,6 @@ pub mod windows;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
-#[cfg(target_os = "macos")]
-pub mod macos;
-
 /// Power events that can trigger callbacks
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PowerEvent {
@@ -88,10 +85,7 @@ pub struct PowerMonitor {
     #[cfg(target_os = "linux")]
     inner: linux::LinuxPowerMonitor,
 
-    #[cfg(target_os = "macos")]
-    inner: macos::MacOSPowerMonitor,
-
-    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "linux")))]
     _phantom: std::marker::PhantomData<()>,
 }
 
@@ -112,14 +106,7 @@ impl PowerMonitor {
             }
         }
 
-        #[cfg(target_os = "macos")]
-        {
-            Self {
-                inner: macos::MacOSPowerMonitor::new(),
-            }
-        }
-
-        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(windows, target_os = "linux")))]
         {
             Self {
                 _phantom: std::marker::PhantomData,
@@ -129,12 +116,12 @@ impl PowerMonitor {
 
     /// Registers a callback to be called on power events
     pub fn register_callback(&mut self, callback: PowerCallback) {
-        #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+        #[cfg(any(windows, target_os = "linux"))]
         {
             self.inner.register_callback(callback);
         }
 
-        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(windows, target_os = "linux")))]
         {
             let _ = callback;
         }
@@ -142,12 +129,12 @@ impl PowerMonitor {
 
     /// Starts monitoring power events
     pub fn start(&mut self) -> Result<()> {
-        #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+        #[cfg(any(windows, target_os = "linux"))]
         {
             self.inner.start()
         }
 
-        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(windows, target_os = "linux")))]
         {
             Err(PowerMonitorError::PlatformNotSupported)
         }
@@ -155,12 +142,12 @@ impl PowerMonitor {
 
     /// Stops monitoring power events
     pub fn stop(&mut self) -> Result<()> {
-        #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+        #[cfg(any(windows, target_os = "linux"))]
         {
             self.inner.stop()
         }
 
-        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(windows, target_os = "linux")))]
         {
             Err(PowerMonitorError::PlatformNotSupported)
         }

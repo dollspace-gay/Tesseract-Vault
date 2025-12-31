@@ -1,9 +1,9 @@
-/// FUSE filesystem implementation for Linux and macOS
-///
-/// This module implements a FUSE (Filesystem in Userspace) adapter that
-/// allows mounting encrypted containers as regular filesystems.
-///
-/// Uses VolumeIOFilesystem for persistent, encrypted storage.
+//! FUSE filesystem implementation for Linux and macOS
+//!
+//! This module implements a FUSE (Filesystem in Userspace) adapter that
+//! allows mounting encrypted containers as regular filesystems.
+//!
+//! Uses VolumeIOFilesystem for persistent, encrypted storage.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -68,7 +68,7 @@ impl PersistentFuseAdapter {
             uid: inode.uid,
             gid: inode.gid,
             rdev: 0,
-            blksize: FS_BLOCK_SIZE as u32,
+            blksize: FS_BLOCK_SIZE,
             flags: 0,
         }
     }
@@ -577,7 +577,7 @@ pub fn mount(
         .read(true)
         .write(!options.read_only)
         .open(container_path)
-        .map_err(|e| MountError::Io(e))?;
+        .map_err(MountError::Io)?;
 
     // Create backend with proper offset
     let backend: Box<dyn StorageBackend> = Box::new(FileBackend::new(file, data_offset));
@@ -592,7 +592,7 @@ pub fn mount(
                 .read(true)
                 .write(true)
                 .open(container_path)
-                .map_err(|e| MountError::Io(e))?;
+                .map_err(MountError::Io)?;
 
             let backend: Box<dyn StorageBackend> = Box::new(FileBackend::new(file, data_offset));
 

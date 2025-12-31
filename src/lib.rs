@@ -156,6 +156,128 @@ pub fn encrypt_file_validated(input_path: &Path, output_path: &Path, password: &
     encrypt_file(input_path, output_path, password)
 }
 
+/// Encrypts a file using a Hardware Security Module for two-factor key derivation.
+///
+/// This combines password-based encryption with hardware-backed authentication.
+/// The HSM (e.g., YubiKey) participates in key derivation, making decryption
+/// require both the password AND the hardware device.
+///
+/// # Arguments
+///
+/// * `input_path` - Path to the file to encrypt
+/// * `output_path` - Path where the encrypted file will be written
+/// * `password` - Password for encryption
+/// * `hsm` - Hardware Security Module implementation
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - HSM is not available
+/// - Input file cannot be read
+/// - Encryption fails
+/// - Output file cannot be written
+#[cfg(not(target_arch = "wasm32"))]
+pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
+    input_path: &Path,
+    output_path: &Path,
+    password: &str,
+    hsm: &H,
+) -> Result<()> {
+    use zeroize::Zeroizing;
+
+    // Generate salt (also used as HSM challenge)
+    let salt = generate_salt_string();
+    let salt_bytes = salt.as_str().as_bytes();
+
+    // Derive key using HSM (combines password + hardware response)
+    let key = hsm.derive_key(password.as_bytes(), salt_bytes, salt_bytes)?;
+
+    // Convert to fixed-size array for encryptor
+    let mut key_array = Zeroizing::new([0u8; 32]);
+    key_array.copy_from_slice(&key[..32]);
+
+    // Generate base nonce for chunk nonce derivation
+    let mut base_nonce = [0u8; NONCE_LEN];
+    OsRng.try_fill_bytes(&mut base_nonce)
+        .map_err(|e| CryptorError::Cryptography(format!("RNG error: {}", e)))?;
+
+    // Open input file for chunked reading
+    let config = StreamConfig::default();
+    let reader = ChunkedReader::open(input_path, config)?;
+
+    // Create chunked encryptor
+    let encryptor = Box::new(AesGcmEncryptor::new());
+    let salt_string = salt.as_str().to_string();
+    let key_clone = key_array.clone();
+    let chunked_encryptor = ChunkedEncryptor::new(reader, encryptor, key_array, base_nonce, salt_string)
+        .with_pqc_enabled(&key_clone)?;
+
+    // Encrypt to output file atomically
+    storage::write_atomically(output_path, |file| {
+        chunked_encryptor
+            .encrypt_to(file)
+            .map_err(|e| std::io::Error::other(e.to_string()))
+    })?;
+
+    Ok(())
+}
+
+/// Decrypts a file using a Hardware Security Module for two-factor key derivation.
+///
+/// Requires the same HSM device that was used during encryption.
+///
+/// # Arguments
+///
+/// * `input_path` - Path to the encrypted file
+/// * `output_path` - Path where the decrypted file will be written
+/// * `password` - Password for decryption
+/// * `hsm` - Hardware Security Module implementation (must be the same device used for encryption)
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - HSM is not available or wrong device
+/// - Input file cannot be read or has invalid format
+/// - Password is incorrect
+/// - Decryption or authentication fails
+#[cfg(not(target_arch = "wasm32"))]
+pub fn decrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
+    input_path: &Path,
+    output_path: &Path,
+    password: &str,
+    hsm: &H,
+) -> Result<()> {
+    use zeroize::Zeroizing;
+
+    // Read header to get salt
+    let mut file = File::open(input_path)?;
+    let header = StreamHeader::read_from(&mut file)?;
+
+    // Use salt as HSM challenge
+    let salt_bytes = header.salt.as_bytes();
+
+    // Derive key using HSM (combines password + hardware response)
+    let key = hsm.derive_key(password.as_bytes(), salt_bytes, salt_bytes)?;
+
+    // Convert to fixed-size array for decryptor
+    let mut key_array = Zeroizing::new([0u8; 32]);
+    key_array.copy_from_slice(&key[..32]);
+
+    // Reopen file for full decryption
+    let file = File::open(input_path)?;
+    let encryptor = Box::new(AesGcmEncryptor::new());
+    let mut chunked_decryptor = ChunkedDecryptor::new(file, encryptor, key_array)?;
+
+    // Decrypt to output file atomically
+    storage::write_atomically(output_path, |output_file| {
+        chunked_decryptor
+            .decrypt_to(output_file)
+            .map_err(|e| std::io::Error::other(e.to_string()))
+    })?;
+
+    Ok(())
+}
+
 /// Decrypts a file with a password.
 ///
 /// This is the high-level API for file decryption. It:

@@ -12,8 +12,8 @@ categories = ["cryptography"]
 wasm-opt = ["-O4", "--enable-bulk-memory"]
 
 [features]
-default = ["post-quantum", "compression", "ctrlc"]
-encrypted-volumes = ["dep:fuser", "dep:winfsp"]
+default = ["post-quantum", "compression", "ctrlc", "yubikey", "encrypted-volumes"]
+encrypted-volumes = ["dep:fuser", "dep:winfsp"]  # Requires LLVM/Clang for WinFSP bindings
 ctrlc = ["dep:ctrlc"]
 
 # WASM build profiles
@@ -25,7 +25,7 @@ post-quantum = ["dep:ml-kem", "dep:ml-dsa", "dep:rand09", "dep:chacha20"]  # Inc
 compression = ["dep:flate2"]  # Include DEFLATE compression support
 
 # Hardware Security Module support
-yubikey = ["dep:hidapi", "dep:sha1", "dep:hmac"]  # YubiKey HMAC-SHA1 challenge-response via USB HID
+yubikey = ["dep:yubikey-hmac-otp"]  # YubiKey HMAC-SHA1 challenge-response
 
 [lib]
 name = "tesseract_lib"
@@ -100,25 +100,19 @@ tray-icon = "0.21"
 image = "0.25"
 
 # Hardware Security Module support
-# Direct USB HID implementation for YubiKey
-hidapi = { version = "2.6", optional = true }
-sha1 = { version = "0.10", optional = true }
-hmac = { version = "0.12", optional = true }
+yubikey-hmac-otp = { version = "0.10", optional = true }
 
 # Cross-platform optional dependencies
 ctrlc = { version = "3.4", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["memoryapi", "winnt", "debugapi", "processthreadsapi", "winbase"] }
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Power", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
 windows-service = "0.7"
 winreg = "0.52"
 winfsp = { version = "0.12", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-fuser = { version = "0.16", optional = true }
-
-[target.'cfg(target_os = "macos")'.dependencies]
 fuser = { version = "0.16", optional = true }
 
 [target.'cfg(windows)'.build-dependencies]

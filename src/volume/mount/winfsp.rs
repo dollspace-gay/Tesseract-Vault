@@ -4,12 +4,11 @@
 /// containers as drive letters or directories on Windows.
 ///
 /// Uses VolumeIOFilesystem for persistent, encrypted storage.
-
 use std::collections::HashMap;
 use std::ffi::{OsString, c_void};
 use std::os::windows::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::time::SystemTime;
 
 use windows::Win32::Foundation::*;
@@ -18,7 +17,7 @@ use winfsp::{
     U16CStr, U16CString,
     filesystem::{
         FileInfo, FileSecurity, FileSystemContext, DirInfo, DirMarker,
-        OpenFileInfo, VolumeInfo,
+        OpenFileInfo, VolumeInfo, WideNameInfo,
     },
     host::{FileSystemHost, VolumeParams},
     FspError, Result as FspResult,
@@ -76,8 +75,6 @@ pub struct WinFspFileContext {
 /// Path to inode cache entry
 struct PathCacheEntry {
     inode: u32,
-    parent_inode: u32,
-    name: String,
 }
 
 /// WinFsp filesystem adapter using VolumeIOFilesystem
@@ -93,8 +90,6 @@ impl WinFspAdapter {
         let mut cache = HashMap::new();
         cache.insert(PathBuf::from("/"), PathCacheEntry {
             inode: ROOT_INODE,
-            parent_inode: ROOT_INODE,
-            name: String::new(),
         });
 
         Self {
@@ -200,21 +195,11 @@ impl WinFspAdapter {
         }
 
         // Cache the result
-        if let Some(parent) = path.parent() {
-            if let Some(name) = path.file_name() {
-                let parent_inode = if parent == Path::new("/") || parent == Path::new("") {
-                    ROOT_INODE
-                } else {
-                    self.resolve_path(parent)?
-                };
-
-                let mut cache = self.path_cache.write().unwrap();
-                cache.insert(path.to_path_buf(), PathCacheEntry {
-                    inode: current_inode,
-                    parent_inode,
-                    name: name.to_string_lossy().to_string(),
-                });
-            }
+        {
+            let mut cache = self.path_cache.write().unwrap();
+            cache.insert(path.to_path_buf(), PathCacheEntry {
+                inode: current_inode,
+            });
         }
 
         Ok(current_inode)
@@ -251,7 +236,7 @@ impl WinFspAdapter {
         file_info.file_attributes = Self::inode_type_to_attributes(file_type);
         file_info.reparse_tag = 0;
         file_info.file_size = inode.size;
-        file_info.allocation_size = ((inode.size + FS_BLOCK_SIZE as u64 - 1) / FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
+        file_info.allocation_size = inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
         file_info.creation_time = unix_to_filetime(inode.ctime);
         file_info.last_access_time = unix_to_filetime(inode.atime);
         file_info.last_write_time = unix_to_filetime(inode.mtime);
@@ -266,7 +251,6 @@ impl WinFspAdapter {
     /// Invalidate path cache entries for a path and its children
     fn invalidate_cache(&self, path: &Path) {
         let mut cache = self.path_cache.write().unwrap();
-        let path_str = path.to_string_lossy().to_string();
 
         // Remove the path itself
         cache.remove(path);
@@ -372,8 +356,6 @@ impl FileSystemContext for WinFspAdapter {
             let mut cache = self.path_cache.write().unwrap();
             cache.insert(normalized_path.clone(), PathCacheEntry {
                 inode: inode_num,
-                parent_inode,
-                name,
             });
         }
 
@@ -574,7 +556,7 @@ impl FileSystemContext for WinFspAdapter {
         };
 
         // Process entries starting from start_index
-        for (i, entry) in entries.iter().enumerate().skip(start_index) {
+        for entry in entries.iter().skip(start_index) {
             let name = match entry.name_str() {
                 Ok(n) => n,
                 Err(_) => continue,
@@ -600,7 +582,7 @@ impl FileSystemContext for WinFspAdapter {
 
                 file_info.file_attributes = Self::inode_type_to_attributes(file_type);
                 file_info.file_size = entry_inode.size;
-                file_info.allocation_size = ((entry_inode.size + FS_BLOCK_SIZE as u64 - 1) / FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
+                file_info.allocation_size = entry_inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
                 file_info.creation_time = unix_to_filetime(entry_inode.ctime);
                 file_info.last_access_time = unix_to_filetime(entry_inode.atime);
                 file_info.last_write_time = unix_to_filetime(entry_inode.mtime);
@@ -649,7 +631,7 @@ impl FileSystemContext for WinFspAdapter {
 
         file_info.file_attributes = Self::inode_type_to_attributes(file_type);
         file_info.file_size = inode.size;
-        file_info.allocation_size = ((inode.size + FS_BLOCK_SIZE as u64 - 1) / FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
+        file_info.allocation_size = inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
         file_info.creation_time = unix_to_filetime(inode.ctime);
         file_info.last_access_time = unix_to_filetime(inode.atime);
         file_info.last_write_time = unix_to_filetime(inode.mtime);

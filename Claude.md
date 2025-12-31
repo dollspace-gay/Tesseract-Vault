@@ -21,15 +21,48 @@ When work is complete, inform the user what files changed and let them handle gi
 
 ## Issue Tracking with chainlink
 
-Essential commands:
-  chainlink ready              Show issues ready to work (no blockers)
-  chainlink create "Title"     Create new issue
-  chainlink update ID --status in_progress   Claim work
-  chainlink close ID           Mark complete
-  chainlink block ID1 ID2      Mark ID1 as blocked by ID2
-  chainlink show ID            View issue details
-  chainlink list               List all issues
-  chainlink tree               Show issues as hierarchy
+## Quick Start
+
+```bash
+# Initialize in any project
+chainlink init
+
+# Start a session when you begin work
+chainlink session start
+
+# Create issues
+chainlink create "Fix login bug" -p high
+chainlink create "Add dark mode" -d "Support light/dark theme toggle"
+
+# Set what you're working on
+chainlink session work 1
+```
+
+## Commands Reference
+
+```bash
+chainlink create <title>              # Create issue (returns ID)
+chainlink create <title> -p high      # With priority (low/medium/high/critical)
+chainlink create <title> -d "desc"    # With description
+
+chainlink subissue <parent_id> <title>       # Create subissue under parent
+chainlink subissue <parent_id> <title> -p high  # Subissue with priority
+
+chainlink list                        # List open issues
+chainlink list -s all                 # List all issues
+chainlink list -s closed              # List closed issues
+chainlink list -l bug                 # Filter by label
+chainlink list -p high                # Filter by priority
+
+chainlink show <id>                   # Show issue details
+chainlink update <id> --title "New"   # Update title
+chainlink update <id> -d "New desc"   # Update description
+chainlink update <id> -p critical     # Update priority
+
+chainlink close <id>                  # Close issue
+chainlink reopen <id>                 # Reopen closed issue
+chainlink delete <id>                 # Delete (with confirmation)
+chainlink delete <id> -f     
 
 ## Cross-Platform Requirements
 
@@ -69,8 +102,7 @@ Platform-specific notes:
 When implementing platform-specific features:
   1. Implement Windows version first if needed
   2. Implement Linux version and test in WSL
-  3. Implement macOS version (best effort without testing)
-  4. Use #[cfg(target_os = "...")] guards for platform-specific code
+  3. Use #[cfg(target_os = "...")] guards for platform-specific code
 
   Rust Development Best Practices
 

@@ -83,6 +83,15 @@ struct Settings {
     last_output_directory: Option<String>,
     panel_transparency: u8,
     enable_notifications: bool,
+    // YubiKey/HSM settings
+    #[serde(default)]
+    yubikey_enabled: bool,
+    #[serde(default = "default_yubikey_slot")]
+    yubikey_slot: u8,
+}
+
+fn default_yubikey_slot() -> u8 {
+    2
 }
 
 impl Default for Settings {
@@ -93,6 +102,8 @@ impl Default for Settings {
             last_output_directory: None,
             panel_transparency: 100,
             enable_notifications: true,
+            yubikey_enabled: false,
+            yubikey_slot: 2,
         }
     }
 }
@@ -242,7 +253,7 @@ struct CryptorApp {
     window_visible: bool,
     // Volume management fields
     #[cfg(feature = "encrypted-volumes")]
-    volume_manager: Option<tesseract::volume::VolumeManager>,
+    volume_manager: Option<tesseract_lib::volume::VolumeManager>,
     #[allow(dead_code)]
     volume_tab: VolumeTab,
     #[allow(dead_code)]
@@ -317,7 +328,7 @@ impl CryptorApp {
             window_visible: true,
             // Volume management fields
             #[cfg(feature = "encrypted-volumes")]
-            volume_manager: Some(tesseract::volume::VolumeManager::new()),
+            volume_manager: Some(tesseract_lib::volume::VolumeManager::new()),
             volume_tab: VolumeTab::Create,
             volume_container_path: String::new(),
             volume_mount_point: String::new(),
@@ -476,12 +487,15 @@ impl CryptorApp {
             item.status = QueueStatus::Processing;
             item.progress = 0.0;
 
+            let yubikey_enabled = self.settings.yubikey_enabled;
+            let yubikey_slot = self.settings.yubikey_slot;
+
             let result = match item.mode {
                 Mode::Encrypt => rt.block_on(async {
-                    encrypt_file(&item.input_path, &item.output_path, &item.password, item.use_compression)
+                    encrypt_file(&item.input_path, &item.output_path, &item.password, item.use_compression, yubikey_enabled, yubikey_slot)
                 }),
                 Mode::Decrypt => rt.block_on(async {
-                    decrypt_file(&item.input_path, &item.output_path, &item.password)
+                    decrypt_file(&item.input_path, &item.output_path, &item.password, yubikey_enabled, yubikey_slot)
                 }),
                 Mode::Volume => {
                     // Volume operations don't go through the queue
@@ -729,6 +743,54 @@ impl CryptorApp {
 
                     ui.add_space(15.0);
 
+                    // YubiKey settings section
+                    ui.separator();
+                    ui.add_space(10.0);
+                    ui.label(egui::RichText::new("Hardware Security (YubiKey)")
+                        .size(16.0)
+                        .color(egui::Color32::from_rgb(50, 50, 50)));
+                    ui.add_space(10.0);
+
+                    // YubiKey enabled checkbox
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Enable YubiKey 2FA:").size(14.0));
+                        ui.add_space(10.0);
+                        if ui.checkbox(&mut self.settings.yubikey_enabled, "").changed() {
+                            let _ = self.settings.save();
+                        }
+                    });
+
+                    // YubiKey slot selector (only show if YubiKey is enabled)
+                    if self.settings.yubikey_enabled {
+                        ui.add_space(10.0);
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("YubiKey Slot:").size(14.0));
+                            ui.add_space(10.0);
+
+                            let slot1_selected = self.settings.yubikey_slot == 1;
+                            let slot2_selected = self.settings.yubikey_slot == 2;
+
+                            if ui.selectable_label(slot1_selected, "Slot 1").clicked() {
+                                self.settings.yubikey_slot = 1;
+                                let _ = self.settings.save();
+                            }
+                            ui.add_space(5.0);
+                            if ui.selectable_label(slot2_selected, "Slot 2").clicked() {
+                                self.settings.yubikey_slot = 2;
+                                let _ = self.settings.save();
+                            }
+                        });
+
+                        ui.add_space(5.0);
+                        ui.label(egui::RichText::new("Note: YubiKey must be configured with HMAC-SHA1 challenge-response")
+                            .size(11.0)
+                            .color(egui::Color32::from_rgb(120, 120, 120)));
+                    }
+
+                    ui.add_space(15.0);
+                    ui.separator();
+                    ui.add_space(10.0);
+
                     // Panel transparency slider
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("Panel Transparency:").size(14.0));
@@ -824,10 +886,13 @@ impl CryptorApp {
         self.is_processing = true;
         self.progress = 0.0;
 
+        let yubikey_enabled = self.settings.yubikey_enabled;
+        let yubikey_slot = self.settings.yubikey_slot;
+
         match mode {
             Mode::Encrypt => {
                 let result = rt.block_on(async {
-                    encrypt_file(&input_path, &output_path, &password, use_compression)
+                    encrypt_file(&input_path, &output_path, &password, use_compression, yubikey_enabled, yubikey_slot)
                 });
 
                 match result {
@@ -853,7 +918,7 @@ impl CryptorApp {
             }
             Mode::Decrypt => {
                 let result = rt.block_on(async {
-                    decrypt_file(&input_path, &output_path, &password)
+                    decrypt_file(&input_path, &output_path, &password, yubikey_enabled, yubikey_slot)
                 });
 
                 match result {
@@ -1905,6 +1970,24 @@ impl eframe::App for CryptorApp {
                             ui.add_enabled(false, browse_btn);
                         });
 
+                        // Confirm password row (only for encryption)
+                        if self.mode == Some(Mode::Encrypt) {
+                            ui.add_space(15.0);
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Confirm").size(14.0));
+                                ui.add_space(30.0);
+                                ui.add(egui::TextEdit::singleline(&mut self.confirm_password)
+                                    .password(true)
+                                    .desired_width(500.0));
+                                ui.add_space(10.0);
+                                // Placeholder button to match layout
+                                let browse_btn = egui::Button::new("Browse...")
+                                    .fill(egui::Color32::from_rgb(200, 230, 255))
+                                    .min_size(egui::vec2(100.0, 30.0));
+                                ui.add_enabled(false, browse_btn);
+                            });
+                        }
+
                         ui.add_space(30.0);
 
                         // Action buttons
@@ -2070,6 +2153,18 @@ impl eframe::App for CryptorApp {
                                 .min_size(egui::vec2(140.0, 35.0))
                                 .rounding(egui::Rounding::same(18.0));
                                 ui.add_enabled(false, auth_badge);
+
+                                // YubiKey badge (only shown when enabled)
+                                if self.settings.yubikey_enabled {
+                                    ui.add_space(10.0);
+                                    let yubikey_badge = egui::Button::new(
+                                        egui::RichText::new("🔑 YubiKey 2FA").size(12.0).color(egui::Color32::WHITE)
+                                    )
+                                    .fill(egui::Color32::from_rgb(80, 180, 80))
+                                    .min_size(egui::vec2(120.0, 35.0))
+                                    .rounding(egui::Rounding::same(18.0));
+                                    ui.add_enabled(false, yubikey_badge);
+                                }
                             });
                         });
 
@@ -2085,12 +2180,48 @@ fn encrypt_file(
     output_path: &str,
     password: &str,
     use_compression: bool,
+    yubikey_enabled: bool,
+    yubikey_slot: u8,
 ) -> Result<String, Box<dyn std::error::Error>> {
     use rand::rngs::OsRng;
     use rand_core::TryRngCore;
 
     let input = PathBuf::from(input_path);
     let output = PathBuf::from(output_path);
+
+    // If YubiKey is enabled, use the HSM-aware encryption
+    #[cfg(feature = "yubikey")]
+    if yubikey_enabled {
+        use tesseract_lib::hsm::yubikey::{YubiKey, YubiKeyConfig, YubiKeySlot};
+        use tesseract_lib::hsm::HardwareSecurityModule;
+
+        let yk_slot = match yubikey_slot {
+            1 => YubiKeySlot::Slot1,
+            _ => YubiKeySlot::Slot2,
+        };
+
+        let config = YubiKeyConfig {
+            slot: yk_slot,
+            ..Default::default()
+        };
+
+        let yubikey = YubiKey::with_config(config)?;
+
+        if !yubikey.is_available() {
+            return Err("No YubiKey detected. Please insert your YubiKey and try again.".into());
+        }
+
+        tesseract_lib::encrypt_file_with_hsm(&input, &output, password, &yubikey)?;
+        return Ok(format!("File encrypted with YubiKey 2FA: {}", output.display()));
+    }
+
+    #[cfg(not(feature = "yubikey"))]
+    if yubikey_enabled {
+        return Err("YubiKey support not compiled in. Rebuild with --features yubikey".into());
+    }
+
+    // Standard encryption without YubiKey
+    let _ = yubikey_slot; // Suppress warning when yubikey feature is disabled
 
     let mut config = StreamConfig::default();
     if use_compression {
@@ -2124,9 +2255,45 @@ fn decrypt_file(
     input_path: &str,
     output_path: &str,
     password: &str,
+    yubikey_enabled: bool,
+    yubikey_slot: u8,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let input = PathBuf::from(input_path);
     let output = PathBuf::from(output_path);
+
+    // If YubiKey is enabled, use the HSM-aware decryption
+    #[cfg(feature = "yubikey")]
+    if yubikey_enabled {
+        use tesseract_lib::hsm::yubikey::{YubiKey, YubiKeyConfig, YubiKeySlot};
+        use tesseract_lib::hsm::HardwareSecurityModule;
+
+        let yk_slot = match yubikey_slot {
+            1 => YubiKeySlot::Slot1,
+            _ => YubiKeySlot::Slot2,
+        };
+
+        let config = YubiKeyConfig {
+            slot: yk_slot,
+            ..Default::default()
+        };
+
+        let yubikey = YubiKey::with_config(config)?;
+
+        if !yubikey.is_available() {
+            return Err("No YubiKey detected. Please insert your YubiKey and try again.".into());
+        }
+
+        tesseract_lib::decrypt_file_with_hsm(&input, &output, password, &yubikey)?;
+        return Ok(format!("File decrypted with YubiKey 2FA: {}", output.display()));
+    }
+
+    #[cfg(not(feature = "yubikey"))]
+    if yubikey_enabled {
+        return Err("YubiKey support not compiled in. Rebuild with --features yubikey".into());
+    }
+
+    // Standard decryption without YubiKey
+    let _ = yubikey_slot; // Suppress warning when yubikey feature is disabled
 
     let input_file = std::fs::File::open(&input)?;
     let decryptor = ChunkedDecryptor::new(

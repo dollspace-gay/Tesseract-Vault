@@ -103,7 +103,12 @@
       "Bash(git revert:*)",
       "Bash(bd:*)",
       "Bash(del \"c:\\Users\\texas\\Tesseract\\Tesseract\\fuzz\\fuzz_targets\\fuzz_target_1.rs\")",
-      "Bash(cargo geiger:*)"
+      "Bash(cargo geiger:*)",
+      "Bash(chainlink list:*)",
+      "Bash(chainlink show:*)",
+      "Bash(chainlink close:*)",
+      "Bash(ls:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

@@ -42,8 +42,9 @@ jobs:
 
       - name: Run differential tests
         run: |
-          # Use --no-default-features to avoid GUI dependencies (GTK on Linux)
-          cargo test --test differential_tests --release --no-default-features -- --nocapture
+          # Enable core features but skip GUI dependencies (GTK on Linux)
+          # post-quantum, compression, ctrlc needed for binary to compile
+          cargo test --test differential_tests --release --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
         env:
           # More test cases for thorough coverage
           PROPTEST_CASES: 100
@@ -51,7 +52,7 @@ jobs:
       - name: Extended differential testing (scheduled)
         if: github.event_name == 'schedule'
         run: |
-          cargo test --test differential_tests --release --no-default-features -- --nocapture
+          cargo test --test differential_tests --release --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
         env:
           PROPTEST_CASES: 500
 
@@ -79,7 +80,8 @@ jobs:
 
       - name: Run differential tests
         run: |
-          # Use --no-default-features to avoid GUI dependencies (requires Windows SDK setup)
-          cargo test --test differential_tests --release --no-default-features -- --nocapture
+          # Enable core features but skip GUI (requires Windows SDK setup)
+          # post-quantum, compression, ctrlc needed for binary to compile
+          cargo test --test differential_tests --release --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
         env:
           PROPTEST_CASES: 50

@@ -190,6 +190,7 @@ enum Mode {
 enum VolumeTab {
     Create,
     Mount,
+    Hidden,
     Info,
     Password,
     Security,
@@ -276,6 +277,16 @@ struct CryptorApp {
     remote_wipe_require_confirmation: bool,
     remote_wipe_qr_texture: Option<egui::TextureHandle>,
     remote_wipe_show_qr: bool,
+    // Hidden volume fields
+    hidden_volume_container: String,
+    hidden_volume_size: String,
+    hidden_volume_offset: String,
+    hidden_volume_password: String,
+    hidden_volume_password_confirm: String,
+    hidden_volume_status: String,
+    mount_as_hidden: bool,
+    mount_hidden_password: String,
+    mount_hidden_offset: String,
 }
 
 impl Default for CryptorApp {
@@ -348,6 +359,16 @@ impl CryptorApp {
             remote_wipe_require_confirmation: true,
             remote_wipe_qr_texture: None,
             remote_wipe_show_qr: true,
+            // Hidden volume fields
+            hidden_volume_container: String::new(),
+            hidden_volume_size: String::from("50M"),
+            hidden_volume_offset: String::new(),
+            hidden_volume_password: String::new(),
+            hidden_volume_password_confirm: String::new(),
+            hidden_volume_status: String::new(),
+            mount_as_hidden: false,
+            mount_hidden_password: String::new(),
+            mount_hidden_offset: String::new(),
         };
 
         // If initial file is provided, set it up
@@ -980,6 +1001,12 @@ impl CryptorApp {
                     egui::Color32::from_rgb(200, 200, 200)
                 };
 
+                let hidden_color = if self.volume_tab == VolumeTab::Hidden {
+                    egui::Color32::from_rgb(91, 206, 250)
+                } else {
+                    egui::Color32::from_rgb(200, 200, 200)
+                };
+
                 let info_color = if self.volume_tab == VolumeTab::Info {
                     egui::Color32::from_rgb(91, 206, 250)
                 } else {
@@ -1018,6 +1045,15 @@ impl CryptorApp {
                     .min_size(egui::vec2(120.0, 40.0))
                     .rounding(egui::Rounding::same(20.0))).clicked() {
                     self.volume_tab = VolumeTab::Mount;
+                }
+
+                ui.add_space(10.0);
+
+                if ui.add(egui::Button::new(egui::RichText::new("🔒 Hidden").size(14.0).color(egui::Color32::WHITE))
+                    .fill(hidden_color)
+                    .min_size(egui::vec2(120.0, 40.0))
+                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                    self.volume_tab = VolumeTab::Hidden;
                 }
 
                 ui.add_space(10.0);
@@ -1314,14 +1350,55 @@ impl CryptorApp {
                     ui.checkbox(&mut self.volume_read_only, "Mount as read-only");
                 });
 
+                ui.add_space(15.0);
+
+                // Mount hidden volume checkbox
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.mount_as_hidden, "Mount hidden volume");
+                });
+
+                // Hidden volume fields (shown only when checkbox is checked)
+                if self.mount_as_hidden {
+                    ui.add_space(10.0);
+
+                    // Hidden volume offset
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Hidden Offset").size(14.0));
+                        ui.add_space(20.0);
+                        ui.add(egui::TextEdit::singleline(&mut self.mount_hidden_offset)
+                            .desired_width(420.0));
+                        ui.add_space(10.0);
+                        ui.label("(e.g., 500M)");
+                    });
+
+                    ui.add_space(10.0);
+
+                    // Hidden volume password
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Hidden Password").size(14.0));
+                        ui.add_space(2.0);
+                        ui.add(egui::TextEdit::singleline(&mut self.mount_hidden_password)
+                            .password(true)
+                            .desired_width(420.0));
+                    });
+                }
+
                 ui.add_space(30.0);
 
                 // Mount/Unmount buttons
                 ui.vertical_centered(|ui| {
                     ui.horizontal(|ui| {
-                        let can_mount = !self.volume_container_path.is_empty()
+                        let basic_valid = !self.volume_container_path.is_empty()
                             && !self.volume_mount_point.is_empty()
                             && !self.volume_password.is_empty();
+
+                        let hidden_valid = if self.mount_as_hidden {
+                            !self.mount_hidden_offset.is_empty() && !self.mount_hidden_password.is_empty()
+                        } else {
+                            true
+                        };
+
+                        let can_mount = basic_valid && hidden_valid;
 
                         if ui.add_enabled(can_mount, egui::Button::new(
                             egui::RichText::new("💾 Mount Volume").size(16.0).color(egui::Color32::WHITE))
@@ -1333,6 +1410,19 @@ impl CryptorApp {
                             {
                                 use tesseract_lib::volume::MountOptions;
 
+                                // Parse hidden offset if mounting hidden volume
+                                let (hidden_offset, hidden_password) = if self.mount_as_hidden {
+                                    match parse_size(&self.mount_hidden_offset) {
+                                        Ok(offset) => (Some(offset), Some(self.mount_hidden_password.clone())),
+                                        Err(e) => {
+                                            self.volume_status = format!("✗ Invalid hidden offset: {}", e);
+                                            return;
+                                        }
+                                    }
+                                } else {
+                                    (None, None)
+                                };
+
                                 if let Some(ref mut manager) = self.volume_manager {
                                     let options = MountOptions {
                                         mount_point: std::path::PathBuf::from(&self.volume_mount_point),
@@ -1340,8 +1430,8 @@ impl CryptorApp {
                                         allow_other: false,
                                         auto_unmount: true,
                                         fs_name: Some("Tesseract".to_string()),
-                                        hidden_offset: None,
-                                        hidden_password: None,
+                                        hidden_offset,
+                                        hidden_password,
                                     };
 
                                     match manager.mount(
@@ -1350,8 +1440,10 @@ impl CryptorApp {
                                         options,
                                     ) {
                                         Ok(_) => {
-                                            self.volume_status = format!("✓ Volume mounted at {}", self.volume_mount_point);
+                                            let mount_type = if self.mount_as_hidden { "Hidden volume" } else { "Volume" };
+                                            self.volume_status = format!("✓ {} mounted at {}", mount_type, self.volume_mount_point);
                                             self.volume_password.clear();
+                                            self.mount_hidden_password.clear();
                                             // Update mounted volumes list
                                             self.mounted_volumes = manager.list_mounted();
                                         }
@@ -1414,6 +1506,187 @@ impl CryptorApp {
                         });
                     }
                 }
+            }
+
+            VolumeTab::Hidden => {
+                ui.vertical_centered(|ui| {
+                    ui.label(egui::RichText::new("Hidden Volume Management").size(18.0));
+                });
+                ui.add_space(10.0);
+
+                // Info box about hidden volumes
+                egui::Frame::none()
+                    .fill(egui::Color32::from_rgb(40, 40, 60))
+                    .rounding(egui::Rounding::same(8.0))
+                    .inner_margin(egui::Margin::same(12.0))
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new("🔒 Hidden volumes provide plausible deniability. They are encrypted containers within your outer volume that cannot be detected without the correct password and offset.")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(180, 180, 220)));
+                    });
+
+                ui.add_space(20.0);
+
+                // Container path (outer volume)
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Outer Container").size(14.0));
+                    ui.add_space(10.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.hidden_volume_container)
+                        .desired_width(420.0));
+                    ui.add_space(10.0);
+                    if ui.button("Browse...").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_file() {
+                            self.hidden_volume_container = path.display().to_string();
+                        }
+                    }
+                });
+
+                ui.add_space(15.0);
+
+                // Hidden volume size
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Hidden Size").size(14.0));
+                    ui.add_space(32.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.hidden_volume_size)
+                        .desired_width(420.0));
+                    ui.add_space(10.0);
+                    ui.label("(e.g., 50M, 100M)");
+                });
+
+                ui.add_space(15.0);
+
+                // Hidden volume offset
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Offset").size(14.0));
+                    ui.add_space(65.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.hidden_volume_offset)
+                        .desired_width(420.0));
+                    ui.add_space(10.0);
+                    ui.label("(e.g., 500M from start)");
+                });
+
+                ui.add_space(15.0);
+
+                // Outer volume password (to unlock outer container)
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Outer Password").size(14.0));
+                    ui.add_space(10.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
+                        .password(true)
+                        .desired_width(420.0));
+                });
+
+                ui.add_space(15.0);
+
+                // Hidden volume password
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Hidden Password").size(14.0));
+                    ui.add_space(2.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.hidden_volume_password)
+                        .password(true)
+                        .desired_width(420.0));
+                });
+
+                ui.add_space(15.0);
+
+                // Confirm hidden password
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Confirm Hidden").size(14.0));
+                    ui.add_space(12.0);
+                    ui.add(egui::TextEdit::singleline(&mut self.hidden_volume_password_confirm)
+                        .password(true)
+                        .desired_width(420.0));
+                });
+
+                ui.add_space(25.0);
+
+                // Create hidden volume button
+                ui.vertical_centered(|ui| {
+                    let can_create = !self.hidden_volume_container.is_empty()
+                        && !self.hidden_volume_size.is_empty()
+                        && !self.hidden_volume_offset.is_empty()
+                        && !self.volume_password.is_empty()
+                        && !self.hidden_volume_password.is_empty()
+                        && self.hidden_volume_password == self.hidden_volume_password_confirm;
+
+                    if ui.add_enabled(can_create, egui::Button::new(
+                        egui::RichText::new("🔒 Create Hidden Volume").size(16.0).color(egui::Color32::WHITE))
+                        .fill(egui::Color32::from_rgb(91, 206, 250))
+                        .min_size(egui::vec2(250.0, 50.0))
+                        .rounding(egui::Rounding::same(25.0))).clicked() {
+
+                        #[cfg(feature = "encrypted-volumes")]
+                        {
+                            use tesseract_lib::volume::Container;
+
+                            // Parse sizes
+                            let size_result = parse_size(&self.hidden_volume_size);
+                            let offset_result = parse_size(&self.hidden_volume_offset);
+
+                            match (size_result, offset_result) {
+                                (Ok(hidden_size), Ok(hidden_offset)) => {
+                                    // Open the outer container
+                                    match Container::open(
+                                        std::path::Path::new(&self.hidden_volume_container),
+                                        &self.volume_password,
+                                    ) {
+                                        Ok(mut container) => {
+                                            match container.create_hidden_volume(
+                                                hidden_size,
+                                                &self.hidden_volume_password,
+                                                hidden_offset,
+                                            ) {
+                                                Ok(_) => {
+                                                    self.hidden_volume_status = format!(
+                                                        "✅ Hidden volume created: {} at offset {}",
+                                                        self.hidden_volume_size,
+                                                        self.hidden_volume_offset
+                                                    );
+                                                    // Clear passwords
+                                                    self.volume_password.clear();
+                                                    self.hidden_volume_password.clear();
+                                                    self.hidden_volume_password_confirm.clear();
+                                                }
+                                                Err(e) => {
+                                                    self.hidden_volume_status = format!("❌ Failed to create hidden volume: {}", e);
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            self.hidden_volume_status = format!("❌ Failed to open outer container: {}", e);
+                                        }
+                                    }
+                                }
+                                (Err(e), _) => {
+                                    self.hidden_volume_status = format!("❌ Invalid hidden size: {}", e);
+                                }
+                                (_, Err(e)) => {
+                                    self.hidden_volume_status = format!("❌ Invalid offset: {}", e);
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Status message
+                if !self.hidden_volume_status.is_empty() {
+                    ui.add_space(20.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new(&self.hidden_volume_status).size(14.0));
+                    });
+                }
+
+                // Security warning
+                ui.add_space(30.0);
+                egui::Frame::none()
+                    .fill(egui::Color32::from_rgb(60, 40, 30))
+                    .rounding(egui::Rounding::same(8.0))
+                    .inner_margin(egui::Margin::same(12.0))
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new("⚠️ IMPORTANT: Remember your offset! Without the correct offset and password, your hidden volume cannot be accessed. Fill the outer volume with decoy data for best plausible deniability.")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(255, 200, 150)));
+                    });
             }
 
             VolumeTab::Info => {

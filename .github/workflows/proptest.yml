@@ -42,8 +42,9 @@ jobs:
 
       - name: Run proptest encryption tests
         run: |
-          # Use --no-default-features to avoid GUI dependencies (GTK on Linux)
-          cargo test --test proptest_encryption --release --no-default-features -- --nocapture
+          # Enable core features but skip GUI dependencies (GTK on Linux)
+          # post-quantum, compression, ctrlc needed for binary to compile
+          cargo test --test proptest_encryption --release --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
         env:
           # Increase cases for CI (more thorough testing)
           PROPTEST_CASES: 200
@@ -51,7 +52,7 @@ jobs:
       - name: Run proptest with extended cases (scheduled)
         if: github.event_name == 'schedule'
         run: |
-          cargo test --test proptest_encryption --release --no-default-features -- --nocapture
+          cargo test --test proptest_encryption --release --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
         env:
           # Even more cases for scheduled runs
           PROPTEST_CASES: 1000
@@ -80,7 +81,8 @@ jobs:
 
       - name: Run proptest encryption tests
         run: |
-          # Use --no-default-features to avoid GUI dependencies (requires Windows SDK setup)
-          cargo test --test proptest_encryption --release --no-default-features -- --nocapture
+          # Enable core features but skip GUI (requires Windows SDK setup)
+          # post-quantum, compression, ctrlc needed for binary to compile
+          cargo test --test proptest_encryption --release --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
         env:
           PROPTEST_CASES: 100

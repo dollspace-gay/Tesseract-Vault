@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - YubiKey hardware security module integration
 - Daemon shutdown signal handling
 - Indirect block handling for large files
+- Code coverage reporting with Codecov integration
+- SPDX license headers on all source files
+- CONTRIBUTING.md with development guidelines
+- CODE_OF_CONDUCT.md (Contributor Covenant v2.1)
+- SECURITY.md with vulnerability reporting policy
 
 ### Changed
 - Improved replay protection from count-based to time-window based nonce pruning

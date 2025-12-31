@@ -1,7 +1,7 @@
 //! Memory protection utilities for preventing sensitive data from being swapped to disk.
 //!
 //! This module provides cross-platform memory locking using:
-//! - Linux/macOS: `mlock(2)` / `munlock(2)`
+//! - Linux: `mlock(2)` / `munlock(2)`
 //! - Windows: `VirtualLock()` / `VirtualUnlock()`
 //!
 //! Memory locking prevents the OS from swapping sensitive data (keys, passwords, plaintext)
@@ -60,7 +60,7 @@ impl std::error::Error for MemLockError {}
 ///
 /// # Platform Support
 ///
-/// - **Linux/macOS**: Uses `mlock(2)` to lock pages in RAM
+/// - **Linux**: Uses `mlock(2)` to lock pages in RAM
 /// - **Windows**: Uses `VirtualLock()` to lock pages in RAM
 ///
 /// # Resource Limits

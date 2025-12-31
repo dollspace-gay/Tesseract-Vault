@@ -1,4 +1,4 @@
-//! FUSE filesystem implementation for Linux and macOS
+//! FUSE filesystem implementation for Linux
 //!
 //! This module implements a FUSE (Filesystem in Userspace) adapter that
 //! allows mounting encrypted containers as regular filesystems.

@@ -440,13 +440,7 @@ impl Tpm2Device {
         Path::new("/dev/tpm0").exists() || Path::new("/dev/tpmrm0").exists()
     }
 
-    #[cfg(target_os = "macos")]
-    fn detect_tpm() -> bool {
-        // macOS typically doesn't have TPM, use Secure Enclave instead
-        false
-    }
-
-    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "linux")))]
     fn detect_tpm() -> bool {
         false
     }

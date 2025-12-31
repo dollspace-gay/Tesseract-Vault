@@ -66,9 +66,9 @@ chainlink delete <id> -f
 
 ## Cross-Platform Requirements
 
-This project MUST be cross-platform and support Windows, Linux, and macOS.
+This project MUST be cross-platform and support Windows and Linux.
 
-IMPORTANT: Do not use Windows-specific APIs or crates unless you also provide equivalent implementations for Linux and macOS. All platform-specific code should be properly gated with #[cfg(target_os = "...")] attributes.
+IMPORTANT: Do not use Windows-specific APIs or crates unless you also provide equivalent implementations for Linux. All platform-specific code should be properly gated with #[cfg(target_os = "...")] attributes.
 
 ## Testing Requirements
 
@@ -97,7 +97,6 @@ CRITICAL: After making code changes, you MUST test builds and run verification t
 Platform-specific notes:
   • Windows: Primary development environment
   • Linux: WSL FedoraLinux-42 instance - you have root access for installing dependencies
-  • macOS: Currently no test environment available
 
 When implementing platform-specific features:
   1. Implement Windows version first if needed

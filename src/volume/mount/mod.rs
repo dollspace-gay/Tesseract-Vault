@@ -1,9 +1,9 @@
 //! Platform-specific volume mounting implementations
 //!
 //! This module provides cross-platform support for mounting encrypted volumes
-//! as filesystems using FUSE (Linux/macOS) or WinFsp (Windows).
+//! as filesystems using FUSE (Linux) or WinFsp (Windows).
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 #[cfg(feature = "encrypted-volumes")]
 pub mod fuse;
 
@@ -115,7 +115,7 @@ pub fn mount(
     password: &str,
     options: MountOptions,
 ) -> Result<MountHandle> {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     {
         fuse::mount(container_path, password, options).map(|inner| MountHandle { inner })
     }
@@ -125,7 +125,7 @@ pub fn mount(
         winfsp::mount(container_path, password, options).map(|inner| MountHandle { inner })
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         Err(MountError::PlatformNotSupported)
     }
@@ -136,7 +136,7 @@ pub fn mount(
 /// The volume is automatically unmounted when this handle is dropped.
 #[cfg(feature = "encrypted-volumes")]
 pub struct MountHandle {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     inner: fuse::FuseMountHandle,
 
     #[cfg(target_os = "windows")]
@@ -147,7 +147,7 @@ pub struct MountHandle {
 impl MountHandle {
     /// Returns the mount point path
     pub fn mount_point(&self) -> &Path {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(target_os = "linux")]
         {
             self.inner.mount_point()
         }
@@ -160,7 +160,7 @@ impl MountHandle {
 
     /// Unmounts the volume
     pub fn unmount(self) -> Result<()> {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(target_os = "linux")]
         {
             self.inner.unmount()
         }

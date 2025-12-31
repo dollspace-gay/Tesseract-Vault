@@ -7,7 +7,6 @@
 //!
 //! - **Windows**: Excludes process from Windows Error Reporting (WER) dumps
 //! - **Linux**: Disables core dumps via RLIMIT_CORE
-//! - **macOS**: Disables core dumps via RLIMIT_CORE
 //!
 //! # Security
 //!

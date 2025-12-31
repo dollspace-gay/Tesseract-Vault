@@ -1,5 +1,5 @@
 // System tray integration for Tesseract
-// Cross-platform support for Windows, Linux, and macOS
+// Cross-platform support for Windows and Linux
 
 use std::path::PathBuf;
 use tray_icon::{
@@ -81,7 +81,7 @@ impl TrayManager {
 
         #[cfg(not(target_os = "windows"))]
         {
-            // On Linux and macOS, use the .png file
+            // On Linux, use the .png file
             let icon_path = Self::get_icon_path("logo.png");
             let icon_data = std::fs::read(&icon_path)?;
             let icon = image::load_from_memory(&icon_data)?;

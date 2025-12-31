@@ -89,7 +89,6 @@ The `encrypted-volumes` feature requires platform-specific dependencies:
 
 - **Windows**: [WinFsp](https://winfsp.dev/) must be installed
 - **Linux**: FUSE kernel driver and libraries (`fusermount`, `libfuse`)
-- **macOS**: [macFUSE](https://macfuse.github.io/) 5.1.1 or later
 
 **Note**: The encrypted-volumes feature is optional. File encryption/decryption works without these dependencies.
 
@@ -246,12 +245,6 @@ sudo tesseract daemon install-service
 sudo systemctl start tesseract
 ```
 
-**macOS:**
-```bash
-sudo tesseract daemon install-service
-sudo launchctl start com.tesseract.daemon
-```
-
 The daemon provides:
 - Automatic volume unmounting on sleep/hibernate
 - Power state monitoring and callbacks
@@ -273,7 +266,7 @@ The GUI executable will be located at [target/release/tesseract-gui](target/rele
 ### Features
 
 - **Beautiful interface**: Modern gradient design with smooth animations
-- **Cross-platform**: Native look and feel on Windows, Linux, and macOS
+- **Cross-platform**: Native look and feel on Windows and Linux
 - **Auto-detection**: Automatically switches to decrypt mode for `.enc` files
 - **Drag and drop**: Pre-populates fields when launched from file associations
 - **Real-time progress**: Visual progress bar with percentage indicator and speed
@@ -320,28 +313,6 @@ This will:
 - Register MIME type for `.enc` files
 - Add file associations to `~/.config/mimeapps.list`
 - Update MIME database
-
-To uninstall:
-
-```bash
-./target/release/tesseract-register uninstall
-```
-
-#### macOS
-
-Run the registration utility:
-
-```bash
-./target/release/tesseract-register install
-```
-
-**Note**: macOS file associations work best with `.app` bundles. For full integration, install the `duti` tool:
-
-```bash
-brew install duti
-```
-
-Then run the installer again. Alternatively, manually associate `.enc` files through Finder's "Get Info" panel.
 
 To uninstall:
 
@@ -468,14 +439,12 @@ Tesseract has not undergone a formal security audit. Use at your own risk for se
 |----------|----------------|---------|--------|-----|--------|
 | Windows 10/11 | ✅ | ✅ | ✅ | ✅ | Full support |
 | Linux (x64) | ✅ | ✅ | ✅ | ✅ | Full support |
-| macOS | ✅ | ✅ | ✅ | ✅ | Full support |
 | WebAssembly | ✅ | ❌ | ❌ | ❌ | File encryption only |
 
 ### Tested Platforms
 
 - **Windows**: Windows 10/11 (x64)
 - **Linux**: Fedora, Ubuntu, Debian, Arch
-- **macOS**: macOS 11+ (Big Sur and later)
 
 ## 📊 Performance
 

@@ -1,7 +1,7 @@
 //! Cross-platform filesystem abstraction for encrypted volumes
 //!
 //! This module provides a common interface for implementing encrypted filesystems
-//! that works across FUSE (Linux/macOS) and WinFsp (Windows).
+//! that works across FUSE (Linux) and WinFsp (Windows).
 
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;

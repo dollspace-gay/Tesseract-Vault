@@ -638,15 +638,7 @@ fn detect_x86_brand() -> String {
 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
 fn detect_arm_capabilities(caps: &mut HardwareCapabilities) {
     // Detect vendor (simplified - could be expanded with /proc/cpuinfo on Linux)
-    #[cfg(target_os = "macos")]
-    {
-        caps.vendor = CpuVendor::Apple;
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        caps.vendor = CpuVendor::Arm;
-    }
+    caps.vendor = CpuVendor::Arm;
 
     // Use std_detect for ARM feature detection
     #[cfg(target_arch = "aarch64")]

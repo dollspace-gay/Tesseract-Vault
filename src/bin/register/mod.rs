@@ -11,8 +11,6 @@ use std::path::PathBuf;
 mod windows;
 #[cfg(target_os = "linux")]
 mod linux;
-#[cfg(target_os = "macos")]
-mod macos;
 
 /// Get the path to the GUI executable
 fn get_gui_exe_path() -> PathBuf {
@@ -64,14 +62,6 @@ fn main() {
                 }
             }
 
-            #[cfg(target_os = "macos")]
-            {
-                if let Err(e) = macos::install(&exe_path) {
-                    eprintln!("Error during installation: {}", e);
-                    std::process::exit(1);
-                }
-            }
-
             println!("\n✓ Installation complete!");
         }
         "uninstall" => {
@@ -87,13 +77,6 @@ fn main() {
             #[cfg(target_os = "linux")]
             {
                 if let Err(e) = linux::uninstall() {
-                    eprintln!("Error during uninstallation: {}", e);
-                }
-            }
-
-            #[cfg(target_os = "macos")]
-            {
-                if let Err(e) = macos::uninstall() {
                     eprintln!("Error during uninstallation: {}", e);
                 }
             }

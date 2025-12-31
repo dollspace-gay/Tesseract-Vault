@@ -7,7 +7,6 @@
 //!
 //! - **Windows**: Uses `IsDebuggerPresent()` and `CheckRemoteDebuggerPresent()`
 //! - **Linux**: Checks `/proc/self/status` for `TracerPid`
-//! - **macOS**: Uses `sysctl()` with `P_TRACED` flag
 //!
 //! # Security
 //!
@@ -48,9 +47,6 @@ use winapi::um::processthreadsapi::GetCurrentProcess;
 #[cfg(target_os = "linux")]
 use std::fs;
 
-#[cfg(target_os = "macos")]
-use libc::{c_int, c_void, sysctl, CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid};
-
 /// Check if a debugger is currently attached to the process
 ///
 /// # Returns
@@ -61,7 +57,6 @@ use libc::{c_int, c_void, sysctl, CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid};
 ///
 /// - **Windows**: Checks both local and remote debuggers
 /// - **Linux**: Checks TracerPid in /proc/self/status
-/// - **macOS**: Checks P_TRACED flag via sysctl
 /// - **Other**: Always returns false
 pub fn is_debugger_present() -> bool {
     #[cfg(windows)]
@@ -104,41 +99,7 @@ pub fn is_debugger_present() -> bool {
         false
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        unsafe {
-            // Use sysctl to check P_TRACED flag
-            const P_TRACED: u32 = 0x00000800;
-
-            #[repr(C)]
-            struct KinfoProc {
-                padding: [u8; 32],  // Simplified - actual struct is more complex
-                p_flag: u32,
-                // ... more fields we don't need
-            }
-
-            let mut info: KinfoProc = std::mem::zeroed();
-            let mut size = std::mem::size_of::<KinfoProc>();
-
-            let mut mib = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()];
-
-            let result = sysctl(
-                mib.as_mut_ptr(),
-                4,
-                &mut info as *mut _ as *mut c_void,
-                &mut size,
-                std::ptr::null_mut(),
-                0
-            );
-
-            if result == 0 {
-                return (info.p_flag & P_TRACED) != 0;
-            }
-        }
-        false
-    }
-
-    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         // Unsupported platform - assume no debugger
         false

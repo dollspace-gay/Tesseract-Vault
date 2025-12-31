@@ -65,17 +65,18 @@ jobs:
       - name: Verify AES-GCM with Kani
         run: |
           echo "::group::Kani Verification - AES-GCM"
-          cargo kani --lib --harness verify_nonce_len
-          cargo kani --lib --harness verify_encrypt_no_panic
-          cargo kani --lib --harness verify_encrypt_rejects_invalid_nonce
-          cargo kani --lib --harness verify_decrypt_length
-          cargo kani --lib --harness verify_decrypt_minimum_length
+          # Use --no-default-features to exclude GUI deps (eframe->image->rav1e) that conflict with Kani's nightly
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_len
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_encrypt_no_panic
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_encrypt_rejects_invalid_nonce
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_decrypt_length
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_decrypt_minimum_length
           echo "::endgroup::"
 
       - name: Verify Argon2 KDF with Kani
         run: |
           echo "::group::Kani Verification - Argon2 KDF"
-          cargo kani --lib --harness verify_key_length
-          cargo kani --lib --harness verify_salt_generation
-          cargo kani --lib --harness verify_config_validity
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_key_length
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_salt_generation
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_config_validity
           echo "::endgroup::"

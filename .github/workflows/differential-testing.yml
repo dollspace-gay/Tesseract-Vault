@@ -9,6 +9,9 @@ on:
     # Run weekly on Saturdays at 3am UTC
     - cron: '0 3 * * 6'
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1

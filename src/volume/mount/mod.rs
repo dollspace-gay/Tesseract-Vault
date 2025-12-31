@@ -18,6 +18,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum MountError {
     /// Container error
+    #[cfg(feature = "post-quantum")]
     #[error("Container error: {0}")]
     Container(#[from] super::container::ContainerError),
 

@@ -15,6 +15,7 @@ pub mod allocator;
 pub mod debugger;
 pub mod dump_protection;
 pub mod guard;
+#[cfg(feature = "post-quantum")]
 pub mod pool;
 pub mod scrub;
 pub mod tme;

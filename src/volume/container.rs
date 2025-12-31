@@ -67,8 +67,10 @@ use zeroize::Zeroizing;
 
 use super::header::{VolumeHeader, PqVolumeMetadata, HEADER_SIZE, PQC_PADDING_SIZE};
 use super::keyslot::{KeySlots, MasterKey};
+#[cfg(feature = "post-quantum")]
 use crate::crypto::pqc::{MlKemKeyPair, encapsulate};
-use crate::crypto::streaming::{derive_hybrid_key};
+#[cfg(feature = "post-quantum")]
+use crate::crypto::streaming::derive_hybrid_key;
 use crate::crypto::kdf::Argon2Kdf;
 use crate::crypto::{KeyDerivation, Encryptor};
 use crate::crypto::aes_gcm::AesGcmEncryptor;

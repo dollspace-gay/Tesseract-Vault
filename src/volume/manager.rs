@@ -9,8 +9,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
+#[cfg(feature = "post-quantum")]
 use super::container::ContainerError;
-#[cfg(feature = "encrypted-volumes")]
+#[cfg(all(feature = "encrypted-volumes", feature = "post-quantum"))]
 use super::container::Container;
 use super::mount::{MountError, MountOptions};
 
@@ -21,6 +22,7 @@ use super::mount::MountHandle;
 #[derive(Debug, Error)]
 pub enum VolumeManagerError {
     /// Container error
+    #[cfg(feature = "post-quantum")]
     #[error("Container error: {0}")]
     Container(#[from] ContainerError),
 

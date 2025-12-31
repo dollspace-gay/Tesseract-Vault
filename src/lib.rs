@@ -58,6 +58,7 @@ pub use crypto::streaming::{
 pub use crypto::{Encryptor, KeyDerivation};
 pub use error::{CryptorError, Result};
 pub use memory::allocator::{SecureAllocator, AllocatorStats};
+#[cfg(feature = "post-quantum")]
 pub use memory::pool::{EncryptedAllocation, EncryptedMemoryPool, SecurityLevel};
 pub use memory::scrub::{scrub_bytes, scrub_bytes_pattern, scrub_and_verify, ScrubPattern, ScrubStats, ScrubGuard};
 pub use memory::LockedMemory;
@@ -127,9 +128,16 @@ pub fn encrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
     // Create chunked encryptor
     let encryptor = Box::new(AesGcmEncryptor::new());
     let salt_string = salt.as_str().to_string();
-    let key_clone = key.clone();
-    let chunked_encryptor = ChunkedEncryptor::new(reader, encryptor, key, base_nonce, salt_string)
-        .with_pqc_enabled(&key_clone)?; // Enable post-quantum hybrid encryption
+
+    #[cfg(feature = "post-quantum")]
+    let chunked_encryptor = {
+        let key_clone = key.clone();
+        ChunkedEncryptor::new(reader, encryptor, key, base_nonce, salt_string)
+            .with_pqc_enabled(&key_clone)? // Enable post-quantum hybrid encryption
+    };
+
+    #[cfg(not(feature = "post-quantum"))]
+    let chunked_encryptor = ChunkedEncryptor::new(reader, encryptor, key, base_nonce, salt_string);
 
     // Encrypt to output file atomically
     storage::write_atomically(output_path, |file| {
@@ -213,9 +221,16 @@ pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
     // Create chunked encryptor
     let encryptor = Box::new(AesGcmEncryptor::new());
     let salt_string = salt.as_str().to_string();
-    let key_clone = key_array.clone();
-    let chunked_encryptor = ChunkedEncryptor::new(reader, encryptor, key_array, base_nonce, salt_string)
-        .with_pqc_enabled(&key_clone)?;
+
+    #[cfg(feature = "post-quantum")]
+    let chunked_encryptor = {
+        let key_clone = key_array.clone();
+        ChunkedEncryptor::new(reader, encryptor, key_array, base_nonce, salt_string)
+            .with_pqc_enabled(&key_clone)?
+    };
+
+    #[cfg(not(feature = "post-quantum"))]
+    let chunked_encryptor = ChunkedEncryptor::new(reader, encryptor, key_array, base_nonce, salt_string);
 
     // Encrypt to output file atomically
     storage::write_atomically(output_path, |file| {

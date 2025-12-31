@@ -6,11 +6,13 @@
 pub mod aes_gcm;
 pub mod hardware;
 pub mod kdf;
+#[cfg(feature = "post-quantum")]
 pub mod pqc;
+#[cfg(feature = "post-quantum")]
 pub mod signatures;
 pub mod streaming;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "post-quantum"))]
 mod pqc_tests;
 
 // Kani formal verification harnesses

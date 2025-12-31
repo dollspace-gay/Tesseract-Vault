@@ -9,6 +9,9 @@ on:
     # Run weekly on Sundays at 2am UTC (timing analysis needs quiet environment)
     - cron: '0 2 * * 0'
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1

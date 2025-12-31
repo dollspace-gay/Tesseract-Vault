@@ -45,7 +45,9 @@
 
 use crate::config::NONCE_LEN;
 use crate::error::{CryptorError, Result};
+#[cfg(feature = "compression")]
 use flate2::read::{DeflateDecoder, DeflateEncoder};
+#[cfg(feature = "compression")]
 use flate2::Compression;
 use rayon::prelude::*;
 use std::fs::File;
@@ -205,6 +207,7 @@ pub fn derive_chunk_nonce(base_nonce: &[u8; NONCE_LEN], chunk_index: u64) -> [u8
 ///
 /// The decapsulation key is encrypted with AES-256-GCM using the password key.
 /// This allows password-based access while maintaining quantum resistance.
+#[cfg(feature = "post-quantum")]
 pub fn generate_pq_metadata(password_key: &[u8; 32]) -> Result<(PqMetadata, Zeroizing<[u8; 32]>)> {
     use crate::crypto::pqc::{MlKemKeyPair, encapsulate};
     use crate::crypto::aes_gcm::AesGcmEncryptor;
@@ -253,6 +256,7 @@ pub fn generate_pq_metadata(password_key: &[u8; 32]) -> Result<(PqMetadata, Zero
 /// # Returns
 ///
 /// The 32-byte shared secret from ML-KEM decapsulation
+#[cfg(feature = "post-quantum")]
 pub fn decrypt_pq_metadata(metadata: &PqMetadata, password_key: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
     use crate::crypto::pqc::decapsulate;
     use crate::crypto::aes_gcm::AesGcmEncryptor;
@@ -988,6 +992,7 @@ impl ChunkedEncryptor {
     /// # Errors
     ///
     /// Returns an error if PQ metadata generation fails
+    #[cfg(feature = "post-quantum")]
     pub fn with_pqc_enabled(mut self, password_key: &[u8; 32]) -> Result<Self> {
         // Generate PQ metadata and get shared secret
         let (pq_metadata, pq_shared_secret) = generate_pq_metadata(password_key)?;
@@ -1021,6 +1026,7 @@ impl ChunkedEncryptor {
     /// # Returns
     ///
     /// Compressed data.
+    #[cfg(feature = "compression")]
     fn compress_data(data: &[u8]) -> Result<Vec<u8>> {
         use std::io::Read as _;
 
@@ -1056,11 +1062,15 @@ impl ChunkedEncryptor {
         // Encrypt and write each chunk
         while let Some(chunk) = self.reader.next_chunk()? {
             // Optionally compress chunk data
+            #[cfg(feature = "compression")]
             let data = if self.compress {
                 Self::compress_data(&chunk.data)?
             } else {
                 chunk.data.clone()
             };
+
+            #[cfg(not(feature = "compression"))]
+            let data = chunk.data.clone();
 
             // Derive unique nonce for this chunk
             let chunk_nonce = derive_chunk_nonce(&self.base_nonce, chunk.index);
@@ -1133,11 +1143,15 @@ impl ChunkedEncryptor {
                 .par_iter()
                 .map(|chunk| {
                     // Optionally compress chunk data
+                    #[cfg(feature = "compression")]
                     let data = if compress {
                         Self::compress_data(&chunk.data)?
                     } else {
                         chunk.data.clone()
                     };
+
+                    #[cfg(not(feature = "compression"))]
+                    let data = chunk.data.clone();
 
                     // Derive unique nonce for this chunk
                     let chunk_nonce = derive_chunk_nonce(&self.base_nonce, chunk.index);
@@ -1237,7 +1251,8 @@ impl<R: Read> ChunkedDecryptor<R> {
     ) -> Result<Self> {
         let header = StreamHeader::read_from(&mut reader)?;
 
-        // Check if file uses PQ hybrid encryption
+        // Check if file uses PQ hybrid encryption (only when post-quantum feature is enabled)
+        #[cfg(feature = "post-quantum")]
         let final_key = if let Some(ref metadata_str) = header.metadata {
             // Try to parse as PQ metadata
             match serde_json::from_str::<PqMetadata>(metadata_str) {
@@ -1255,6 +1270,10 @@ impl<R: Read> ChunkedDecryptor<R> {
             // No metadata, use password key as-is
             key
         };
+
+        // Without post-quantum feature, just use the password key directly
+        #[cfg(not(feature = "post-quantum"))]
+        let final_key = key;
 
         Ok(Self {
             reader,
@@ -1299,6 +1318,7 @@ impl<R: Read> ChunkedDecryptor<R> {
     /// # Returns
     ///
     /// Decompressed data.
+    #[cfg(feature = "compression")]
     fn decompress_data(data: &[u8]) -> Result<Vec<u8>> {
         use std::io::Read as _;
 
@@ -1356,11 +1376,15 @@ impl<R: Read> ChunkedDecryptor<R> {
             let decrypted = self.encryptor.decrypt(&self.key, &chunk_nonce, &ciphertext)?;
 
             // Optionally decompress chunk data
+            #[cfg(feature = "compression")]
             let plaintext = if self.header.compressed {
                 Self::decompress_data(&decrypted)?
             } else {
                 decrypted
             };
+
+            #[cfg(not(feature = "compression"))]
+            let plaintext = decrypted;
 
             // Write decrypted data
             writer.write_all(&plaintext)?;
@@ -1448,11 +1472,15 @@ impl<R: Read> ChunkedDecryptor<R> {
                     let decrypted = self.encryptor.decrypt(&self.key, &chunk_nonce, ciphertext)?;
 
                     // Optionally decompress chunk data
+                    #[cfg(feature = "compression")]
                     let plaintext = if compressed {
                         Self::decompress_data(&decrypted)?
                     } else {
                         decrypted
                     };
+
+                    #[cfg(not(feature = "compression"))]
+                    let plaintext = decrypted;
 
                     Ok::<_, CryptorError>(plaintext)
                 })

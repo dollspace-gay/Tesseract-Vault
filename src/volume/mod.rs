@@ -7,6 +7,7 @@
 pub mod automount;
 pub mod chunk;
 pub mod cloud_sync;
+#[cfg(feature = "post-quantum")]
 pub mod container;
 
 #[cfg(feature = "cloud-storage")]
@@ -20,6 +21,7 @@ pub mod header;
 pub mod io;
 pub mod keyslot;
 pub mod manager;
+#[cfg(feature = "post-quantum")]
 pub mod migration;
 pub mod mount;
 pub mod operations;
@@ -29,6 +31,7 @@ pub mod volumeio_fs;
 
 pub use automount::{AutoMountConfig, AutoMountService, AutoMountAuth, VolumeConfig, VolumeConfigBuilder};
 pub use chunk::{ChunkMapper, ChunkLocation, ChunkRange, ChunkError, DEFAULT_CHUNK_SIZE};
+#[cfg(feature = "post-quantum")]
 pub use container::{Container, METADATA_SIZE, KEYSLOTS_SIZE};
 pub use filesystem::{EncryptedFilesystem, FileAttr, FileType, FilesystemError, DirEntry};
 pub use header::{
@@ -37,6 +40,7 @@ pub use header::{
 };
 pub use keyslot::{KeySlots, MasterKey, MAX_KEY_SLOTS};
 pub use manager::{VolumeManager, VolumeManagerError, MountedVolumeInfo};
+#[cfg(feature = "post-quantum")]
 pub use migration::{VolumeMigration, MigrationBackup, MigrationError};
 pub use mount::{MountOptions, MountError};
 pub use operations::InMemoryFilesystem;

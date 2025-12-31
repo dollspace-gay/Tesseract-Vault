@@ -9,6 +9,9 @@ on:
     # Run daily to catch new advisories
     - cron: '0 6 * * *'
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 

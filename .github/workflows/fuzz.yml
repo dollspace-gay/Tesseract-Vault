@@ -9,6 +9,9 @@ on:
     # Run weekly on Saturdays at 1am UTC for extended fuzzing
     - cron: '0 1 * * 6'
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1

@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tesseract - Remote Wipe Command</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+        h1 {
+            color: #ff4444;
+            text-align: center;
+            border-bottom: 2px solid #ff4444;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+        .warning-banner {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .section {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .section h2 {
+            color: #4fc3f7;
+            margin-top: 0;
+            font-size: 1.1em;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin: 15px 0 5px;
+            font-weight: 500;
+            color: #b0b0b0;
+        }
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #e0e0e0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #4fc3f7;
+            box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.2);
+        }
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        select {
+            cursor: pointer;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        button {
+            flex: 1;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            color: white;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background: linear-gradient(135deg, #ff6666 0%, #ee0000 100%);
+            transform: translateY(-1px);
+        }
+        .btn-warning {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            color: white;
+        }
+        .btn-warning:hover:not(:disabled) {
+            background: linear-gradient(135deg, #ffb74d 0%, #ff9800 100%);
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .btn-test {
+            background: linear-gradient(135deg, #4caf50 0%, #388e3c 100%);
+            color: white;
+        }
+        .btn-test:hover:not(:disabled) {
+            background: linear-gradient(135deg, #66bb6a 0%, #4caf50 100%);
+        }
+        .output {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            border-left: 4px solid #4fc3f7;
+        }
+        .output.error {
+            border-left-color: #ff4444;
+            background: rgba(255, 0, 0, 0.1);
+            color: #ff8888;
+        }
+        .output.success {
+            border-left-color: #4caf50;
+            background: rgba(0, 255, 0, 0.05);
+            color: #81c784;
+        }
+        .output.warning {
+            border-left-color: #ff9800;
+            background: rgba(255, 152, 0, 0.1);
+            color: #ffb74d;
+        }
+        .confirmation-dialog {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .confirmation-content {
+            background: #1a1a2e;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 400px;
+            text-align: center;
+            border: 2px solid #ff4444;
+        }
+        .confirmation-content h3 {
+            color: #ff4444;
+            margin-top: 0;
+        }
+        .confirmation-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .command-type-info {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+        }
+        .status-dot.connected {
+            background: #4caf50;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .test-section {
+            border: 1px dashed rgba(76, 175, 80, 0.3);
+            background: rgba(76, 175, 80, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <h1>Tesseract Remote Wipe</h1>
+
+    <div class="warning-banner">
+        DANGER: This interface can trigger IRREVERSIBLE key destruction
+    </div>
+
+    <div class="section">
+        <h2>1. Authentication</h2>
+        <label for="token">Wipe Token (64-character hex):</label>
+        <input type="text" id="token" placeholder="Enter your wipe token from QR code or manual copy" maxlength="64">
+        <div class="help-text">This token was generated when you set up remote wipe on your device</div>
+
+        <label for="volumeId">Volume ID:</label>
+        <input type="text" id="volumeId" placeholder="e.g., my-encrypted-volume">
+        <div class="help-text">The identifier of the volume you want to target</div>
+    </div>
+
+    <div class="section">
+        <h2>2. Command</h2>
+        <label for="commandType">Command Type:</label>
+        <select id="commandType">
+            <option value="lock">Lock Volume</option>
+            <option value="checkin">Check-In (Dead Man's Switch)</option>
+            <option value="destroy">DESTROY KEYS (Irreversible!)</option>
+            <option value="revoke">Revoke Token</option>
+        </select>
+        <div class="command-type-info" id="commandInfo">
+            Lock: Temporarily locks the volume. Keys are preserved but inaccessible.
+        </div>
+
+        <label for="message">Message (optional):</label>
+        <textarea id="message" placeholder="e.g., Device lost on 2024-01-15"></textarea>
+    </div>
+
+    <div class="section">
+        <h2>3. Execute</h2>
+        <div class="button-group">
+            <button class="btn-warning" onclick="createCommand()">Create Command</button>
+            <button class="btn-secondary" onclick="verifyCommand()">Verify</button>
+        </div>
+
+        <div id="commandOutput"></div>
+
+        <div class="button-group" style="margin-top: 15px;">
+            <button class="btn-danger" id="sendBtn" onclick="showConfirmation()" disabled>
+                Send Command
+            </button>
+            <button class="btn-secondary" onclick="copyCommand()">Copy to Clipboard</button>
+        </div>
+    </div>
+
+    <div class="section test-section">
+        <h2>Test Mode</h2>
+        <p style="font-size: 13px; color: #888;">Generate test credentials for trying the interface. DO NOT use in production.</p>
+        <div class="button-group">
+            <button class="btn-test" onclick="generateTestCredentials()">Generate Test Token</button>
+        </div>
+        <div id="testOutput"></div>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">WASM module not loaded</span>
+    </div>
+
+    <!-- Confirmation Dialog -->
+    <div class="confirmation-dialog" id="confirmDialog">
+        <div class="confirmation-content">
+            <h3>CONFIRM DESTRUCTIVE ACTION</h3>
+            <p id="confirmMessage">Are you sure you want to execute this command?</p>
+            <p style="color: #ff8888; font-size: 14px;" id="confirmWarning"></p>
+            <div class="confirmation-buttons">
+                <button class="btn-secondary" onclick="hideConfirmation()">Cancel</button>
+                <button class="btn-danger" onclick="executeCommand()">CONFIRM</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import init, {
+            create_wipe_command,
+            verify_wipe_command,
+            is_wipe_command_fresh,
+            get_wipe_command_info,
+            generate_test_volume_id,
+            generate_test_wipe_token,
+            version,
+            security_audit_info
+        } from '../../pkg/web/tesseract_lib.js';
+
+        let wasmLoaded = false;
+        let currentCommand = null;
+
+        // Initialize WASM module
+        async function initWasm() {
+            try {
+                await init();
+                wasmLoaded = true;
+                document.getElementById('statusDot').classList.add('connected');
+                document.getElementById('statusText').textContent = `WASM loaded - Tesseract v${version()}`;
+                console.log(security_audit_info());
+            } catch (error) {
+                document.getElementById('statusText').textContent = `WASM load failed: ${error.message}`;
+                console.error('Failed to load WASM:', error);
+            }
+        }
+
+        // Initialize on page load
+        initWasm();
+
+        // Update command info based on selection
+        document.getElementById('commandType').addEventListener('change', function() {
+            const info = document.getElementById('commandInfo');
+            switch (this.value) {
+                case 'lock':
+                    info.textContent = 'Lock: Temporarily locks the volume. Keys are preserved but inaccessible.';
+                    info.style.color = '#888';
+                    break;
+                case 'checkin':
+                    info.textContent = 'Check-In: Acknowledge the device is still accessible. Resets dead man\'s switch timer.';
+                    info.style.color = '#888';
+                    break;
+                case 'destroy':
+                    info.textContent = 'DESTROY: Permanently and irreversibly destroys all encryption keys. DATA WILL BE UNRECOVERABLE.';
+                    info.style.color = '#ff4444';
+                    break;
+                case 'revoke':
+                    info.textContent = 'Revoke: Disables remote wipe capability. A new token must be generated on the device.';
+                    info.style.color = '#888';
+                    break;
+            }
+        });
+
+        // Create command
+        window.createCommand = function() {
+            if (!wasmLoaded) {
+                showOutput('commandOutput', 'WASM module not loaded', 'error');
+                return;
+            }
+
+            const token = document.getElementById('token').value.trim();
+            const volumeId = document.getElementById('volumeId').value.trim();
+            const commandType = document.getElementById('commandType').value;
+            const message = document.getElementById('message').value.trim() || null;
+
+            if (!token) {
+                showOutput('commandOutput', 'Please enter a wipe token', 'error');
+                return;
+            }
+            if (token.length !== 64) {
+                showOutput('commandOutput', `Token must be 64 hex characters (got ${token.length})`, 'error');
+                return;
+            }
+            if (!volumeId) {
+                showOutput('commandOutput', 'Please enter a volume ID', 'error');
+                return;
+            }
+
+            try {
+                currentCommand = create_wipe_command(token, volumeId, commandType, message);
+                const info = get_wipe_command_info(currentCommand);
+
+                showOutput('commandOutput', `Command created successfully!\n\n${info}\n\nJSON:\n${currentCommand}`, 'success');
+                document.getElementById('sendBtn').disabled = false;
+            } catch (error) {
+                showOutput('commandOutput', `Error: ${error}`, 'error');
+                currentCommand = null;
+                document.getElementById('sendBtn').disabled = true;
+            }
+        };
+
+        // Verify command
+        window.verifyCommand = function() {
+            if (!wasmLoaded) {
+                showOutput('commandOutput', 'WASM module not loaded', 'error');
+                return;
+            }
+
+            if (!currentCommand) {
+                showOutput('commandOutput', 'No command to verify. Create a command first.', 'error');
+                return;
+            }
+
+            const token = document.getElementById('token').value.trim();
+
+            try {
+                const isValid = verify_wipe_command(currentCommand, token);
+                const isFresh = is_wipe_command_fresh(currentCommand);
+
+                if (isValid && isFresh) {
+                    showOutput('commandOutput', `Verification PASSED\n\nSignature: Valid\nTimestamp: Fresh (within 5 minute window)\n\nCommand is ready to send.`, 'success');
+                } else {
+                    let msg = 'Verification FAILED\n\n';
+                    if (!isValid) msg += '- Signature is INVALID (wrong token?)\n';
+                    if (!isFresh) msg += '- Command has EXPIRED (older than 5 minutes)\n';
+                    showOutput('commandOutput', msg, 'error');
+                }
+            } catch (error) {
+                showOutput('commandOutput', `Verification error: ${error}`, 'error');
+            }
+        };
+
+        // Copy command to clipboard
+        window.copyCommand = function() {
+            if (!currentCommand) {
+                showOutput('commandOutput', 'No command to copy', 'error');
+                return;
+            }
+
+            navigator.clipboard.writeText(currentCommand).then(() => {
+                showOutput('commandOutput', 'Command copied to clipboard!', 'success');
+            }).catch(err => {
+                showOutput('commandOutput', `Copy failed: ${err}`, 'error');
+            });
+        };
+
+        // Show confirmation dialog
+        window.showConfirmation = function() {
+            if (!currentCommand) return;
+
+            const commandType = document.getElementById('commandType').value;
+            const confirmWarning = document.getElementById('confirmWarning');
+
+            if (commandType === 'destroy') {
+                confirmWarning.textContent = 'This action is IRREVERSIBLE. All encryption keys will be permanently destroyed and your data will be UNRECOVERABLE.';
+            } else if (commandType === 'lock') {
+                confirmWarning.textContent = 'The volume will be locked until manually unlocked.';
+            } else if (commandType === 'revoke') {
+                confirmWarning.textContent = 'Remote wipe capability will be disabled. You will need physical access to re-enable it.';
+            } else {
+                confirmWarning.textContent = '';
+            }
+
+            document.getElementById('confirmDialog').style.display = 'flex';
+        };
+
+        // Hide confirmation dialog
+        window.hideConfirmation = function() {
+            document.getElementById('confirmDialog').style.display = 'none';
+        };
+
+        // Execute command (send to cloud sync)
+        window.executeCommand = function() {
+            hideConfirmation();
+
+            if (!currentCommand) {
+                showOutput('commandOutput', 'No command to send', 'error');
+                return;
+            }
+
+            // Show integration options
+            showOutput('commandOutput',
+                `Command ready for transmission!\n\n` +
+                `INTEGRATION OPTIONS:\n\n` +
+                `1. FILE-BASED SYNC (Dropbox, Google Drive, OneDrive):\n` +
+                `   Save this JSON to: <sync-folder>/tesseract-wipe-commands.json\n` +
+                `   The Tesseract client polls this file during sync operations.\n\n` +
+                `2. S3/CLOUD STORAGE API:\n` +
+                `   POST to: s3://<bucket>/tesseract/<volume-id>/wipe-commands\n` +
+                `   Content-Type: application/json\n\n` +
+                `3. MANUAL COPY:\n` +
+                `   Copy the JSON below and deliver it to the target device.\n\n` +
+                `COMMAND JSON:\n${currentCommand}`,
+                'warning'
+            );
+        };
+
+        // Generate test credentials
+        window.generateTestCredentials = function() {
+            if (!wasmLoaded) {
+                showOutput('testOutput', 'WASM module not loaded', 'error');
+                return;
+            }
+
+            try {
+                const token = generate_test_wipe_token();
+                const volumeId = generate_test_volume_id();
+
+                document.getElementById('token').value = token;
+                document.getElementById('volumeId').value = volumeId;
+
+                showOutput('testOutput',
+                    `Test credentials generated!\n\n` +
+                    `Token: ${token}\n` +
+                    `Volume ID: ${volumeId}\n\n` +
+                    `WARNING: These are for testing only. In production, tokens are generated on the target device.`,
+                    'success'
+                );
+            } catch (error) {
+                showOutput('testOutput', `Error: ${error}`, 'error');
+            }
+        };
+
+        // Helper to show output
+        function showOutput(elementId, message, type) {
+            const output = document.getElementById(elementId);
+            output.className = `output ${type}`;
+            output.textContent = message;
+            output.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

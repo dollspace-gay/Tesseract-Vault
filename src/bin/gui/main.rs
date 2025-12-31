@@ -193,6 +193,7 @@ enum VolumeTab {
     Info,
     Password,
     Security,
+    RemoteWipe,
 }
 
 #[derive(Clone)]
@@ -265,6 +266,16 @@ struct CryptorApp {
     duress_password_confirm: String,
     duress_status: String,
     has_duress_password: bool,
+    // Remote wipe fields
+    remote_wipe_enabled: bool,
+    remote_wipe_token: String,
+    remote_wipe_token_display: String,
+    remote_wipe_status: String,
+    remote_wipe_keyfile_paths: Vec<String>,
+    remote_wipe_new_path: String,
+    remote_wipe_require_confirmation: bool,
+    remote_wipe_qr_texture: Option<egui::TextureHandle>,
+    remote_wipe_show_qr: bool,
 }
 
 impl Default for CryptorApp {
@@ -327,6 +338,16 @@ impl CryptorApp {
             duress_password_confirm: String::new(),
             duress_status: String::new(),
             has_duress_password: false,
+            // Remote wipe fields
+            remote_wipe_enabled: false,
+            remote_wipe_token: String::new(),
+            remote_wipe_token_display: String::new(),
+            remote_wipe_status: String::new(),
+            remote_wipe_keyfile_paths: Vec::new(),
+            remote_wipe_new_path: String::new(),
+            remote_wipe_require_confirmation: true,
+            remote_wipe_qr_texture: None,
+            remote_wipe_show_qr: true,
         };
 
         // If initial file is provided, set it up
@@ -977,6 +998,12 @@ impl CryptorApp {
                     egui::Color32::from_rgb(200, 200, 200)
                 };
 
+                let remote_wipe_color = if self.volume_tab == VolumeTab::RemoteWipe {
+                    egui::Color32::from_rgb(91, 206, 250)
+                } else {
+                    egui::Color32::from_rgb(200, 200, 200)
+                };
+
                 if ui.add(egui::Button::new(egui::RichText::new("📦 Create").size(14.0).color(egui::Color32::WHITE))
                     .fill(create_color)
                     .min_size(egui::vec2(120.0, 40.0))
@@ -1018,6 +1045,15 @@ impl CryptorApp {
                     .min_size(egui::vec2(120.0, 40.0))
                     .rounding(egui::Rounding::same(20.0))).clicked() {
                     self.volume_tab = VolumeTab::Security;
+                }
+
+                ui.add_space(10.0);
+
+                if ui.add(egui::Button::new(egui::RichText::new("📡 Remote Wipe").size(14.0).color(egui::Color32::WHITE))
+                    .fill(remote_wipe_color)
+                    .min_size(egui::vec2(130.0, 40.0))
+                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                    self.volume_tab = VolumeTab::RemoteWipe;
                 }
             });
         });
@@ -1738,7 +1774,337 @@ impl CryptorApp {
                     });
                 }
             }
+            VolumeTab::RemoteWipe => {
+                self.render_remote_wipe_tab(ui);
+            }
         }
+    }
+
+    /// Generates a QR code texture from a string
+    #[cfg(feature = "gui")]
+    fn generate_qr_texture(ctx: &egui::Context, data: &str) -> Option<egui::TextureHandle> {
+        use qrcode::QrCode;
+
+        // Generate QR code
+        let code = match QrCode::new(data.as_bytes()) {
+            Ok(c) => c,
+            Err(_) => return None,
+        };
+
+        // Get the QR code as a pixel matrix
+        let colors = code.to_colors();
+        let width = code.width();
+
+        // Scale factor for better visibility
+        let scale = 4;
+        let img_size = width * scale;
+
+        // Create RGBA pixel data
+        let mut pixels = vec![255u8; img_size * img_size * 4];
+
+        for y in 0..width {
+            for x in 0..width {
+                let is_dark = colors[y * width + x] == qrcode::Color::Dark;
+                let color = if is_dark { 0u8 } else { 255u8 };
+
+                // Fill scaled pixels
+                for sy in 0..scale {
+                    for sx in 0..scale {
+                        let px = x * scale + sx;
+                        let py = y * scale + sy;
+                        let idx = (py * img_size + px) * 4;
+                        pixels[idx] = color;     // R
+                        pixels[idx + 1] = color; // G
+                        pixels[idx + 2] = color; // B
+                        pixels[idx + 3] = 255;   // A
+                    }
+                }
+            }
+        }
+
+        // Create egui texture
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(
+            [img_size, img_size],
+            &pixels,
+        );
+
+        Some(ctx.load_texture(
+            "qr_code",
+            color_image,
+            egui::TextureOptions::NEAREST,
+        ))
+    }
+
+    #[cfg(feature = "encrypted-volumes")]
+    fn render_remote_wipe_tab(&mut self, ui: &mut egui::Ui) {
+        use tesseract_lib::volume::remote_wipe::WipeToken;
+
+        ui.vertical_centered(|ui| {
+            ui.label(egui::RichText::new("Remote Wipe Configuration").size(18.0));
+        });
+        ui.add_space(20.0);
+
+        // Info box
+        egui::Frame::none()
+            .fill(egui::Color32::from_rgb(40, 60, 80))
+            .rounding(egui::Rounding::same(10.0))
+            .inner_margin(egui::Margin::same(15.0))
+            .show(ui, |ui| {
+                ui.label(egui::RichText::new("📡 Remote Wipe").size(16.0).color(egui::Color32::from_rgb(91, 206, 250)));
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new(
+                    "Remote wipe allows you to destroy encryption keys across all devices via a cloud command.\n\
+                    • Generate a wipe token and store it securely (e.g., password manager, safe)\n\
+                    • Register keyfile paths that should be destroyed on wipe\n\
+                    • Use the web dashboard to trigger wipe from any device"
+                ).size(12.0).color(egui::Color32::from_rgb(200, 220, 240)));
+            });
+
+        ui.add_space(20.0);
+
+        // Token generation section
+        ui.label(egui::RichText::new("Wipe Token").size(16.0));
+        ui.add_space(10.0);
+
+        // Track if we need to generate a new QR code
+        let mut generate_qr = false;
+        let mut qr_token = String::new();
+
+        if self.remote_wipe_token_display.is_empty() {
+            // Generate new token button
+            if ui.add(egui::Button::new(
+                egui::RichText::new("🔑 Generate Wipe Token").size(14.0).color(egui::Color32::WHITE))
+                .fill(egui::Color32::from_rgb(91, 206, 250))
+                .min_size(egui::vec2(200.0, 40.0))
+                .rounding(egui::Rounding::same(20.0))).clicked() {
+
+                let token = WipeToken::generate();
+                self.remote_wipe_token = token.to_hex().to_string();
+                self.remote_wipe_token_display = self.remote_wipe_token.clone();
+                self.remote_wipe_status = "✓ Token generated - SAVE THIS TOKEN SECURELY!".to_string();
+                generate_qr = true;
+                qr_token = self.remote_wipe_token.clone();
+            }
+        } else {
+            // Display existing token
+            egui::Frame::none()
+                .fill(egui::Color32::from_rgb(30, 30, 30))
+                .rounding(egui::Rounding::same(8.0))
+                .inner_margin(egui::Margin::same(12.0))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Token:").size(12.0).color(egui::Color32::GRAY));
+                        ui.add_space(10.0);
+                        // Show truncated token with copy button
+                        let display_token = if self.remote_wipe_token_display.len() > 32 {
+                            format!("{}...", &self.remote_wipe_token_display[..32])
+                        } else {
+                            self.remote_wipe_token_display.clone()
+                        };
+                        ui.label(egui::RichText::new(&display_token).size(11.0).color(egui::Color32::from_rgb(150, 255, 150)).monospace());
+                    });
+                });
+
+            ui.add_space(10.0);
+
+            ui.horizontal(|ui| {
+                // Copy to clipboard button
+                if ui.add(egui::Button::new(
+                    egui::RichText::new("📋 Copy Token").size(12.0).color(egui::Color32::WHITE))
+                    .fill(egui::Color32::from_rgb(100, 100, 100))
+                    .min_size(egui::vec2(120.0, 30.0))
+                    .rounding(egui::Rounding::same(15.0))).clicked() {
+                    ui.output_mut(|o| o.copied_text = self.remote_wipe_token_display.clone());
+                    self.remote_wipe_status = "✓ Token copied to clipboard".to_string();
+                }
+
+                ui.add_space(10.0);
+
+                // Regenerate token button
+                if ui.add(egui::Button::new(
+                    egui::RichText::new("🔄 Regenerate").size(12.0).color(egui::Color32::WHITE))
+                    .fill(egui::Color32::from_rgb(180, 100, 50))
+                    .min_size(egui::vec2(120.0, 30.0))
+                    .rounding(egui::Rounding::same(15.0))).clicked() {
+                    let token = WipeToken::generate();
+                    self.remote_wipe_token = token.to_hex().to_string();
+                    self.remote_wipe_token_display = self.remote_wipe_token.clone();
+                    self.remote_wipe_status = "✓ New token generated - old token is now INVALID!".to_string();
+                    generate_qr = true;
+                    qr_token = self.remote_wipe_token.clone();
+                }
+
+                ui.add_space(10.0);
+
+                // Clear token button
+                if ui.add(egui::Button::new(
+                    egui::RichText::new("🗑️ Clear").size(12.0).color(egui::Color32::WHITE))
+                    .fill(egui::Color32::from_rgb(180, 50, 50))
+                    .min_size(egui::vec2(80.0, 30.0))
+                    .rounding(egui::Rounding::same(15.0))).clicked() {
+                    self.remote_wipe_token.clear();
+                    self.remote_wipe_token_display.clear();
+                    self.remote_wipe_qr_texture = None;
+                    self.remote_wipe_status = "Token cleared".to_string();
+                }
+
+                ui.add_space(10.0);
+
+                // Toggle QR code button
+                if self.remote_wipe_qr_texture.is_some() {
+                    let qr_btn_text = if self.remote_wipe_show_qr { "Hide QR" } else { "Show QR" };
+                    if ui.add(egui::Button::new(
+                        egui::RichText::new(qr_btn_text).size(12.0).color(egui::Color32::WHITE))
+                        .fill(egui::Color32::from_rgb(70, 70, 120))
+                        .min_size(egui::vec2(80.0, 30.0))
+                        .rounding(egui::Rounding::same(15.0))).clicked() {
+                        self.remote_wipe_show_qr = !self.remote_wipe_show_qr;
+                    }
+                }
+            });
+
+            // Display QR code if available and visible
+            if self.remote_wipe_show_qr {
+                if let Some(ref texture) = self.remote_wipe_qr_texture {
+                    ui.add_space(15.0);
+                    ui.vertical_centered(|ui| {
+                        egui::Frame::none()
+                            .fill(egui::Color32::WHITE)
+                            .rounding(egui::Rounding::same(8.0))
+                            .inner_margin(egui::Margin::same(10.0))
+                            .show(ui, |ui| {
+                                ui.image(egui::load::SizedTexture::new(texture.id(), egui::vec2(200.0, 200.0)));
+                            });
+                        ui.add_space(5.0);
+                        ui.label(egui::RichText::new("Scan to copy token to password manager")
+                            .size(11.0).color(egui::Color32::GRAY));
+                    });
+                } else if !self.remote_wipe_token_display.is_empty() {
+                    // Generate QR code if token exists but no texture
+                    generate_qr = true;
+                    qr_token = self.remote_wipe_token_display.clone();
+                }
+            }
+        }
+
+        // Generate QR code texture if needed (done outside the UI code to avoid borrow issues)
+        if generate_qr && !qr_token.is_empty() {
+            if let Some(texture) = Self::generate_qr_texture(ui.ctx(), &qr_token) {
+                self.remote_wipe_qr_texture = Some(texture);
+            }
+        }
+
+        ui.add_space(25.0);
+        ui.separator();
+        ui.add_space(15.0);
+
+        // Keyfile paths section
+        ui.label(egui::RichText::new("Protected Keyfile Paths").size(16.0));
+        ui.add_space(5.0);
+        ui.label(egui::RichText::new("Files at these paths will be securely destroyed when a wipe command is received.")
+            .size(11.0).color(egui::Color32::GRAY));
+        ui.add_space(10.0);
+
+        // List existing paths
+        if !self.remote_wipe_keyfile_paths.is_empty() {
+            egui::Frame::none()
+                .fill(egui::Color32::from_rgb(40, 40, 40))
+                .rounding(egui::Rounding::same(8.0))
+                .inner_margin(egui::Margin::same(10.0))
+                .show(ui, |ui| {
+                    let mut path_to_remove: Option<usize> = None;
+                    for (idx, path) in self.remote_wipe_keyfile_paths.iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("📄").size(12.0));
+                            ui.label(egui::RichText::new(path).size(11.0).monospace());
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.small_button("✗").clicked() {
+                                    path_to_remove = Some(idx);
+                                }
+                            });
+                        });
+                    }
+                    if let Some(idx) = path_to_remove {
+                        self.remote_wipe_keyfile_paths.remove(idx);
+                    }
+                });
+            ui.add_space(10.0);
+        }
+
+        // Add new path
+        ui.horizontal(|ui| {
+            ui.add(egui::TextEdit::singleline(&mut self.remote_wipe_new_path)
+                .hint_text("Enter keyfile path...")
+                .desired_width(400.0));
+            ui.add_space(10.0);
+            if ui.button("Browse...").clicked() {
+                if let Some(path) = rfd::FileDialog::new().pick_file() {
+                    self.remote_wipe_new_path = path.display().to_string();
+                }
+            }
+            ui.add_space(10.0);
+            if ui.add_enabled(!self.remote_wipe_new_path.is_empty(), egui::Button::new("+ Add")).clicked() {
+                if !self.remote_wipe_keyfile_paths.contains(&self.remote_wipe_new_path) {
+                    self.remote_wipe_keyfile_paths.push(self.remote_wipe_new_path.clone());
+                }
+                self.remote_wipe_new_path.clear();
+            }
+        });
+
+        ui.add_space(25.0);
+        ui.separator();
+        ui.add_space(15.0);
+
+        // Settings
+        ui.label(egui::RichText::new("Settings").size(16.0));
+        ui.add_space(10.0);
+
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut self.remote_wipe_enabled, "");
+            ui.label("Enable remote wipe capability");
+        });
+
+        ui.add_space(5.0);
+
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut self.remote_wipe_require_confirmation, "");
+            ui.label("Require confirmation before destroying keys");
+        });
+
+        ui.add_space(5.0);
+        ui.label(egui::RichText::new("When enabled, wipe commands require a second confirmation command within 5 minutes.")
+            .size(11.0).color(egui::Color32::GRAY));
+
+        // Status message
+        if !self.remote_wipe_status.is_empty() {
+            ui.add_space(20.0);
+            ui.vertical_centered(|ui| {
+                let color = if self.remote_wipe_status.starts_with("✓") {
+                    egui::Color32::from_rgb(100, 255, 100)
+                } else if self.remote_wipe_status.starts_with("✗") {
+                    egui::Color32::from_rgb(255, 100, 100)
+                } else {
+                    egui::Color32::from_rgb(200, 200, 200)
+                };
+                ui.label(egui::RichText::new(&self.remote_wipe_status).size(13.0).color(color));
+            });
+        }
+
+        ui.add_space(20.0);
+
+        // Web dashboard link
+        egui::Frame::none()
+            .fill(egui::Color32::from_rgb(50, 50, 70))
+            .rounding(egui::Rounding::same(10.0))
+            .inner_margin(egui::Margin::same(15.0))
+            .show(ui, |ui| {
+                ui.label(egui::RichText::new("🌐 Web Dashboard").size(14.0).color(egui::Color32::from_rgb(91, 206, 250)));
+                ui.add_space(5.0);
+                ui.label(egui::RichText::new(
+                    "To trigger a remote wipe, use the web dashboard from any device.\n\
+                    You'll need your wipe token and volume ID."
+                ).size(11.0).color(egui::Color32::from_rgb(180, 180, 200)));
+            });
     }
 }
 

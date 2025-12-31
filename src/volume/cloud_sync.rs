@@ -686,6 +686,336 @@ impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
     }
 }
 
+// =============================================================================
+// Remote Wipe Command Delivery via Cloud Sync
+// =============================================================================
+//
+// This section integrates remote wipe functionality with cloud sync, allowing
+// wipe commands to be delivered through the same cloud storage backend used
+// for volume synchronization.
+//
+// Architecture:
+// - Wipe commands are stored at reserved chunk index (u64::MAX - 1)
+// - Commands are JSON-serialized WipeCommand structs
+// - Clients poll for commands during sync operations
+// - Commands are deleted after successful processing
+
+use crate::volume::remote_wipe::{WipeCommand, StoredWipeConfig};
+
+/// Reserved chunk index for wipe command storage
+/// (u64::MAX is used for manifest, so we use MAX-1 for commands)
+pub const WIPE_COMMAND_CHUNK_INDEX: u64 = u64::MAX - 1;
+
+/// Reserved chunk index for wipe config storage
+pub const WIPE_CONFIG_CHUNK_INDEX: u64 = u64::MAX - 2;
+
+/// Pending wipe commands stored in cloud
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudWipeCommands {
+    /// List of pending commands (usually just one)
+    pub commands: Vec<WipeCommand>,
+    /// Timestamp when commands were last updated
+    pub updated_at: u64,
+}
+
+impl CloudWipeCommands {
+    /// Creates an empty command list
+    pub fn new() -> Self {
+        Self {
+            commands: Vec::new(),
+            updated_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        }
+    }
+
+    /// Adds a command to the list
+    pub fn push(&mut self, command: WipeCommand) {
+        self.commands.push(command);
+        self.updated_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+    }
+
+    /// Removes and returns the first command
+    pub fn pop(&mut self) -> Option<WipeCommand> {
+        if self.commands.is_empty() {
+            return None;
+        }
+        self.updated_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        Some(self.commands.remove(0))
+    }
+
+    /// Returns true if there are pending commands
+    pub fn has_pending(&self) -> bool {
+        !self.commands.is_empty()
+    }
+
+    /// Serializes to JSON bytes
+    pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
+        serde_json::to_vec(self)
+    }
+
+    /// Deserializes from JSON bytes
+    pub fn from_bytes(data: &[u8]) -> Result<Self, serde_json::Error> {
+        serde_json::from_slice(data)
+    }
+}
+
+impl Default for CloudWipeCommands {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Cloud-based wipe command delivery
+///
+/// This manager handles storing and retrieving wipe commands via cloud storage,
+/// enabling remote wipe capability across devices.
+pub struct CloudWipeManager<B> {
+    /// The cloud storage backend
+    backend: B,
+    /// Volume ID for command filtering
+    volume_id: String,
+}
+
+impl<B: super::io::AsyncStorageBackend> CloudWipeManager<B> {
+    /// Creates a new CloudWipeManager
+    pub fn new(backend: B, volume_id: String) -> Self {
+        Self { backend, volume_id }
+    }
+
+    /// Stores a wipe command in cloud storage for delivery
+    ///
+    /// This is called from the web interface or another triggering device.
+    pub async fn push_command(&self, command: WipeCommand) -> SyncResult<()> {
+        // Load existing commands
+        let mut commands = self.load_commands().await?.unwrap_or_default();
+
+        // Add the new command
+        commands.push(command);
+
+        // Save back to cloud
+        let data = commands.to_bytes()?;
+        self.backend
+            .write_chunk(WIPE_COMMAND_CHUNK_INDEX, &data)
+            .await
+            .map_err(SyncError::Io)?;
+
+        Ok(())
+    }
+
+    /// Loads pending wipe commands from cloud storage
+    pub async fn load_commands(&self) -> SyncResult<Option<CloudWipeCommands>> {
+        match self.backend.read_chunk(WIPE_COMMAND_CHUNK_INDEX, 0).await {
+            Ok(Some(data)) => {
+                let commands = CloudWipeCommands::from_bytes(&data)?;
+                Ok(Some(commands))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(SyncError::Io(e)),
+        }
+    }
+
+    /// Checks for and returns pending wipe commands for this volume
+    ///
+    /// Filters commands by volume_id to ensure we only process commands
+    /// intended for this volume.
+    pub async fn poll_commands(&self) -> SyncResult<Vec<WipeCommand>> {
+        let commands = self.load_commands().await?;
+
+        match commands {
+            Some(cmds) => {
+                // Filter commands for this volume
+                let matching: Vec<WipeCommand> = cmds.commands
+                    .into_iter()
+                    .filter(|cmd| cmd.data.volume_id == self.volume_id)
+                    .collect();
+                Ok(matching)
+            }
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// Removes a processed command from cloud storage
+    ///
+    /// Call this after successfully processing a wipe command.
+    pub async fn acknowledge_command(&self, command: &WipeCommand) -> SyncResult<()> {
+        let mut commands = self.load_commands().await?.unwrap_or_default();
+
+        // Remove the specific command (match by nonce for uniqueness)
+        commands.commands.retain(|c| c.data.nonce != command.data.nonce);
+
+        // Save updated list (or delete if empty)
+        if commands.commands.is_empty() {
+            // Delete the command chunk
+            self.backend
+                .delete_chunk(WIPE_COMMAND_CHUNK_INDEX)
+                .await
+                .map_err(SyncError::Io)?;
+        } else {
+            let data = commands.to_bytes()?;
+            self.backend
+                .write_chunk(WIPE_COMMAND_CHUNK_INDEX, &data)
+                .await
+                .map_err(SyncError::Io)?;
+        }
+
+        Ok(())
+    }
+
+    /// Stores the wipe configuration in cloud storage
+    ///
+    /// This allows other devices to know remote wipe is configured.
+    pub async fn store_config(&self, config: &StoredWipeConfig) -> SyncResult<()> {
+        let data = config.to_bytes()
+            .map_err(|e| SyncError::Backend(e.to_string()))?;
+
+        self.backend
+            .write_chunk(WIPE_CONFIG_CHUNK_INDEX, &data)
+            .await
+            .map_err(SyncError::Io)?;
+
+        Ok(())
+    }
+
+    /// Loads the wipe configuration from cloud storage
+    pub async fn load_config(&self) -> SyncResult<Option<StoredWipeConfig>> {
+        match self.backend.read_chunk(WIPE_CONFIG_CHUNK_INDEX, 0).await {
+            Ok(Some(data)) => {
+                let config = StoredWipeConfig::from_bytes(&data)
+                    .map_err(|e| SyncError::Backend(e.to_string()))?;
+                Ok(Some(config))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(SyncError::Io(e)),
+        }
+    }
+
+    /// Deletes all wipe-related data from cloud storage
+    ///
+    /// Call this when disabling remote wipe or deleting the volume.
+    pub async fn clear_all(&self) -> SyncResult<()> {
+        // Delete commands
+        let _ = self.backend.delete_chunk(WIPE_COMMAND_CHUNK_INDEX).await;
+        // Delete config
+        let _ = self.backend.delete_chunk(WIPE_CONFIG_CHUNK_INDEX).await;
+        Ok(())
+    }
+
+    /// Returns the volume ID
+    pub fn volume_id(&self) -> &str {
+        &self.volume_id
+    }
+}
+
+// Extension methods to add wipe command functionality to CloudSyncManager
+impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
+    /// Polls for pending wipe commands during sync
+    ///
+    /// This should be called periodically or at the start of sync operations
+    /// to check for remote wipe commands.
+    pub async fn check_for_wipe_commands(&self) -> SyncResult<Vec<WipeCommand>> {
+        let volume_id = self.manifest().volume_id.clone();
+
+        // Load commands from cloud
+        match self.backend.read_chunk(WIPE_COMMAND_CHUNK_INDEX, 0).await {
+            Ok(Some(data)) => {
+                let commands = CloudWipeCommands::from_bytes(&data)?;
+                // Filter commands for this volume
+                let matching: Vec<WipeCommand> = commands.commands
+                    .into_iter()
+                    .filter(|cmd| cmd.data.volume_id == volume_id)
+                    .collect();
+                Ok(matching)
+            }
+            Ok(None) => Ok(Vec::new()),
+            Err(e) => Err(SyncError::Io(e)),
+        }
+    }
+
+    /// Stores the wipe configuration alongside volume data
+    pub async fn store_wipe_config(&self, config: &StoredWipeConfig) -> SyncResult<()> {
+        let data = config.to_bytes()
+            .map_err(|e| SyncError::Backend(e.to_string()))?;
+
+        self.backend
+            .write_chunk(WIPE_CONFIG_CHUNK_INDEX, &data)
+            .await
+            .map_err(SyncError::Io)?;
+
+        Ok(())
+    }
+
+    /// Loads the wipe configuration from cloud
+    pub async fn load_wipe_config(&self) -> SyncResult<Option<StoredWipeConfig>> {
+        match self.backend.read_chunk(WIPE_CONFIG_CHUNK_INDEX, 0).await {
+            Ok(Some(data)) => {
+                let config = StoredWipeConfig::from_bytes(&data)
+                    .map_err(|e| SyncError::Backend(e.to_string()))?;
+                Ok(Some(config))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(SyncError::Io(e)),
+        }
+    }
+
+    /// Pushes a wipe command to cloud storage
+    pub async fn push_wipe_command(&self, command: WipeCommand) -> SyncResult<()> {
+        // Load existing commands
+        let mut commands = match self.backend.read_chunk(WIPE_COMMAND_CHUNK_INDEX, 0).await {
+            Ok(Some(data)) => CloudWipeCommands::from_bytes(&data)?,
+            Ok(None) => CloudWipeCommands::new(),
+            Err(e) => return Err(SyncError::Io(e)),
+        };
+
+        // Add the new command
+        commands.push(command);
+
+        // Save back to cloud
+        let data = commands.to_bytes()?;
+        self.backend
+            .write_chunk(WIPE_COMMAND_CHUNK_INDEX, &data)
+            .await
+            .map_err(SyncError::Io)?;
+
+        Ok(())
+    }
+
+    /// Acknowledges a processed wipe command (removes it from cloud)
+    pub async fn acknowledge_wipe_command(&self, command: &WipeCommand) -> SyncResult<()> {
+        let mut commands = match self.backend.read_chunk(WIPE_COMMAND_CHUNK_INDEX, 0).await {
+            Ok(Some(data)) => CloudWipeCommands::from_bytes(&data)?,
+            Ok(None) => return Ok(()), // No commands to acknowledge
+            Err(e) => return Err(SyncError::Io(e)),
+        };
+
+        // Remove the specific command (match by nonce for uniqueness)
+        commands.commands.retain(|c| c.data.nonce != command.data.nonce);
+
+        // Save updated list (or delete if empty)
+        if commands.commands.is_empty() {
+            self.backend
+                .delete_chunk(WIPE_COMMAND_CHUNK_INDEX)
+                .await
+                .map_err(SyncError::Io)?;
+        } else {
+            let data = commands.to_bytes()?;
+            self.backend
+                .write_chunk(WIPE_COMMAND_CHUNK_INDEX, &data)
+                .await
+                .map_err(SyncError::Io)?;
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -845,5 +1175,52 @@ mod tests {
         assert!(!stats.is_success());
         // 10 / 11 = ~90.9%
         assert!(stats.success_rate() > 90.0 && stats.success_rate() < 91.0);
+    }
+
+    #[test]
+    fn test_cloud_wipe_commands_new() {
+        let commands = CloudWipeCommands::new();
+        assert!(!commands.has_pending());
+        assert!(commands.commands.is_empty());
+    }
+
+    #[test]
+    fn test_cloud_wipe_commands_serialization() {
+        use crate::volume::remote_wipe::{WipeToken, WipeCommandType};
+
+        let mut commands = CloudWipeCommands::new();
+        let token = WipeToken::generate();
+        let cmd = WipeCommand::new(&token, "test-volume", WipeCommandType::Lock);
+        commands.push(cmd);
+
+        assert!(commands.has_pending());
+
+        // Serialize and deserialize
+        let bytes = commands.to_bytes().unwrap();
+        let restored = CloudWipeCommands::from_bytes(&bytes).unwrap();
+
+        assert_eq!(restored.commands.len(), 1);
+        assert_eq!(restored.commands[0].data.volume_id, "test-volume");
+    }
+
+    #[test]
+    fn test_cloud_wipe_commands_pop() {
+        use crate::volume::remote_wipe::{WipeToken, WipeCommandType};
+
+        let mut commands = CloudWipeCommands::new();
+        let token = WipeToken::generate();
+
+        commands.push(WipeCommand::new(&token, "vol1", WipeCommandType::Lock));
+        commands.push(WipeCommand::new(&token, "vol2", WipeCommandType::CheckIn));
+
+        assert_eq!(commands.commands.len(), 2);
+
+        let first = commands.pop().unwrap();
+        assert_eq!(first.data.volume_id, "vol1");
+        assert_eq!(commands.commands.len(), 1);
+
+        let second = commands.pop().unwrap();
+        assert_eq!(second.data.volume_id, "vol2");
+        assert!(!commands.has_pending());
     }
 }

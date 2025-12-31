@@ -29,7 +29,7 @@ compression = ["dep:flate2"]  # Include DEFLATE compression support
 yubikey = ["dep:yubikey-hmac-otp"]  # YubiKey HMAC-SHA1 challenge-response
 
 # GUI support (eframe, image, etc.) - disabled for Kani verification due to rav1e nightly conflicts
-gui = ["dep:eframe", "dep:rfd", "dep:notify-rust", "dep:tray-icon", "dep:image"]
+gui = ["dep:eframe", "dep:rfd", "dep:notify-rust", "dep:tray-icon", "dep:image", "dep:qrcode"]
 
 [lib]
 name = "tesseract_lib"
@@ -106,6 +106,7 @@ rfd = { version = "0.15", optional = true }
 notify-rust = { version = "4.11", optional = true }
 tray-icon = { version = "0.21", optional = true }
 image = { version = "0.25", optional = true }
+qrcode = { version = "0.14", optional = true }
 
 # Hardware Security Module support
 yubikey-hmac-otp = { version = "0.10", optional = true }

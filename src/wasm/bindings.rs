@@ -354,6 +354,175 @@ pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Security audit information
+#[wasm_bindgen]
+pub fn security_audit_info() -> String {
+    format!(
+        "Tesseract Vault v{} - Security Features:\n\
+         - AES-256-GCM authenticated encryption\n\
+         - Argon2id memory-hard key derivation\n\
+         - Post-quantum hybrid encryption (ML-KEM-1024)\n\
+         - Constant-time operations\n\
+         - Automatic memory zeroization",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
+// Remote Wipe WASM Bindings
+// -------------------------
+// These functions allow the web interface to create authenticated wipe commands
+// that can be sent via cloud sync to remotely destroy encryption keys.
+
+use crate::volume::remote_wipe::{WipeCommand, WipeCommandType, WipeToken};
+
+/// Create a wipe command from a hex token
+///
+/// This is the primary function for the web remote wipe interface.
+/// The user enters their wipe token (from QR code or manual copy) and
+/// this function creates a signed command to send via cloud sync.
+///
+/// # Arguments
+///
+/// * `token_hex` - The wipe token as a hex string (64 characters)
+/// * `volume_id` - The volume ID to target
+/// * `command_type` - The type of command: "destroy", "lock", "checkin", or "revoke"
+/// * `message` - Optional message (e.g., reason for wipe)
+///
+/// # Returns
+///
+/// JSON-serialized WipeCommand ready for transmission
+#[wasm_bindgen]
+pub fn create_wipe_command(
+    token_hex: &str,
+    volume_id: &str,
+    command_type: &str,
+    message: Option<String>,
+) -> Result<String, JsValue> {
+    // Parse the token
+    let token = WipeToken::from_hex(token_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid token: {}", e)))?;
+
+    // Parse command type
+    let cmd_type = match command_type.to_lowercase().as_str() {
+        "destroy" | "destroykeys" => WipeCommandType::DestroyKeys,
+        "lock" => WipeCommandType::Lock,
+        "checkin" | "check-in" => WipeCommandType::CheckIn,
+        "revoke" | "revoketoken" => WipeCommandType::RevokeToken,
+        _ => return Err(JsValue::from_str(&format!(
+            "Invalid command type: {}. Use 'destroy', 'lock', 'checkin', or 'revoke'",
+            command_type
+        ))),
+    };
+
+    // Create the command
+    let command = match message {
+        Some(msg) => WipeCommand::with_message(&token, volume_id, cmd_type, &msg),
+        None => WipeCommand::new(&token, volume_id, cmd_type),
+    };
+
+    // Serialize to JSON
+    serde_json::to_string(&command)
+        .map_err(|e| JsValue::from_str(&format!("Serialization failed: {}", e)))
+}
+
+/// Verify a wipe command signature
+///
+/// Use this to verify that a command was signed with the correct token.
+///
+/// # Arguments
+///
+/// * `command_json` - JSON-serialized WipeCommand
+/// * `token_hex` - The wipe token as a hex string
+///
+/// # Returns
+///
+/// true if signature is valid, false otherwise
+#[wasm_bindgen]
+pub fn verify_wipe_command(command_json: &str, token_hex: &str) -> Result<bool, JsValue> {
+    // Parse the token
+    let token = WipeToken::from_hex(token_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid token: {}", e)))?;
+
+    // Parse the command
+    let command: WipeCommand = serde_json::from_str(command_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid command JSON: {}", e)))?;
+
+    Ok(command.verify(&token))
+}
+
+/// Check if a wipe command is still fresh (within time window)
+///
+/// Commands expire after 5 minutes to prevent replay attacks.
+///
+/// # Arguments
+///
+/// * `command_json` - JSON-serialized WipeCommand
+///
+/// # Returns
+///
+/// true if command is fresh, false if expired
+#[wasm_bindgen]
+pub fn is_wipe_command_fresh(command_json: &str) -> Result<bool, JsValue> {
+    let command: WipeCommand = serde_json::from_str(command_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid command JSON: {}", e)))?;
+
+    Ok(command.is_fresh())
+}
+
+/// Get command details from a serialized command
+///
+/// # Arguments
+///
+/// * `command_json` - JSON-serialized WipeCommand
+///
+/// # Returns
+///
+/// Human-readable command details
+#[wasm_bindgen]
+pub fn get_wipe_command_info(command_json: &str) -> Result<String, JsValue> {
+    let command: WipeCommand = serde_json::from_str(command_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid command JSON: {}", e)))?;
+
+    let cmd_type_str = match command.data.command_type {
+        WipeCommandType::DestroyKeys => "Destroy Keys (IRREVERSIBLE)",
+        WipeCommandType::Lock => "Lock Volume",
+        WipeCommandType::CheckIn => "Check-In",
+        WipeCommandType::RevokeToken => "Revoke Token",
+    };
+
+    let message = command.data.message.as_deref().unwrap_or("None");
+
+    Ok(format!(
+        "Command Type: {}\nVolume ID: {}\nTimestamp: {}\nMessage: {}\nFresh: {}",
+        cmd_type_str,
+        command.data.volume_id,
+        command.data.timestamp,
+        message,
+        command.is_fresh()
+    ))
+}
+
+/// Generate a random volume ID for testing
+///
+/// Creates a random 16-character hex ID.
+#[wasm_bindgen]
+pub fn generate_test_volume_id() -> String {
+    let mut bytes = [0u8; 8];
+    getrandom::fill(&mut bytes).expect("RNG failed");
+    hex::encode(bytes)
+}
+
+/// Generate a test wipe token (FOR TESTING ONLY)
+///
+/// WARNING: In production, tokens should only be generated on the device
+/// that will receive wipe commands. This function is for demonstration
+/// and testing purposes only.
+#[wasm_bindgen]
+pub fn generate_test_wipe_token() -> String {
+    let token = WipeToken::generate();
+    token.to_hex().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,3 +1,7 @@
 target/
 .beads/
 .chainlink/
+
+# Test vector directories (downloaded from external sources)
+tests/wycheproof/
+tests/nist_cavp/

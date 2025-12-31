@@ -27,12 +27,17 @@
 //!
 //! ```no_run
 //! use tesseract_lib::hsm::yubikey::YubiKey;
+//! use tesseract_lib::hsm::HardwareSecurityModule;
 //!
 //! // Initialize YubiKey
 //! let yubikey = YubiKey::new()?;
 //!
 //! // Check if available
 //! if yubikey.is_available() {
+//!     let password = "secret";
+//!     let salt = [0u8; 32];
+//!     let challenge = [1u8; 32];
+//!
 //!     // Derive key using challenge-response
 //!     let key = yubikey.derive_key(
 //!         password.as_bytes(),

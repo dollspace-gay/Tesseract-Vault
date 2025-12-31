@@ -418,4 +418,80 @@ mod tests {
         // Should have been called twice (once from update, once from force)
         assert_eq!(call_count.load(Ordering::SeqCst), 2);
     }
+
+    // Additional tests to catch mutation testing gaps
+
+    /// Test that bytes_per_second returns a non-zero positive value after processing
+    #[test]
+    fn test_bytes_per_second_returns_positive_value() {
+        let mut tracker = ProgressTracker::new(10000);
+
+        // Wait enough time to get reliable measurement
+        std::thread::sleep(Duration::from_millis(150));
+        tracker.update(1500);
+
+        let bps = tracker.bytes_per_second();
+        assert!(bps.is_some(), "bytes_per_second should return Some after elapsed time");
+        let bps_value = bps.unwrap();
+        // Must be positive and non-zero (mutation would return 0.0)
+        assert!(bps_value > 0.0, "bytes_per_second must be positive, got {}", bps_value);
+        // Sanity check: ~1500 bytes in ~0.15s = ~10000 bytes/sec
+        assert!(bps_value > 1000.0, "bytes_per_second should be > 1000, got {}", bps_value);
+    }
+
+    /// Test that eta returns None when not enough time has elapsed (< 0.1 seconds)
+    #[test]
+    fn test_eta_returns_none_when_elapsed_too_short() {
+        let mut tracker = ProgressTracker::new(1000);
+        // Update immediately without sleeping - elapsed time < 0.1s
+        tracker.update(100);
+
+        // ETA should be None because elapsed_secs < 0.1
+        assert!(tracker.eta().is_none(), "eta should be None when elapsed < 0.1s");
+    }
+
+    /// Test format_bytes with extremely large values (PB range)
+    #[test]
+    fn test_format_bytes_large_values() {
+        // Test petabyte range - ensures unit_index bound is correct
+        let pb = 1024_u64.pow(5); // 1 PB
+        assert_eq!(format_bytes(pb), "1.0 PB");
+
+        // Test value that would exceed PB if bounds weren't enforced
+        let huge = 1024_u64.pow(5) * 1024; // 1024 PB
+        let result = format_bytes(huge);
+        assert!(result.ends_with(" PB"), "Should still use PB unit for huge values: {}", result);
+    }
+
+    /// Test format_bytes arithmetic is correct (not using division instead of subtraction)
+    #[test]
+    fn test_format_bytes_arithmetic_correctness() {
+        // Values that would produce different results with / vs - in unit calculation
+        assert_eq!(format_bytes(1), "1.0 B");
+        assert_eq!(format_bytes(100), "100.0 B");
+        assert_eq!(format_bytes(1023), "1023.0 B");
+        assert_eq!(format_bytes(1024), "1.0 KB");
+        assert_eq!(format_bytes(1025), "1.0 KB");
+
+        // 1.5 TB - tests multiple unit boundaries
+        let tb_and_half = (1024_u64.pow(4) * 3) / 2;
+        assert_eq!(format_bytes(tb_and_half), "1.5 TB");
+    }
+
+    /// Test default trait implementation returns None for bytes_per_second
+    #[test]
+    fn test_default_trait_bytes_per_second() {
+        // Create a minimal implementor that uses default bytes_per_second
+        struct MinimalReporter;
+        impl ProgressReporter for MinimalReporter {
+            fn progress(&self) -> f64 { 0.5 }
+            fn bytes_processed(&self) -> u64 { 500 }
+            fn total_bytes(&self) -> u64 { 1000 }
+        }
+
+        let reporter = MinimalReporter;
+        // Default implementation should return None, not Some(0.0)
+        assert!(reporter.bytes_per_second().is_none(), "default bytes_per_second should return None");
+        assert!(reporter.eta().is_none(), "default eta should return None");
+    }
 }

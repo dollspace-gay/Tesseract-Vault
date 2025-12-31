@@ -1,8 +1,0 @@
-src/validation.rs:41:5: replace get_and_validate_password -> Result<Zeroizing<String>> with Ok(Zeroizing::new(String::new()))
-src/validation.rs:67:5: replace get_password -> Result<Zeroizing<String>> with Ok(Zeroizing::new(String::new()))
-src/validation.rs:67:5: replace get_password -> Result<Zeroizing<String>> with Ok(Zeroizing::from(String::new()))
-src/validation.rs:108:48: delete ! in validate_password
-src/validation.rs:67:5: replace get_password -> Result<Zeroizing<String>> with Ok(Zeroizing::new("xyzzy".into()))
-src/validation.rs:51:8: delete ! in get_and_validate_password
-src/validation.rs:41:5: replace get_and_validate_password -> Result<Zeroizing<String>> with Ok(Zeroizing::from(String::new()))
-src/validation.rs:41:5: replace get_and_validate_password -> Result<Zeroizing<String>> with Ok(Zeroizing::new("xyzzy".into()))

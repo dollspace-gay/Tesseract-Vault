@@ -22,7 +22,7 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```
 //! use tesseract_lib::metadata::{MetadataSanitizer, SanitizationOptions, TimestampStrategy};
 //!
 //! let sanitizer = MetadataSanitizer::new(SanitizationOptions {
@@ -33,9 +33,10 @@
 //!     ..Default::default()
 //! });
 //!
-//! // Sanitize file attributes before writing
-//! let mut attr = tesseract_lib::volume::filesystem::FileAttr::default();
-//! sanitizer.sanitize_file_attr(&mut attr);
+//! // Sanitize a timestamp value
+//! let original_timestamp = 1234567890u64;
+//! let sanitized = sanitizer.sanitize_timestamp(original_timestamp);
+//! assert_eq!(sanitized, 0); // Zero strategy sets all timestamps to 0
 //! ```
 
 mod sanitizer;

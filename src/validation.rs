@@ -2,6 +2,22 @@
 //!
 //! This module provides functionality for validating password strength
 //! and securely collecting passwords from users.
+//!
+//! # Password Strength Estimation
+//!
+//! On native platforms, uses [zxcvbn](https://github.com/dropbox/zxcvbn) for
+//! entropy-based password strength estimation. This approach recognizes common patterns:
+//!
+//! - Dictionary words and common passwords
+//! - Keyboard patterns (qwerty, 123456)
+//! - Repeated characters and sequences
+//! - L33t speak substitutions
+//! - Date patterns
+//!
+//! This is more effective than complexity rules (requiring uppercase, numbers, etc.)
+//! which users often satisfy with predictable patterns like "Password1!".
+//!
+//! On WASM, falls back to complexity-based validation since zxcvbn is not available.
 
 use crate::error::{CryptorError, Result};
 #[cfg(not(target_arch = "wasm32"))]
@@ -14,14 +30,21 @@ use zeroize::Zeroizing;
 /// Minimum password length required.
 pub const MIN_PASSWORD_LENGTH: usize = 12;
 
+/// Minimum zxcvbn score required (0-4 scale).
+/// Score::Three = "safely unguessable: moderate protection from offline slow-hash scenario"
+#[cfg(not(target_arch = "wasm32"))]
+pub const MIN_ENTROPY_SCORE: zxcvbn::Score = zxcvbn::Score::Three;
+
 /// Minimum complexity score (number of character types required).
+/// Used on WASM where zxcvbn is not available.
+#[cfg(target_arch = "wasm32")]
 pub const MIN_COMPLEXITY_SCORE: u8 = 3;
 
 /// Prompts the user for a password and validates it.
 ///
 /// This function:
 /// - Prompts for a password (hidden input)
-/// - Validates password strength
+/// - Validates password strength using entropy estimation
 /// - Prompts for confirmation
 /// - Verifies both passwords match using constant-time comparison
 ///
@@ -69,7 +92,91 @@ pub fn get_password() -> Result<Zeroizing<String>> {
     Ok(Zeroizing::new(read_password()?))
 }
 
-/// Enforces strong password requirements.
+/// Validates password strength using entropy estimation (native) or complexity rules (WASM).
+///
+/// # Native Platforms
+///
+/// Uses zxcvbn for entropy-based validation. Password must:
+/// - Be at least 12 characters long
+/// - Achieve a zxcvbn score of 3 or higher (0-4 scale)
+///
+/// Score meanings:
+/// - 0: Too guessable (risky password)
+/// - 1: Very guessable (protection from throttled online attacks)
+/// - 2: Somewhat guessable (protection from unthrottled online attacks)
+/// - 3: Safely unguessable (moderate protection from offline slow-hash scenario)
+/// - 4: Very unguessable (strong protection from offline slow-hash scenario)
+///
+/// # WASM
+///
+/// Falls back to complexity-based validation requiring:
+/// - At least 12 characters
+/// - At least 3 of: uppercase, lowercase, numbers, special characters
+///
+/// # Arguments
+///
+/// * `password` - The password to validate
+///
+/// # Errors
+///
+/// Returns an error with feedback if password doesn't meet requirements.
+///
+/// # Examples
+///
+/// ```
+/// # use tesseract_lib::validation::validate_password;
+/// // Strong random password - should pass
+/// assert!(validate_password("K7#mPx9@nL2$qR").is_ok());
+///
+/// // Too short
+/// assert!(validate_password("Short1!").is_err());
+///
+/// // Common password pattern - fails entropy check
+/// assert!(validate_password("Password123!").is_err());
+/// ```
+#[cfg(not(target_arch = "wasm32"))]
+pub fn validate_password(password: &str) -> Result<()> {
+    // Check minimum length first
+    if password.len() < MIN_PASSWORD_LENGTH {
+        return Err(CryptorError::PasswordValidation(format!(
+            "Password must be at least {} characters long.",
+            MIN_PASSWORD_LENGTH
+        )));
+    }
+
+    // Use zxcvbn for entropy-based strength estimation
+    let entropy = zxcvbn::zxcvbn(password, &[]);
+    let score = entropy.score();
+
+    if score < MIN_ENTROPY_SCORE {
+        // Build helpful feedback message
+        let mut feedback_parts = Vec::new();
+
+        if let Some(feedback) = entropy.feedback() {
+            if let Some(warning) = feedback.warning() {
+                feedback_parts.push(format!("Warning: {}", warning));
+            }
+            for suggestion in feedback.suggestions() {
+                feedback_parts.push(format!("Suggestion: {}", suggestion));
+            }
+        }
+
+        let feedback_msg = if feedback_parts.is_empty() {
+            "Password is too weak. Try using a longer passphrase with random words.".to_string()
+        } else {
+            feedback_parts.join(" ")
+        };
+
+        return Err(CryptorError::PasswordValidation(format!(
+            "Password strength score {} is below required minimum of {} (scale 0-4). {}",
+            u8::from(score), u8::from(MIN_ENTROPY_SCORE), feedback_msg
+        )));
+    }
+
+    Ok(())
+}
+
+/// WASM fallback: complexity-based password validation.
 ///
 /// Password must:
 /// - Be at least 12 characters long
@@ -78,22 +185,7 @@ pub fn get_password() -> Result<Zeroizing<String>> {
 ///   - Lowercase letters
 ///   - Numbers
 ///   - Special characters
-///
-/// # Arguments
-///
-/// * `password` - The password to validate
-///
-/// # Errors
-///
-/// Returns an error if password doesn't meet requirements.
-///
-/// # Examples
-///
-/// ```
-/// # use tesseract_lib::validation::validate_password;
-/// assert!(validate_password("Abcdef123!@#").is_ok());
-/// assert!(validate_password("weak").is_err());
-/// ```
+#[cfg(target_arch = "wasm32")]
 pub fn validate_password(password: &str) -> Result<()> {
     if password.len() < MIN_PASSWORD_LENGTH {
         return Err(CryptorError::PasswordValidation(format!(
@@ -129,45 +221,56 @@ mod tests {
     }
 
     #[test]
-    fn test_password_low_complexity() {
-        // Single character type - should fail
-        assert!(validate_password("alllowercase").is_err());
-        assert!(validate_password("ALLUPPERCASE").is_err());
-        assert!(validate_password("12345678901234567890").is_err());
+    fn test_weak_common_passwords() {
+        // These pass old complexity rules but fail entropy check
+        assert!(validate_password("Password123!").is_err());
+        assert!(validate_password("Qwerty12345!").is_err());
+        assert!(validate_password("Welcome2024!").is_err());
     }
 
     #[test]
-    fn test_password_two_types_no_special() {
-        // Two character types without special chars - should fail (need 3 types)
-        // This test catches the mutation: delete ! in validate_password
-        // which would incorrectly detect alphanumeric as special chars
-        assert!(validate_password("abcdefghij12").is_err()); // lower + number = 2
-        assert!(validate_password("ABCDEFGHIJ12").is_err()); // upper + number = 2
-        assert!(validate_password("abcdefABCDEF").is_err()); // lower + upper = 2
+    fn test_simple_patterns_rejected() {
+        // Repeated characters
+        assert!(validate_password("aaaaaaaaaaaa").is_err());
+        // Sequential patterns
+        assert!(validate_password("abcdefghijkl").is_err());
+        assert!(validate_password("123456789012").is_err());
     }
 
     #[test]
-    fn test_password_valid_three_types() {
-        assert!(validate_password("Abcdefghij12").is_ok()); // upper + lower + number
-        assert!(validate_password("Abcdefghij!!").is_ok()); // upper + lower + special
-        assert!(validate_password("abcdefghij12!").is_ok()); // lower + number + special
-        assert!(validate_password("ABCDEFGHIJ12!").is_ok()); // upper + number + special
+    fn test_strong_random_passwords() {
+        // Truly random passwords should pass
+        assert!(validate_password("K7#mPx9@nL2$qR").is_ok());
+        assert!(validate_password("xQ8!vN3@pM5$bH").is_ok());
+        assert!(validate_password("j2$Kf9#Lm4@Np7").is_ok());
     }
 
     #[test]
-    fn test_password_valid_four_types() {
-        assert!(validate_password("Abcd1234!@#$").is_ok());
-        assert!(validate_password("MyP@ssw0rd123").is_ok());
+    fn test_passphrases() {
+        // Long passphrases with some randomness should pass
+        assert!(validate_password("correct-horse-battery-staple-7").is_ok());
+        assert!(validate_password("purple-monkey-dishwasher-42!").is_ok());
     }
 
     #[test]
     fn test_password_exactly_min_length() {
-        assert!(validate_password("Abcdefgh123!").is_ok());
+        // 12 chars, random enough to pass
+        assert!(validate_password("k7#mPx9@nL2$").is_ok());
     }
 
     #[test]
     fn test_password_unicode() {
-        // Unicode characters count as special characters
-        assert!(validate_password("Abcdefgh123😀").is_ok());
+        // Unicode characters add entropy
+        assert!(validate_password("Abcdefgh123😀🎉").is_ok());
+    }
+
+    #[test]
+    fn test_entropy_score_feedback() {
+        // Verify weak passwords get rejected with helpful feedback
+        let result = validate_password("Password123!");
+        assert!(result.is_err());
+        if let Err(CryptorError::PasswordValidation(msg)) = result {
+            assert!(msg.contains("score"));
+        }
     }
 }

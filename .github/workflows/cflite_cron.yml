@@ -1,0 +1,54 @@
+name: ClusterFuzzLite Maintenance
+
+on:
+  schedule:
+    # Run daily at 2am UTC for corpus pruning
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  corpus-pruning:
+    name: Corpus Pruning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Build Fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+        with:
+          language: rust
+          sanitizer: address
+
+      - name: Run Corpus Pruning
+        id: prune
+        uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 60
+          mode: 'prune'
+          sanitizer: address
+
+  coverage:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    needs: corpus-pruning
+
+    steps:
+      - name: Build Fuzzers (Coverage)
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+        with:
+          language: rust
+          sanitizer: coverage
+
+      - name: Run Coverage
+        id: coverage
+        uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 60
+          mode: 'coverage'
+          sanitizer: coverage

@@ -258,8 +258,9 @@ pub struct StoredWipeConfig {
     pub last_attempt: u64,
     /// Lockout end timestamp (0 if not locked out)
     pub lockout_until: u64,
-    /// Used nonces (for replay protection)
-    pub used_nonces: Vec<[u8; COMMAND_NONCE_SIZE]>,
+    /// Used nonces with timestamps (for replay protection)
+    /// Each entry is (timestamp_seconds, nonce) - nonces older than MAX_COMMAND_AGE_SECS are pruned
+    pub used_nonces: Vec<(u64, [u8; COMMAND_NONCE_SIZE])>,
     /// When the config was created
     pub created_at: u64,
 }
@@ -345,18 +346,40 @@ impl StoredWipeConfig {
     }
 
     /// Checks if a nonce has been used (replay protection)
+    ///
+    /// Only checks nonces within the valid time window (MAX_COMMAND_AGE_SECS).
+    /// Expired nonces are not checked since commands with those timestamps would
+    /// fail the freshness check anyway.
     pub fn is_nonce_used(&self, nonce: &[u8; COMMAND_NONCE_SIZE]) -> bool {
-        self.used_nonces.iter().any(|n| n == nonce)
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let cutoff = now.saturating_sub(MAX_COMMAND_AGE_SECS);
+
+        self.used_nonces
+            .iter()
+            .filter(|(ts, _)| *ts >= cutoff) // Only check non-expired nonces
+            .any(|(_, n)| n == nonce)
     }
 
-    /// Records a used nonce
+    /// Records a used nonce with current timestamp
+    ///
+    /// Automatically prunes nonces older than the command validity window.
+    /// This eliminates the fixed 1000-nonce limit - storage is naturally bounded
+    /// by the time window (typically only a handful of commands per 5 minutes).
     pub fn record_nonce(&mut self, nonce: [u8; COMMAND_NONCE_SIZE]) {
-        self.used_nonces.push(nonce);
-        // Limit stored nonces to prevent unbounded growth
-        // Keep only the most recent 1000 nonces
-        if self.used_nonces.len() > 1000 {
-            self.used_nonces.drain(0..self.used_nonces.len() - 1000);
-        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Prune expired nonces (older than validity window)
+        let cutoff = now.saturating_sub(MAX_COMMAND_AGE_SECS);
+        self.used_nonces.retain(|(ts, _)| *ts >= cutoff);
+
+        // Add the new nonce with timestamp
+        self.used_nonces.push((now, nonce));
     }
 
     /// Serializes config to JSON
@@ -702,6 +725,29 @@ impl RemoteWipeManager {
     }
 
     /// Destroys all registered keyfiles
+    ///
+    /// # SSD Limitation Warning
+    ///
+    /// **IMPORTANT**: The multi-pass overwrite technique used here is **ineffective on SSDs**
+    /// due to wear leveling. SSD controllers write data to new physical blocks rather than
+    /// overwriting existing ones, meaning the original key material may persist in:
+    ///
+    /// - Unmapped blocks awaiting garbage collection
+    /// - Over-provisioned reserve space (7-28% of SSD capacity)
+    /// - Wear-leveled spare blocks
+    ///
+    /// For SSDs, the overwrite passes provide **defense-in-depth only**, not guaranteed
+    /// secure deletion. The actual security comes from Tesseract's encryption-first design:
+    ///
+    /// 1. All sensitive data is encrypted before being written to disk
+    /// 2. Deleting the encryption key renders all ciphertext unreadable
+    /// 3. Even if key material persists on SSD blocks, it requires physical extraction
+    ///
+    /// For complete assurance on SSDs, consider:
+    /// - Hardware Secure Erase (ATA/NVMe)
+    /// - Physical destruction of the drive
+    ///
+    /// See `docs/SSD_SECURE_DELETION.md` for detailed guidance.
     fn destroy_all_keyfiles(&self) -> std::result::Result<usize, WipeError> {
         let mut wiped = 0;
 
@@ -709,6 +755,8 @@ impl RemoteWipeManager {
             let path = Path::new(path_str);
             if path.exists() {
                 // Securely wipe the file before deletion
+                // NOTE: Effective on HDDs only. On SSDs, this provides defense-in-depth
+                // but does not guarantee secure deletion due to wear leveling.
                 if let Ok(metadata) = std::fs::metadata(path) {
                     let size = metadata.len() as usize;
                     if size > 0 {

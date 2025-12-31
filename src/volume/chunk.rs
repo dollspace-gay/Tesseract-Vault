@@ -250,8 +250,8 @@ impl ChunkMapper {
             });
         }
 
-        // Clamp end to volume size
-        let end_offset = (start_offset + length).min(self.volume_size);
+        // Clamp end to volume size (use saturating_add to prevent overflow)
+        let end_offset = start_offset.saturating_add(length).min(self.volume_size);
         let actual_length = end_offset - start_offset;
 
         let start = self.map_offset(start_offset)?;

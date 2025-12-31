@@ -567,8 +567,15 @@ impl DirEntry {
     }
 
     /// Returns the filename as a string
+    ///
+    /// Returns an error if:
+    /// - The name contains invalid UTF-8
+    /// - The name_len field exceeds the actual name buffer length
     pub fn name_str(&self) -> Result<&str, std::str::Utf8Error> {
-        std::str::from_utf8(&self.name[..self.name_len as usize])
+        // Bounds check to prevent panic if name_len > name.len()
+        // This can happen when deserializing malformed data
+        let actual_len = (self.name_len as usize).min(self.name.len());
+        std::str::from_utf8(&self.name[..actual_len])
     }
 
     /// Returns true if this entry is deleted

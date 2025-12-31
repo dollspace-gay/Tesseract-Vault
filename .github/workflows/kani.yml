@@ -1,0 +1,81 @@
+name: Kani Verification
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+permissions:
+  contents: read
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  kani-verify:
+    name: Kani Formal Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libglib2.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libcairo2-dev libpango1.0-dev libxdo-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Kani installation
+        id: cache-kani
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-kani
+          key: ${{ runner.os }}-kani-${{ hashFiles('.github/workflows/kani.yml') }}
+
+      - name: Install Kani
+        if: steps.cache-kani.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked kani-verifier
+          cargo kani setup
+
+      - name: Run Kani setup (if cached)
+        if: steps.cache-kani.outputs.cache-hit == 'true'
+        run: cargo kani setup
+
+      - name: Verify AES-GCM with Kani
+        run: |
+          echo "::group::Kani Verification - AES-GCM"
+          cargo kani --lib --harness verify_nonce_len
+          cargo kani --lib --harness verify_encrypt_no_panic
+          cargo kani --lib --harness verify_encrypt_rejects_invalid_nonce
+          cargo kani --lib --harness verify_decrypt_length
+          cargo kani --lib --harness verify_decrypt_minimum_length
+          echo "::endgroup::"
+
+      - name: Verify Argon2 KDF with Kani
+        run: |
+          echo "::group::Kani Verification - Argon2 KDF"
+          cargo kani --lib --harness verify_key_length
+          cargo kani --lib --harness verify_salt_generation
+          cargo kani --lib --harness verify_config_validity
+          echo "::endgroup::"

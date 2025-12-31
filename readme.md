@@ -1,6 +1,10 @@
 # Tesseract Vault
 
-![Formal Verification](https://github.com/dollspace-gay/Tesseract/actions/workflows/formal-verification.yml/badge.svg)
+[![Kani Verification](https://github.com/dollspace-gay/Tesseract/actions/workflows/kani.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/kani.yml)
+[![Wycheproof Tests](https://github.com/dollspace-gay/Tesseract/actions/workflows/wycheproof.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/wycheproof.yml)
+[![NIST CAVP Tests](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml)
+[![Security Audit](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml)
+[![Prusti Verification](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml)
 
 **Tesseract Vault** is an advanced encryption suite providing military-grade file and volume encryption with post-quantum cryptography support.
 

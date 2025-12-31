@@ -43,6 +43,7 @@ path = "src/main.rs"
 [[bin]]
 name = "tesseract-vault-gui"
 path = "src/bin/gui/main.rs"
+required-features = ["gui"]
 
 [[bin]]
 name = "tesseract-vault-register"

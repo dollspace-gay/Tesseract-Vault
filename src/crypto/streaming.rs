@@ -918,6 +918,7 @@ pub struct ChunkedEncryptor {
     key: zeroize::Zeroizing<[u8; 32]>,
     base_nonce: [u8; NONCE_LEN],
     header: StreamHeader,
+    #[cfg_attr(not(feature = "compression"), allow(dead_code))]
     compress: bool,
 }
 
@@ -1119,6 +1120,7 @@ impl ChunkedEncryptor {
         self.header.write_to(writer)?;
 
         let batch_size = batch_size.unwrap_or_else(rayon::current_num_threads);
+        #[cfg(feature = "compression")]
         let compress = self.compress;
 
         // Process chunks in batches
@@ -1428,6 +1430,7 @@ impl<R: Read> ChunkedDecryptor<R> {
         batch_size: Option<usize>,
     ) -> Result<()> {
         let batch_size = batch_size.unwrap_or_else(rayon::current_num_threads);
+        #[cfg(feature = "compression")]
         let compressed = self.header.compressed;
 
         // Process chunks in batches

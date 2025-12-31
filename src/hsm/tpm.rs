@@ -143,7 +143,7 @@ impl From<TpmError> for CryptorError {
 }
 
 /// PCR (Platform Configuration Register) index
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum PcrIndex {
     /// PCR 0: SRTM, BIOS, Host Platform Extensions, Embedded Option ROMs
@@ -183,7 +183,7 @@ pub enum PcrIndex {
 }
 
 /// Hash algorithm for PCR values
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum TpmHashAlgorithm {
     /// SHA-1 (legacy, not recommended)
     Sha1,
@@ -275,7 +275,7 @@ impl TpmKeyPolicy {
 }
 
 /// Sealed key blob from TPM
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SealedKeyBlob {
     /// The encrypted key data
     pub data: Vec<u8>,

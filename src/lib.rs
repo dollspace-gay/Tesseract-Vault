@@ -45,6 +45,9 @@ pub mod wasm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod hsm;
 
+#[cfg(target_os = "linux")]
+pub mod luks;
+
 // Re-export commonly used types
 pub use config::{CryptoConfig, MAGIC_BYTES, NONCE_LEN};
 pub use crypto::aes_gcm::AesGcmEncryptor;

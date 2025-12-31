@@ -87,3 +87,17 @@ jobs:
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_config_paranoid_is_stronger
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_no_parameter_overflow
           echo "::endgroup::"
+
+      # CRITICAL: Nonce uniqueness verification for streaming encryption
+      # Nonce reuse in AES-GCM is catastrophic - it breaks authentication and allows key recovery
+      - name: Verify streaming nonce safety
+        run: |
+          echo "::group::Kani Verification - Nonce Safety (CRITICAL)"
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_uniqueness_different_indices
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_counter_injection
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_structure
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_length
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_sequential_nonce_uniqueness
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_zero_index_valid
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_max_index_valid
+          echo "::endgroup::"

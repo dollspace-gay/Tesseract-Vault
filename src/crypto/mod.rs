@@ -18,6 +18,8 @@ mod pqc_tests;
 mod aes_gcm_kani;
 #[cfg(kani)]
 mod kdf_kani;
+#[cfg(kani)]
+mod streaming_kani;
 
 use crate::error::Result;
 use zeroize::Zeroizing;

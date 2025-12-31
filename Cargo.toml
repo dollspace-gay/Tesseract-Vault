@@ -12,7 +12,7 @@ categories = ["cryptography"]
 wasm-opt = ["-O4", "--enable-bulk-memory"]
 
 [features]
-default = ["post-quantum", "compression", "ctrlc", "yubikey", "encrypted-volumes"]
+default = ["post-quantum", "compression", "ctrlc", "yubikey", "encrypted-volumes", "gui"]
 encrypted-volumes = ["dep:fuser", "dep:winfsp"]  # Requires LLVM/Clang for WinFSP bindings
 ctrlc = ["dep:ctrlc"]
 
@@ -26,6 +26,9 @@ compression = ["dep:flate2"]  # Include DEFLATE compression support
 
 # Hardware Security Module support
 yubikey = ["dep:yubikey-hmac-otp"]  # YubiKey HMAC-SHA1 challenge-response
+
+# GUI support (eframe, image, etc.) - disabled for Kani verification due to rav1e nightly conflicts
+gui = ["dep:eframe", "dep:rfd", "dep:notify-rust", "dep:tray-icon", "dep:image"]
 
 [lib]
 name = "tesseract_lib"
@@ -90,14 +93,16 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 rpassword = "7.4"
 clap = { version = "4.5", features = ["derive"] }
 tempfile = "3.23"
-eframe = "0.29"
-rfd = "0.15"
 # Minimal tokio features - no networking to reduce attack surface
 tokio = { version = "1", features = ["fs", "sync", "rt", "rt-multi-thread", "macros", "time"] }
 dirs = "5.0"
-notify-rust = "4.11"
-tray-icon = "0.21"
-image = "0.25"
+
+# GUI dependencies (optional - disabled for Kani due to rav1e nightly conflicts)
+eframe = { version = "0.29", optional = true }
+rfd = { version = "0.15", optional = true }
+notify-rust = { version = "4.11", optional = true }
+tray-icon = { version = "0.21", optional = true }
+image = { version = "0.25", optional = true }
 
 # Hardware Security Module support
 yubikey-hmac-otp = { version = "0.10", optional = true }
@@ -106,7 +111,7 @@ yubikey-hmac-otp = { version = "0.10", optional = true }
 ctrlc = { version = "3.4", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["memoryapi", "winnt", "debugapi", "processthreadsapi", "winbase"] }
+winapi = { version = "0.3", features = ["memoryapi", "winnt", "debugapi", "processthreadsapi", "winbase", "winuser"] }
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Power", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
 windows-service = "0.7"
 winreg = "0.52"

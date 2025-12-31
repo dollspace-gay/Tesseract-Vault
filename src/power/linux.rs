@@ -186,11 +186,6 @@ fn run_inhibitor_monitor(
         }
     };
 
-    // Store the child process for cleanup
-    *inhibitor_process.lock().unwrap() = Some(
-        Command::new("true").spawn().unwrap() // Placeholder, we'll handle this differently
-    );
-
     let stdout = match child.stdout.take() {
         Some(s) => s,
         None => {
@@ -200,6 +195,10 @@ fn run_inhibitor_monitor(
             return;
         }
     };
+
+    // Store the child process for cleanup by stop()
+    // This allows external termination when blocking on readline
+    *inhibitor_process.lock().unwrap() = Some(child);
 
     let reader = BufReader::new(stdout);
 
@@ -244,8 +243,14 @@ fn run_inhibitor_monitor(
         }
     }
 
-    let _ = child.kill();
-    let _ = child.wait();
+    // Clean up the child process if it wasn't killed by stop()
+    if let Ok(mut guard) = inhibitor_process.lock() {
+        if let Some(ref mut child) = *guard {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        *guard = None;
+    }
 }
 
 /// Fallback polling-based monitor for systems without D-Bus tools

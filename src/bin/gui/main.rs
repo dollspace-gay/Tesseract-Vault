@@ -2036,12 +2036,8 @@ impl eframe::App for CryptorApp {
                             ui.add(egui::TextEdit::singleline(&mut self.password)
                                 .password(true)
                                 .desired_width(500.0));
-                            ui.add_space(10.0);
-                            // Placeholder button to match layout (not functional)
-                            let browse_btn = egui::Button::new("Browse...")
-                                .fill(egui::Color32::from_rgb(200, 230, 255))
-                                .min_size(egui::vec2(100.0, 30.0));
-                            ui.add_enabled(false, browse_btn);
+                            // Spacer to match Browse button width in file rows
+                            ui.add_space(120.0);
                         });
 
                         // Confirm password row (only for encryption)
@@ -2053,12 +2049,8 @@ impl eframe::App for CryptorApp {
                                 ui.add(egui::TextEdit::singleline(&mut self.confirm_password)
                                     .password(true)
                                     .desired_width(500.0));
-                                ui.add_space(10.0);
-                                // Placeholder button to match layout
-                                let browse_btn = egui::Button::new("Browse...")
-                                    .fill(egui::Color32::from_rgb(200, 230, 255))
-                                    .min_size(egui::vec2(100.0, 30.0));
-                                ui.add_enabled(false, browse_btn);
+                                // Spacer to match Browse button width in file rows
+                                ui.add_space(120.0);
                             });
                         }
 

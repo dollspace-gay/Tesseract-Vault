@@ -4,8 +4,9 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::io::{Read, Write};
 
 #[cfg(unix)]
@@ -28,6 +29,12 @@ pub struct DaemonServer {
 
     /// Socket path for IPC
     socket_path: PathBuf,
+
+    /// Shutdown signal receiver (optional, for service integration)
+    shutdown_rx: Option<mpsc::Receiver<()>>,
+
+    /// Shared shutdown flag for graceful termination
+    shutdown_flag: Arc<AtomicBool>,
 }
 
 impl DaemonServer {
@@ -39,7 +46,30 @@ impl DaemonServer {
             volume_manager: Arc::new(Mutex::new(VolumeManager::new())),
             mounts: Arc::new(Mutex::new(HashMap::new())),
             socket_path,
+            shutdown_rx: None,
+            shutdown_flag: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Create a new daemon server with a shutdown signal receiver
+    ///
+    /// The receiver will be checked periodically during the accept loop.
+    /// When a signal is received, the server will gracefully shut down.
+    pub fn new_with_shutdown(shutdown_rx: mpsc::Receiver<()>) -> Self {
+        let socket_path = Self::default_socket_path();
+
+        Self {
+            volume_manager: Arc::new(Mutex::new(VolumeManager::new())),
+            mounts: Arc::new(Mutex::new(HashMap::new())),
+            socket_path,
+            shutdown_rx: Some(shutdown_rx),
+            shutdown_flag: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Returns a clone of the shutdown flag for external monitoring
+    pub fn shutdown_flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.shutdown_flag)
     }
 
     /// Get the default socket path for the platform
@@ -86,9 +116,19 @@ impl DaemonServer {
         // Set up signal handlers for graceful shutdown
         Self::setup_signal_handlers();
 
-        for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
+        // Set non-blocking mode for graceful shutdown support
+        listener.set_nonblocking(true)?;
+
+        loop {
+            // Check for shutdown signal
+            if self.check_shutdown() {
+                println!("Received shutdown signal, cleaning up...");
+                self.cleanup_on_shutdown();
+                break;
+            }
+
+            match listener.accept() {
+                Ok((stream, _)) => {
                     let mounts = Arc::clone(&self.mounts);
                     let volume_manager = Arc::clone(&self.volume_manager);
 
@@ -98,6 +138,10 @@ impl DaemonServer {
                             eprintln!("Error handling client: {}", e);
                         }
                     });
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    // No connection available, sleep briefly and check shutdown
+                    std::thread::sleep(Duration::from_millis(100));
                 }
                 Err(e) => {
                     eprintln!("Connection error: {}", e);
@@ -117,9 +161,19 @@ impl DaemonServer {
         // Set up Ctrl+C handler for graceful shutdown
         Self::setup_signal_handlers();
 
-        for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
+        // Set non-blocking mode for graceful shutdown support
+        listener.set_nonblocking(true)?;
+
+        loop {
+            // Check for shutdown signal
+            if self.check_shutdown() {
+                println!("Received shutdown signal, cleaning up...");
+                self.cleanup_on_shutdown();
+                break;
+            }
+
+            match listener.accept() {
+                Ok((stream, _)) => {
                     let mounts = Arc::clone(&self.mounts);
                     let volume_manager = Arc::clone(&self.volume_manager);
 
@@ -130,6 +184,10 @@ impl DaemonServer {
                         }
                     });
                 }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    // No connection available, sleep briefly and check shutdown
+                    std::thread::sleep(Duration::from_millis(100));
+                }
                 Err(e) => {
                     eprintln!("Connection error: {}", e);
                 }
@@ -137,6 +195,55 @@ impl DaemonServer {
         }
 
         Ok(())
+    }
+
+    /// Checks if a shutdown signal has been received
+    fn check_shutdown(&self) -> bool {
+        // Check the atomic shutdown flag first (for external signals)
+        if self.shutdown_flag.load(Ordering::Relaxed) {
+            return true;
+        }
+
+        // Check the mpsc channel (for service integration)
+        if let Some(ref rx) = self.shutdown_rx {
+            match rx.try_recv() {
+                Ok(()) => {
+                    self.shutdown_flag.store(true, Ordering::Relaxed);
+                    return true;
+                }
+                Err(mpsc::TryRecvError::Empty) => {}
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    // Sender dropped, treat as shutdown
+                    self.shutdown_flag.store(true, Ordering::Relaxed);
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Cleans up all mounted volumes on shutdown
+    fn cleanup_on_shutdown(&self) {
+        let mut mgr = self.volume_manager.lock().unwrap();
+        let container_paths: Vec<PathBuf> = {
+            let mounts_guard = self.mounts.lock().unwrap();
+            mounts_guard.keys().cloned().collect()
+        };
+
+        for container_path in container_paths {
+            if let Err(e) = mgr.unmount(&container_path) {
+                eprintln!("Failed to unmount {:?}: {}", container_path, e);
+            } else {
+                println!("Unmounted {:?}", container_path);
+            }
+            self.mounts.lock().unwrap().remove(&container_path);
+        }
+    }
+
+    /// Signals the server to shut down gracefully
+    pub fn signal_shutdown(&self) {
+        self.shutdown_flag.store(true, Ordering::Relaxed);
     }
 
     /// Handle a client connection

@@ -129,9 +129,12 @@ fn run_service_impl() -> Result<(), Box<dyn std::error::Error>> {
         process_id: None,
     })?;
 
-    // Start the daemon server in a separate thread
-    let server_handle = std::thread::spawn(|| {
-        let server = DaemonServer::new();
+    // Create a channel to forward shutdown signal to the daemon server
+    let (daemon_shutdown_tx, daemon_shutdown_rx) = mpsc::channel();
+
+    // Start the daemon server in a separate thread with shutdown receiver
+    let server_handle = std::thread::spawn(move || {
+        let server = DaemonServer::new_with_shutdown(daemon_shutdown_rx);
         if let Err(e) = server.run() {
             eprintln!("Daemon server error: {}", e);
         }
@@ -148,7 +151,7 @@ fn run_service_impl() -> Result<(), Box<dyn std::error::Error>> {
         process_id: None,
     })?;
 
-    // Wait for shutdown signal
+    // Wait for shutdown signal from Service Control Manager
     let _ = shutdown_rx.recv();
 
     // Report that the service is stopping
@@ -162,9 +165,11 @@ fn run_service_impl() -> Result<(), Box<dyn std::error::Error>> {
         process_id: None,
     })?;
 
-    // TODO: Send shutdown signal to daemon server
-    // For now, we'll just terminate the thread
-    drop(server_handle);
+    // Send shutdown signal to daemon server
+    let _ = daemon_shutdown_tx.send(());
+
+    // Wait for the server thread to finish (with timeout)
+    let _ = server_handle.join();
 
     // Report that the service has stopped
     status_handle.set_service_status(ServiceStatus {

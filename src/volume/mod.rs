@@ -42,8 +42,14 @@ pub use operations::InMemoryFilesystem;
 pub use sector::{SectorCipher, SECTOR_SIZE_512, SECTOR_SIZE_4K};
 pub use io::{
     VolumeIO, VolumeIOError, StorageBackend, FileBackend, MemoryBackend, CacheStats, DEFAULT_CACHE_CAPACITY,
-    AsyncStorageBackend, AsyncResult, BlockingAdapter, S3Backend, DropboxBackend, AsyncMemoryBackend,
+    AsyncStorageBackend, AsyncResult, BlockingAdapter, AsyncMemoryBackend,
 };
+
+#[cfg(feature = "cloud-storage")]
+pub use s3_client::{S3Client, S3Config, S3Credentials, S3Region, S3StorageBackend};
+
+#[cfg(feature = "cloud-storage")]
+pub use dropbox_client::{DropboxClient, DropboxConfig, DropboxCredentials, DropboxStorageBackend};
 pub use format::{
     Superblock, Inode, InodeType, DirEntry as FsDirEntry, Bitmap,
     JournalEntry, JournalHeader, JournalOpType, FsState, FormatError,

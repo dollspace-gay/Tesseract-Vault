@@ -551,16 +551,20 @@ impl StreamHeader {
         // Version
         writer.write_all(&[FORMAT_VERSION])?;
 
-        // Calculate and write header size (placeholder for now)
-        let header_size_pos = 0u32; // We'll calculate this
-        writer.write_all(&header_size_pos.to_le_bytes())?;
+        // Calculate header size before writing
+        // Fixed: magic(8) + version(1) + size(4) + flags(1) + salt_len(2) + nonce(12)
+        //        + chunk_size(4) + total_chunks(8) + original_size(8) + metadata_len(2) = 50
+        // Variable: salt.len() + metadata.len()
+        let salt_bytes = self.salt.as_bytes();
+        let metadata_bytes = self.metadata.as_ref().map(|s| s.as_bytes()).unwrap_or(&[]);
+        let header_size = 50u32 + salt_bytes.len() as u32 + metadata_bytes.len() as u32;
+        writer.write_all(&header_size.to_le_bytes())?;
 
         // Flags (bit 0: compression)
         let flags = if self.compressed { 0x01 } else { 0x00 };
         writer.write_all(&[flags])?;
 
         // Salt
-        let salt_bytes = self.salt.as_bytes();
         let salt_len = salt_bytes.len() as u16;
         writer.write_all(&salt_len.to_le_bytes())?;
         writer.write_all(salt_bytes)?;
@@ -578,7 +582,6 @@ impl StreamHeader {
         writer.write_all(&self.original_size.to_le_bytes())?;
 
         // Metadata
-        let metadata_bytes = self.metadata.as_ref().map(|s| s.as_bytes()).unwrap_or(&[]);
         let metadata_len = metadata_bytes.len() as u16;
         writer.write_all(&metadata_len.to_le_bytes())?;
         writer.write_all(metadata_bytes)?;

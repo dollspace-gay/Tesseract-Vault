@@ -650,9 +650,11 @@ impl VolumeIOFilesystem {
         let mut entries = Vec::new();
         let mut bytes_read = 0u64;
 
-        // Read from direct blocks
-        for &block_num in &inode.direct {
-            if block_num == 0 || bytes_read >= inode.size {
+        // Read from all blocks (direct and indirect)
+        let total_blocks = inode.size.div_ceil(FS_BLOCK_SIZE as u64) as usize;
+        for block_idx in 0..total_blocks {
+            let block_num = self.get_data_block(&inode, block_idx)?;
+            if block_num == 0 {
                 break;
             }
 
@@ -660,9 +662,11 @@ impl VolumeIOFilesystem {
             let block_entries = self.parse_dir_entries(&block_data)?;
             entries.extend(block_entries);
             bytes_read += FS_BLOCK_SIZE as u64;
-        }
 
-        // TODO: Handle indirect blocks for large directories
+            if bytes_read >= inode.size {
+                break;
+            }
+        }
 
         Ok(entries)
     }
@@ -1046,10 +1050,288 @@ impl VolumeIOFilesystem {
             return Ok(block_num);
         }
 
-        // TODO: Implement double indirect allocation
+        // Double indirect allocation
+        let double_index = indirect_index - ptrs_per_block;
+        if double_index < ptrs_per_block * ptrs_per_block {
+            // Allocate double indirect block if needed
+            if inode.double_indirect == 0 {
+                inode.double_indirect = self.alloc_block()?;
+                self.write_block(inode.double_indirect as u64, &vec![0u8; FS_BLOCK_SIZE as usize])?;
+            }
+
+            let first_level = double_index / ptrs_per_block;
+            let second_level = double_index % ptrs_per_block;
+
+            // Read double indirect block
+            let mut double_block = self.read_block(inode.double_indirect as u64)?;
+            let first_ptr_offset = first_level * 4;
+            let mut first_block = u32::from_le_bytes([
+                double_block[first_ptr_offset],
+                double_block[first_ptr_offset + 1],
+                double_block[first_ptr_offset + 2],
+                double_block[first_ptr_offset + 3],
+            ]);
+
+            // Allocate first level indirect block if needed
+            if first_block == 0 {
+                first_block = self.alloc_block()?;
+                self.write_block(first_block as u64, &vec![0u8; FS_BLOCK_SIZE as usize])?;
+                let bytes = first_block.to_le_bytes();
+                double_block[first_ptr_offset..first_ptr_offset + 4].copy_from_slice(&bytes);
+                self.write_block(inode.double_indirect as u64, &double_block)?;
+            }
+
+            // Read first level indirect block
+            let mut second_block_data = self.read_block(first_block as u64)?;
+            let second_ptr_offset = second_level * 4;
+            let mut block_num = u32::from_le_bytes([
+                second_block_data[second_ptr_offset],
+                second_block_data[second_ptr_offset + 1],
+                second_block_data[second_ptr_offset + 2],
+                second_block_data[second_ptr_offset + 3],
+            ]);
+
+            // Allocate data block if needed
+            if block_num == 0 {
+                block_num = self.alloc_block()?;
+                let bytes = block_num.to_le_bytes();
+                second_block_data[second_ptr_offset..second_ptr_offset + 4].copy_from_slice(&bytes);
+                self.write_block(first_block as u64, &second_block_data)?;
+            }
+
+            return Ok(block_num);
+        }
+
         Err(VolumeIOFsError::InvalidOperation(
-            "Double indirect blocks not yet implemented".to_string(),
+            "File too large (triple indirect not supported)".to_string(),
         ))
+    }
+
+    /// Frees all indirect blocks associated with an inode
+    ///
+    /// This handles both single and double indirect blocks, freeing
+    /// all data blocks they reference as well as the indirect blocks themselves.
+    fn free_indirect_blocks(&self, inode: &Inode) -> Result<()> {
+        let ptrs_per_block = FS_BLOCK_SIZE as usize / 4;
+
+        // Free single indirect blocks
+        if inode.indirect != 0 {
+            let indirect_block = self.read_block(inode.indirect as u64)?;
+            for i in 0..ptrs_per_block {
+                let ptr_offset = i * 4;
+                let block_num = u32::from_le_bytes([
+                    indirect_block[ptr_offset],
+                    indirect_block[ptr_offset + 1],
+                    indirect_block[ptr_offset + 2],
+                    indirect_block[ptr_offset + 3],
+                ]);
+                if block_num != 0 {
+                    self.free_block(block_num)?;
+                }
+            }
+            self.free_block(inode.indirect)?;
+        }
+
+        // Free double indirect blocks
+        if inode.double_indirect != 0 {
+            let double_block = self.read_block(inode.double_indirect as u64)?;
+            for i in 0..ptrs_per_block {
+                let first_ptr_offset = i * 4;
+                let first_block = u32::from_le_bytes([
+                    double_block[first_ptr_offset],
+                    double_block[first_ptr_offset + 1],
+                    double_block[first_ptr_offset + 2],
+                    double_block[first_ptr_offset + 3],
+                ]);
+                if first_block != 0 {
+                    // Free all blocks referenced by this indirect block
+                    let second_block_data = self.read_block(first_block as u64)?;
+                    for j in 0..ptrs_per_block {
+                        let second_ptr_offset = j * 4;
+                        let block_num = u32::from_le_bytes([
+                            second_block_data[second_ptr_offset],
+                            second_block_data[second_ptr_offset + 1],
+                            second_block_data[second_ptr_offset + 2],
+                            second_block_data[second_ptr_offset + 3],
+                        ]);
+                        if block_num != 0 {
+                            self.free_block(block_num)?;
+                        }
+                    }
+                    // Free the first level indirect block
+                    self.free_block(first_block)?;
+                }
+            }
+            // Free the double indirect block itself
+            self.free_block(inode.double_indirect)?;
+        }
+
+        Ok(())
+    }
+
+    /// Collects all data blocks referenced by an inode (for fsck/bitmap operations)
+    ///
+    /// Returns a vector of all block numbers used by this inode, including
+    /// the indirect blocks themselves and all data blocks they reference.
+    fn collect_all_blocks(&self, inode: &Inode) -> Result<Vec<u32>> {
+        let mut blocks = Vec::new();
+        let ptrs_per_block = FS_BLOCK_SIZE as usize / 4;
+
+        // Direct blocks
+        for &block in &inode.direct {
+            if block != 0 {
+                blocks.push(block);
+            }
+        }
+
+        // Single indirect block and its data blocks
+        if inode.indirect != 0 {
+            blocks.push(inode.indirect);
+            let indirect_block = self.read_block(inode.indirect as u64)?;
+            for i in 0..ptrs_per_block {
+                let ptr_offset = i * 4;
+                let block_num = u32::from_le_bytes([
+                    indirect_block[ptr_offset],
+                    indirect_block[ptr_offset + 1],
+                    indirect_block[ptr_offset + 2],
+                    indirect_block[ptr_offset + 3],
+                ]);
+                if block_num != 0 {
+                    blocks.push(block_num);
+                }
+            }
+        }
+
+        // Double indirect block and all its referenced blocks
+        if inode.double_indirect != 0 {
+            blocks.push(inode.double_indirect);
+            let double_block = self.read_block(inode.double_indirect as u64)?;
+            for i in 0..ptrs_per_block {
+                let first_ptr_offset = i * 4;
+                let first_block = u32::from_le_bytes([
+                    double_block[first_ptr_offset],
+                    double_block[first_ptr_offset + 1],
+                    double_block[first_ptr_offset + 2],
+                    double_block[first_ptr_offset + 3],
+                ]);
+                if first_block != 0 {
+                    blocks.push(first_block);
+                    let second_block_data = self.read_block(first_block as u64)?;
+                    for j in 0..ptrs_per_block {
+                        let second_ptr_offset = j * 4;
+                        let block_num = u32::from_le_bytes([
+                            second_block_data[second_ptr_offset],
+                            second_block_data[second_ptr_offset + 1],
+                            second_block_data[second_ptr_offset + 2],
+                            second_block_data[second_ptr_offset + 3],
+                        ]);
+                        if block_num != 0 {
+                            blocks.push(block_num);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(blocks)
+    }
+
+    /// Frees indirect blocks when truncating a file
+    ///
+    /// Frees blocks from `start_block` onwards, handling indirect block cleanup.
+    fn free_blocks_from(&self, inode: &mut Inode, start_block: usize) -> Result<()> {
+        let ptrs_per_block = FS_BLOCK_SIZE as usize / 4;
+
+        // Free direct blocks from start_block onwards
+        for i in start_block..DIRECT_BLOCKS {
+            if inode.direct[i] != 0 {
+                self.free_block(inode.direct[i])?;
+                inode.direct[i] = 0;
+            }
+        }
+
+        // If we're truncating before indirect blocks, free all indirect blocks
+        if start_block <= DIRECT_BLOCKS {
+            self.free_indirect_blocks(inode)?;
+            return Ok(());
+        }
+
+        let indirect_start = start_block - DIRECT_BLOCKS;
+
+        // Handle single indirect block
+        if inode.indirect != 0 {
+            let mut indirect_block = self.read_block(inode.indirect as u64)?;
+            let mut any_remaining = false;
+
+            for i in 0..ptrs_per_block {
+                if i >= indirect_start && indirect_start < ptrs_per_block {
+                    let ptr_offset = i * 4;
+                    let block_num = u32::from_le_bytes([
+                        indirect_block[ptr_offset],
+                        indirect_block[ptr_offset + 1],
+                        indirect_block[ptr_offset + 2],
+                        indirect_block[ptr_offset + 3],
+                    ]);
+                    if block_num != 0 {
+                        self.free_block(block_num)?;
+                        indirect_block[ptr_offset..ptr_offset + 4].copy_from_slice(&[0, 0, 0, 0]);
+                    }
+                } else {
+                    let ptr_offset = i * 4;
+                    let block_num = u32::from_le_bytes([
+                        indirect_block[ptr_offset],
+                        indirect_block[ptr_offset + 1],
+                        indirect_block[ptr_offset + 2],
+                        indirect_block[ptr_offset + 3],
+                    ]);
+                    if block_num != 0 {
+                        any_remaining = true;
+                    }
+                }
+            }
+
+            if any_remaining {
+                self.write_block(inode.indirect as u64, &indirect_block)?;
+            } else {
+                self.free_block(inode.indirect)?;
+                inode.indirect = 0;
+            }
+        }
+
+        // Handle double indirect block (free entirely if we're truncating before it)
+        if indirect_start < ptrs_per_block && inode.double_indirect != 0 {
+            // Free entire double indirect structure
+            let double_block = self.read_block(inode.double_indirect as u64)?;
+            for i in 0..ptrs_per_block {
+                let first_ptr_offset = i * 4;
+                let first_block = u32::from_le_bytes([
+                    double_block[first_ptr_offset],
+                    double_block[first_ptr_offset + 1],
+                    double_block[first_ptr_offset + 2],
+                    double_block[first_ptr_offset + 3],
+                ]);
+                if first_block != 0 {
+                    let second_block_data = self.read_block(first_block as u64)?;
+                    for j in 0..ptrs_per_block {
+                        let second_ptr_offset = j * 4;
+                        let block_num = u32::from_le_bytes([
+                            second_block_data[second_ptr_offset],
+                            second_block_data[second_ptr_offset + 1],
+                            second_block_data[second_ptr_offset + 2],
+                            second_block_data[second_ptr_offset + 3],
+                        ]);
+                        if block_num != 0 {
+                            self.free_block(block_num)?;
+                        }
+                    }
+                    self.free_block(first_block)?;
+                }
+            }
+            self.free_block(inode.double_indirect)?;
+            inode.double_indirect = 0;
+        }
+
+        Ok(())
     }
 
     // ========================================================================
@@ -1261,13 +1543,14 @@ impl VolumeIOFilesystem {
         // Remove from parent directory
         self.dir_remove_entry(parent_inode, name)?;
 
-        // Free data blocks
+        // Free data blocks (direct blocks)
         for &block in &inode.direct {
             if block != 0 {
                 self.free_block(block)?;
             }
         }
-        // TODO: Free indirect blocks
+        // Free indirect blocks
+        self.free_indirect_blocks(&inode)?;
 
         // Free inode
         self.free_inode(inode_num)?;
@@ -1431,20 +1714,9 @@ impl VolumeIOFilesystem {
         let block_size = FS_BLOCK_SIZE as u64;
 
         if size < old_size {
-            // Shrinking - free unused blocks
-            let old_blocks = old_size.div_ceil(block_size);
-            let new_blocks = size.div_ceil(block_size);
-
-            for block_idx in new_blocks..old_blocks {
-                if block_idx < DIRECT_BLOCKS as u64 {
-                    let block_num = inode.direct[block_idx as usize];
-                    if block_num != 0 {
-                        self.free_block(block_num)?;
-                        inode.direct[block_idx as usize] = 0;
-                    }
-                }
-                // TODO: Handle indirect blocks
-            }
+            // Shrinking - free unused blocks (including indirect blocks)
+            let new_blocks = size.div_ceil(block_size) as usize;
+            self.free_blocks_from(&mut inode, new_blocks)?;
         }
         // When growing, blocks are allocated on write
 
@@ -1608,20 +1880,28 @@ impl VolumeIOFilesystem {
                 // Mark inode as used
                 used_inodes.set(inode_num as usize);
 
-                // Mark data blocks as used
-                for &block in &inode.direct {
-                    if block != 0 {
-                        if used_blocks.is_set(block as usize) {
-                            result.messages.push(format!(
-                                "Block {} referenced by multiple inodes (found in inode {})",
-                                block, inode_num
-                            ));
+                // Mark all data blocks as used (direct and indirect)
+                match self.collect_all_blocks(inode) {
+                    Ok(blocks) => {
+                        for block in blocks {
+                            if block != 0 {
+                                if used_blocks.is_set(block as usize) {
+                                    result.messages.push(format!(
+                                        "Block {} referenced by multiple inodes (found in inode {})",
+                                        block, inode_num
+                                    ));
+                                }
+                                used_blocks.set(block as usize);
+                            }
                         }
-                        used_blocks.set(block as usize);
+                    }
+                    Err(e) => {
+                        result.messages.push(format!(
+                            "Error collecting blocks for inode {}: {}",
+                            inode_num, e
+                        ));
                     }
                 }
-
-                // TODO: Handle indirect blocks
             }
         }
 
@@ -1887,16 +2167,17 @@ impl VolumeIOFilesystem {
         for inode_num in 1..=sb.total_inodes {
             if let Ok(inode) = self.read_inode(inode_num) {
                 if inode.nlink > 0 {
-                    // Mark data blocks as used
-                    for &block in &inode.direct {
-                        if block != 0 && block < sb.total_blocks as u32 {
-                            if !new_bitmap.is_set(block as usize) {
-                                blocks_recovered += 1;
+                    // Mark all data blocks as used (direct and indirect)
+                    if let Ok(blocks) = self.collect_all_blocks(&inode) {
+                        for block in blocks {
+                            if block != 0 && block < sb.total_blocks as u32 {
+                                if !new_bitmap.is_set(block as usize) {
+                                    blocks_recovered += 1;
+                                }
+                                new_bitmap.set(block as usize);
                             }
-                            new_bitmap.set(block as usize);
                         }
                     }
-                    // TODO: Handle indirect blocks
                 }
             }
         }
@@ -2120,13 +2401,14 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
         // Remove from parent directory
         self.dir_remove_entry(parent_inode, &name).map_err(|e| FilesystemError::Other(e.to_string()))?;
 
-        // Free data blocks
+        // Free data blocks (direct blocks)
         for &block in &inode.direct {
             if block != 0 {
                 self.free_block(block).map_err(|e| FilesystemError::Other(e.to_string()))?;
             }
         }
-        // TODO: Free indirect blocks
+        // Free indirect blocks
+        self.free_indirect_blocks(&inode).map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Free inode
         self.free_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
@@ -2304,21 +2586,11 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
             return Err(FilesystemError::IsADirectory(path.to_path_buf()));
         }
 
-        let old_blocks = inode.size.div_ceil(FS_BLOCK_SIZE as u64);
-        let new_blocks = size.div_ceil(FS_BLOCK_SIZE as u64);
+        let new_blocks = size.div_ceil(FS_BLOCK_SIZE as u64) as usize;
 
         if size < inode.size {
-            // Shrinking - free excess blocks
-            for i in new_blocks..old_blocks {
-                if (i as usize) < DIRECT_BLOCKS {
-                    let block = inode.direct[i as usize];
-                    if block != 0 {
-                        self.free_block(block).map_err(|e| FilesystemError::Other(e.to_string()))?;
-                        inode.direct[i as usize] = 0;
-                    }
-                }
-                // TODO: Handle indirect blocks
-            }
+            // Shrinking - free excess blocks (including indirect blocks)
+            self.free_blocks_from(&mut inode, new_blocks).map_err(|e| FilesystemError::Other(e.to_string()))?;
         }
 
         inode.size = size;

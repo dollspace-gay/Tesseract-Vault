@@ -108,7 +108,8 @@
       "Bash(chainlink show:*)",
       "Bash(chainlink close:*)",
       "Bash(ls:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(git config:*)"
     ],
     "deny": [],
     "ask": []

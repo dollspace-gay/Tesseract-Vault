@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2024-12-31
+
 ### Added
 - Hidden volumes GUI support for plausible deniability
 - Entropy-based password validation using zxcvbn
@@ -29,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Improved replay protection from count-based to time-window based nonce pruning
 - Enhanced password validation to reject common patterns like "Password123!"
+- Adjusted Codecov thresholds to 70%/80% (platform-specific code reduces CI coverage)
 
 ### Security
 - Added Kani formal verification harnesses for streaming encryption nonce handling
@@ -60,5 +63,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - NIST CAVP validation tests
 - Formal verification with Kani and Prusti
 
-[Unreleased]: https://github.com/dollspace-gay/Tesseract/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dollspace-gay/Tesseract/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/dollspace-gay/Tesseract/compare/v0.1.0...v1.5.0
 [0.1.0]: https://github.com/dollspace-gay/Tesseract/releases/tag/v0.1.0

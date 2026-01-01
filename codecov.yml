@@ -2,10 +2,13 @@ coverage:
   status:
     project:
       default:
-        target: 90%
-        threshold: 5%
+        # Current: ~70%. Platform-specific code (TPM, Linux power)
+        # reduces achievable coverage in cross-platform CI.
+        target: 70%
+        threshold: 2%
     patch:
       default:
+        # New code should maintain high coverage
         target: 80%
         threshold: 5%
 

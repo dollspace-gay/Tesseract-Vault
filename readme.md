@@ -13,7 +13,7 @@
 [![ClusterFuzzLite](https://github.com/dollspace-gay/Tesseract/actions/workflows/cflite_batch.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/cflite_batch.yml)
 [![Code Coverage](https://github.com/dollspace-gay/Tesseract/actions/workflows/coverage.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/coverage.yml)
 [![codecov](https://codecov.io/gh/dollspace-gay/Tesseract/branch/main/graph/badge.svg)](https://codecov.io/gh/dollspace-gay/Tesseract)
-
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/11678/badge)](https://www.bestpractices.dev/projects/11678)
 **Tesseract Vault** is an advanced encryption suite providing advanced file and volume encryption with post-quantum cryptography support.
 
 Built in Rust for performance and memory safety, Tesseract Vault employs state-of-the-art cryptographic practices to ensure your data remains confidential, tamper-proof, and secure against future quantum computing threats.

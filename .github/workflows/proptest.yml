@@ -79,6 +79,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-proptest-
 
+      # Windows DLL locking issues - ensure clean build
+      - name: Clean target directory
+        run: cargo clean
+        continue-on-error: true
+
       - name: Run proptest encryption tests
         run: |
           # Enable core features but skip GUI (requires Windows SDK setup)

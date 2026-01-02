@@ -78,6 +78,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-diff-
 
+      # Windows DLL locking issues - ensure clean build
+      - name: Clean target directory
+        run: cargo clean
+        continue-on-error: true
+
       - name: Run differential tests
         run: |
           # Enable core features but skip GUI (requires Windows SDK setup)

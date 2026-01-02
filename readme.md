@@ -72,6 +72,75 @@ cargo build --release
 
 The compiled binary will be located at [target/release/tesseract-vault](target/release/tesseract-vault) (or `tesseract-vault.exe` on Windows).
 
+### Installation
+
+#### From Source (Recommended)
+
+```bash
+# Install to ~/.cargo/bin (Linux) or %USERPROFILE%\.cargo\bin (Windows)
+cargo install --path .
+
+# Or with specific features
+cargo install --path . --no-default-features --features "post-quantum compression"
+
+# Install to custom location (honors CARGO_INSTALL_ROOT or --root)
+cargo install --path . --root /usr/local
+# Or via environment variable:
+CARGO_INSTALL_ROOT=/usr/local cargo install --path .
+```
+
+#### Manual Installation
+
+**Linux:**
+```bash
+# Build release binary
+cargo build --release
+
+# Install to system PATH
+sudo cp target/release/tesseract-vault /usr/local/bin/
+sudo cp target/release/tesseract-vault-gui /usr/local/bin/  # Optional GUI
+```
+
+**Windows:**
+```powershell
+# Build release binary
+cargo build --release
+
+# Copy to a directory in your PATH, or add target\release to PATH
+copy target\release\tesseract-vault.exe C:\Windows\System32\
+```
+
+### Uninstallation
+
+#### Cargo Install
+
+```bash
+cargo uninstall tesseract-vault
+```
+
+#### Manual Installation
+
+**Linux:**
+```bash
+sudo rm /usr/local/bin/tesseract-vault
+sudo rm /usr/local/bin/tesseract-vault-gui  # If installed
+```
+
+**Windows:**
+```powershell
+del C:\Windows\System32\tesseract-vault.exe
+```
+
+#### Service and File Associations
+
+```bash
+# Uninstall system service (if installed)
+tesseract daemon uninstall-service
+
+# Uninstall file associations (if installed)
+tesseract-vault-register uninstall
+```
+
 ### Build Features
 
 Tesseract Vault supports several optional feature flags:

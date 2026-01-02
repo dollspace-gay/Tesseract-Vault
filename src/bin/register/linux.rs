@@ -3,15 +3,13 @@
 // Linux Desktop Integration for Tesseract
 // Handles file associations and desktop entries via XDG standards
 
-#![cfg(target_os = "linux")]
-
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Install Linux file associations and desktop entries
-pub fn install(gui_exe: &PathBuf) -> std::io::Result<()> {
+pub fn install(gui_exe: &Path) -> std::io::Result<()> {
     let home = get_home_dir()?;
 
     // Ensure directories exist
@@ -82,7 +80,7 @@ fn get_home_dir() -> std::io::Result<PathBuf> {
 }
 
 /// Install .desktop file for the application
-fn install_desktop_file(apps_dir: &Path, gui_exe: &PathBuf) -> std::io::Result<()> {
+fn install_desktop_file(apps_dir: &Path, gui_exe: &Path) -> std::io::Result<()> {
     let desktop_content = format!(
         r#"[Desktop Entry]
 Version=1.0

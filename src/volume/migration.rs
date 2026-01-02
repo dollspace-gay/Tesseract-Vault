@@ -543,4 +543,285 @@ mod tests {
         // Should fail due to invalid header format
         assert!(result.is_err());
     }
+
+    // ========================================================================
+    // MigrationError Tests
+    // ========================================================================
+
+    #[test]
+    fn test_migration_error_from_header() {
+        use super::super::header::HeaderError;
+        let header_err = HeaderError::InvalidMagic;
+        let migration_err: MigrationError = header_err.into();
+        assert!(matches!(migration_err, MigrationError::Header(_)));
+    }
+
+    #[test]
+    fn test_migration_error_from_keyslot() {
+        use super::super::keyslot::KeySlotError;
+        let ks_err = KeySlotError::AllSlotsFull;
+        let migration_err: MigrationError = ks_err.into();
+        assert!(matches!(migration_err, MigrationError::KeySlot(_)));
+    }
+
+    #[test]
+    fn test_migration_error_display_pqc() {
+        use crate::error::CryptorError;
+        let pqc_err = MigrationError::Pqc(CryptorError::Cryptography("test".to_string()));
+        assert!(pqc_err.to_string().contains("PQC error"));
+    }
+
+    // ========================================================================
+    // MigrationBackup Tests
+    // ========================================================================
+
+    #[test]
+    fn test_migration_backup_save_success() {
+        use super::super::header::VolumeHeader;
+        use super::super::keyslot::KeySlots;
+
+        let salt = [0u8; 32];
+        let header_iv = [0u8; 12];
+        let header = VolumeHeader::new(1024 * 1024, 4096, salt, header_iv);
+        let keyslots = KeySlots::new();
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let backup_path = temp_file.path().to_path_buf();
+
+        let backup = MigrationBackup {
+            original_header: header,
+            original_keyslots: keyslots,
+            backup_path,
+        };
+
+        // Should succeed
+        let result = backup.save();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_migration_backup_fields() {
+        use super::super::header::VolumeHeader;
+        use super::super::keyslot::KeySlots;
+
+        let salt = [0u8; 32];
+        let header_iv = [0u8; 12];
+        let header = VolumeHeader::new(2 * 1024 * 1024, 4096, salt, header_iv);
+        let keyslots = KeySlots::new();
+
+        let backup = MigrationBackup {
+            original_header: header,
+            original_keyslots: keyslots,
+            backup_path: PathBuf::from("/test/backup.bak"),
+        };
+
+        assert_eq!(backup.backup_path, PathBuf::from("/test/backup.bak"));
+        assert_eq!(backup.original_header.volume_size(), 2 * 1024 * 1024);
+    }
+
+    // ========================================================================
+    // VolumeMigration Tests
+    // ========================================================================
+
+    #[test]
+    fn test_volume_migration_backup_path_none() {
+        let migration = VolumeMigration::new("/test/volume.vol");
+        assert!(migration.backup_path().is_none());
+    }
+
+    #[test]
+    fn test_volume_migration_new_with_string() {
+        let migration = VolumeMigration::new("test_volume.vol");
+        assert_eq!(migration.volume_path, PathBuf::from("test_volume.vol"));
+    }
+
+    #[test]
+    fn test_read_keyslots_invalid_data() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        // Write enough data for header + keyslots region but invalid format
+        temp_file.write_all(&[0xFFu8; 64 * 1024]).unwrap();
+        temp_file.flush().unwrap();
+
+        let migration = VolumeMigration::new(temp_file.path());
+        let result = migration.read_keyslots();
+        // Should fail due to invalid keyslots format
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_migrate_nonexistent_file() {
+        let mut migration = VolumeMigration::new("/nonexistent/path/volume.vol");
+        let result = migration.migrate("password");
+        match result {
+            Err(MigrationError::VolumeNotFound(_)) => {}
+            Err(other) => panic!("Expected VolumeNotFound, got: {}", other),
+            Ok(_) => panic!("Expected error, got Ok"),
+        }
+    }
+
+    // ========================================================================
+    // Result Type Tests
+    // ========================================================================
+
+    #[test]
+    fn test_result_type_ok() {
+        let result: Result<i32> = Ok(42);
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_result_type_err() {
+        let result: Result<i32> = Err(MigrationError::UnlockFailed);
+        assert!(result.is_err());
+    }
+
+    // ========================================================================
+    // Error Conversion Chain Tests
+    // ========================================================================
+
+    #[test]
+    fn test_error_chain_io_to_migration() {
+        fn may_fail() -> Result<()> {
+            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"))?
+        }
+
+        let result = may_fail();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_migration_error_already_migrated_message() {
+        let err = MigrationError::AlreadyMigrated;
+        let msg = err.to_string();
+        assert!(msg.contains("already V2"));
+        assert!(msg.contains("post-quantum"));
+    }
+
+    #[test]
+    fn test_migration_error_unlock_failed_message() {
+        let err = MigrationError::UnlockFailed;
+        let msg = err.to_string();
+        assert!(msg.contains("incorrect password") || msg.contains("unlock"));
+    }
+
+    #[test]
+    fn test_migration_error_verification_contains_detail() {
+        let err = MigrationError::VerificationFailed("custom detail here".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("custom detail here"));
+        assert!(msg.contains("verification failed") || msg.contains("Verification"));
+    }
+
+    #[test]
+    fn test_migration_error_serialization_contains_detail() {
+        let err = MigrationError::Serialization("bincode failed".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("bincode failed"));
+    }
+
+    #[test]
+    fn test_migration_error_encryption_contains_detail() {
+        let err = MigrationError::Encryption("AES-GCM error".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("AES-GCM error"));
+    }
+
+    #[test]
+    fn test_migration_error_backup_failed_contains_detail() {
+        let err = MigrationError::BackupFailed("disk full".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("disk full"));
+    }
+
+    // ========================================================================
+    // Full Migration Flow Tests (using temp containers)
+    // Note: Container::create() now creates V2 containers with PQC by default.
+    // These tests verify migration correctly detects and handles V2 containers.
+    // ========================================================================
+
+    #[test]
+    fn test_migrate_v2_container_returns_already_migrated() {
+        use super::super::container::Container;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let container_path = temp_dir.path().join("test_v2.scv");
+        let password = "TestPassword123!@#Strong";
+
+        // Container::create() creates V2 (PQC-enabled) containers by default
+        Container::create(&container_path, 1024 * 1024, password, 4096).unwrap();
+
+        // Migration should detect this is already V2 and return AlreadyMigrated
+        let mut migration = VolumeMigration::new(&container_path);
+        let result = migration.migrate(password);
+        match result {
+            Err(MigrationError::AlreadyMigrated) => {}
+            Err(other) => panic!("Expected AlreadyMigrated, got: {}", other),
+            Ok(_) => panic!("Expected AlreadyMigrated error, got Ok"),
+        }
+    }
+
+    #[test]
+    fn test_migrate_nonexistent_returns_volume_not_found() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let container_path = temp_dir.path().join("nonexistent.scv");
+
+        let mut migration = VolumeMigration::new(&container_path);
+        let result = migration.migrate("password");
+
+        match result {
+            Err(MigrationError::VolumeNotFound(_)) => {}
+            Err(other) => panic!("Expected VolumeNotFound, got: {}", other),
+            Ok(_) => panic!("Expected VolumeNotFound error, got Ok"),
+        }
+    }
+
+    #[test]
+    fn test_rollback_on_v2_container_fails_gracefully() {
+        use super::super::container::Container;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let container_path = temp_dir.path().join("test_rollback.scv");
+        let password = "TestPassword123!@#Strong";
+
+        // Create V2 container
+        Container::create(&container_path, 1024 * 1024, password, 4096).unwrap();
+
+        // Create migration but don't migrate (already V2)
+        let migration = VolumeMigration::new(&container_path);
+
+        // Rollback without migration should fail (no backup exists)
+        let rollback_result = migration.rollback();
+        assert!(rollback_result.is_err());
+    }
+
+    // ========================================================================
+    // Edge Case Tests
+    // ========================================================================
+
+    #[test]
+    fn test_migration_backup_path_initially_none() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let container_path = temp_dir.path().join("volume.scv");
+
+        // Before any migration, backup_path should be None
+        let migration = VolumeMigration::new(&container_path);
+        assert!(migration.backup_path().is_none());
+    }
+
+    #[test]
+    fn test_migration_manager_with_pathbuf() {
+        use std::path::PathBuf;
+
+        let path = PathBuf::from("/some/path/volume.scv");
+        let migration = VolumeMigration::new(&path);
+
+        // Should initialize correctly with PathBuf
+        assert!(migration.backup_path().is_none());
+    }
 }

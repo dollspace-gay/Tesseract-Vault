@@ -277,4 +277,106 @@ mod tests {
             assert!(msg.contains("score"));
         }
     }
+
+    #[test]
+    fn test_password_exactly_one_below_min_length() {
+        // 11 chars - one below minimum
+        let result = validate_password("K7#mPx9@nL2");
+        assert!(result.is_err());
+        if let Err(CryptorError::PasswordValidation(msg)) = result {
+            assert!(msg.contains("12"));
+        }
+    }
+
+    #[test]
+    fn test_empty_password() {
+        let result = validate_password("");
+        assert!(result.is_err());
+        if let Err(CryptorError::PasswordValidation(msg)) = result {
+            assert!(msg.contains("12"));
+        }
+    }
+
+    #[test]
+    fn test_single_char_password() {
+        let result = validate_password("a");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_keyboard_walk_patterns() {
+        // Common keyboard patterns should fail
+        assert!(validate_password("qwertyuiopasdf").is_err());
+        assert!(validate_password("asdfghjkl123!").is_err());
+        assert!(validate_password("zxcvbnm12345!").is_err());
+    }
+
+    #[test]
+    fn test_date_patterns() {
+        // Simple date patterns should fail entropy check
+        assert!(validate_password("12/25/202412").is_err());
+        assert!(validate_password("01012024pass").is_err());
+    }
+
+    #[test]
+    fn test_leet_speak_common_words() {
+        // L33t speak of common words should fail
+        assert!(validate_password("P@ssw0rd2024!").is_err());
+        assert!(validate_password("S3cur1ty!123").is_err());
+    }
+
+    #[test]
+    fn test_very_long_random_password() {
+        // Very long random password should definitely pass
+        let long_pass = "K7#mPx9@nL2$qRvB5&hJ8*tY1!wU4%eD0^";
+        assert!(validate_password(long_pass).is_ok());
+    }
+
+    #[test]
+    fn test_mixed_case_numbers_symbols() {
+        // Truly random mix should pass
+        assert!(validate_password("Xq7!Bm2@Np5#Hk").is_ok());
+    }
+
+    #[test]
+    fn test_high_entropy_passphrase_with_spaces() {
+        // Passphrases with spaces can be strong
+        assert!(validate_password("correct horse staple battery!7").is_ok());
+    }
+
+    #[test]
+    fn test_only_lowercase_long() {
+        // Even long lowercase-only might fail due to patterns
+        let result = validate_password("abcdefghijklmnopqrst");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_only_uppercase_long() {
+        let result = validate_password("ABCDEFGHIJKLMNOPQRST");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_only_numbers_long() {
+        let result = validate_password("12345678901234567890");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_repeated_pattern() {
+        // Repeated patterns should fail
+        assert!(validate_password("Ab1!Ab1!Ab1!Ab1!").is_err());
+    }
+
+    #[test]
+    fn test_min_password_length_constant() {
+        assert_eq!(MIN_PASSWORD_LENGTH, 12);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn test_min_entropy_score_constant() {
+        assert_eq!(MIN_ENTROPY_SCORE, zxcvbn::Score::Three);
+    }
 }

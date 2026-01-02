@@ -3136,4 +3136,762 @@ mod tests {
         // Should not panic
         fs.sync().unwrap();
     }
+
+    // ========================================================================
+    // FsckResult Tests
+    // ========================================================================
+
+    #[test]
+    fn test_fsck_result_default() {
+        let result = FsckResult::default();
+        assert_eq!(result.inodes_scanned, 0);
+        assert_eq!(result.corrupted_inodes, 0);
+        assert_eq!(result.orphaned_blocks, 0);
+        assert_eq!(result.lost_inodes, 0);
+        assert_eq!(result.bitmap_errors, 0);
+        assert_eq!(result.errors_repaired, 0);
+        assert!(result.messages.is_empty());
+    }
+
+    #[test]
+    fn test_fsck_result_is_clean_true() {
+        let result = FsckResult::default();
+        assert!(result.is_clean());
+    }
+
+    #[test]
+    fn test_fsck_result_is_clean_false_corrupted() {
+        let mut result = FsckResult::default();
+        result.corrupted_inodes = 1;
+        assert!(!result.is_clean());
+    }
+
+    #[test]
+    fn test_fsck_result_is_clean_false_orphaned() {
+        let mut result = FsckResult::default();
+        result.orphaned_blocks = 1;
+        assert!(!result.is_clean());
+    }
+
+    #[test]
+    fn test_fsck_result_is_clean_false_lost() {
+        let mut result = FsckResult::default();
+        result.lost_inodes = 1;
+        assert!(!result.is_clean());
+    }
+
+    #[test]
+    fn test_fsck_result_is_clean_false_bitmap() {
+        let mut result = FsckResult::default();
+        result.bitmap_errors = 1;
+        assert!(!result.is_clean());
+    }
+
+    #[test]
+    fn test_fsck_result_debug() {
+        let result = FsckResult::default();
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("FsckResult"));
+    }
+
+    // ========================================================================
+    // VolumeIOFsError Tests
+    // ========================================================================
+
+    #[test]
+    fn test_error_display_volumeio() {
+        let err = VolumeIOFsError::VolumeIO(VolumeIOError::InvalidOffset {
+            offset: 100,
+            volume_size: 50,
+        });
+        assert!(err.to_string().contains("Volume I/O error"));
+    }
+
+    #[test]
+    fn test_error_display_serialization() {
+        let err = VolumeIOFsError::Serialization("parse error".to_string());
+        assert!(err.to_string().contains("Serialization error"));
+        assert!(err.to_string().contains("parse error"));
+    }
+
+    #[test]
+    fn test_error_display_invalid_operation() {
+        let err = VolumeIOFsError::InvalidOperation("cannot proceed".to_string());
+        assert!(err.to_string().contains("Invalid operation"));
+        assert!(err.to_string().contains("cannot proceed"));
+    }
+
+    #[test]
+    fn test_error_display_lock_poisoned() {
+        let err = VolumeIOFsError::LockPoisoned;
+        assert!(err.to_string().contains("Lock poisoned"));
+    }
+
+    #[test]
+    fn test_error_display_not_initialized() {
+        let err = VolumeIOFsError::NotInitialized;
+        assert!(err.to_string().contains("not initialized"));
+    }
+
+    #[test]
+    fn test_error_display_filesystem() {
+        let err = VolumeIOFsError::Filesystem(FilesystemError::NotFound(PathBuf::from("/test")));
+        assert!(err.to_string().contains("Filesystem error"));
+    }
+
+    #[test]
+    fn test_error_from_volumeio() {
+        let vol_err = VolumeIOError::InvalidOffset {
+            offset: 0,
+            volume_size: 100,
+        };
+        let err: VolumeIOFsError = vol_err.into();
+        assert!(matches!(err, VolumeIOFsError::VolumeIO(_)));
+    }
+
+    #[test]
+    fn test_error_from_filesystem() {
+        let fs_err = FilesystemError::NotFound(PathBuf::from("/test"));
+        let err: VolumeIOFsError = fs_err.into();
+        assert!(matches!(err, VolumeIOFsError::Filesystem(_)));
+    }
+
+    // ========================================================================
+    // VolumeIOFilesystem Basic Tests
+    // ========================================================================
+
+    #[test]
+    fn test_new_uninitialized() {
+        let fs = VolumeIOFilesystem::new();
+        // Should fail since not initialized
+        let result = fs.get_superblock();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_default_trait() {
+        let fs = VolumeIOFilesystem::default();
+        // Should be same as new()
+        let result = fs.get_superblock();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_root_inode_constant() {
+        let fs = create_test_fs(1);
+        assert_eq!(fs.root_inode(), ROOT_INODE);
+    }
+
+    // ========================================================================
+    // Inode-based API Tests (for FUSE/WinFsp)
+    // ========================================================================
+
+    #[test]
+    fn test_get_inode() {
+        let fs = create_test_fs(1);
+        let inode = fs.get_inode(ROOT_INODE).unwrap();
+        assert!(inode.is_dir());
+    }
+
+    #[test]
+    fn test_set_inode() {
+        let mut fs = create_test_fs(1);
+
+        // Create a file
+        fs.create(Path::new("/test.txt"), 0o644).unwrap();
+
+        // Look up the inode number
+        let inode_num = fs.lookup(ROOT_INODE, "test.txt").unwrap().unwrap();
+
+        // Modify and set
+        let mut inode = fs.get_inode(inode_num).unwrap();
+        inode.uid = 1000;
+        fs.set_inode(inode_num, &inode).unwrap();
+
+        // Verify
+        let updated = fs.get_inode(inode_num).unwrap();
+        assert_eq!(updated.uid, 1000);
+    }
+
+    #[test]
+    fn test_lookup_found() {
+        let mut fs = create_test_fs(1);
+        fs.create(Path::new("/lookup_test.txt"), 0o644).unwrap();
+
+        let result = fs.lookup(ROOT_INODE, "lookup_test.txt").unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_lookup_not_found() {
+        let fs = create_test_fs(1);
+        let result = fs.lookup(ROOT_INODE, "nonexistent.txt").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_readdir_by_inode() {
+        let mut fs = create_test_fs(1);
+        fs.create(Path::new("/file1.txt"), 0o644).unwrap();
+        fs.mkdir(Path::new("/dir1"), 0o755).unwrap();
+
+        let entries = fs.readdir_by_inode(ROOT_INODE).unwrap();
+        assert!(entries.len() >= 4); // . .. file1.txt dir1
+    }
+
+    #[test]
+    fn test_read_write_by_inode() {
+        let mut fs = create_test_fs(1);
+        fs.create(Path::new("/inode_rw.txt"), 0o644).unwrap();
+
+        let inode_num = fs.lookup(ROOT_INODE, "inode_rw.txt").unwrap().unwrap();
+
+        let data = b"test data via inode";
+        let written = fs.write_by_inode(inode_num, 0, data).unwrap();
+        assert_eq!(written, data.len() as u32);
+
+        let read = fs.read_by_inode(inode_num, 0, data.len() as u32).unwrap();
+        assert_eq!(&read, data);
+    }
+
+    #[test]
+    fn test_create_file_inode_api() {
+        let fs = create_test_fs(1);
+        let inode_num = fs.create_file(ROOT_INODE, "new_file.txt", 0o644).unwrap();
+
+        let inode = fs.get_inode(inode_num).unwrap();
+        assert!(!inode.is_dir());
+        assert_eq!(inode.permissions(), 0o644);
+    }
+
+    #[test]
+    fn test_create_file_already_exists() {
+        let fs = create_test_fs(1);
+        fs.create_file(ROOT_INODE, "dup.txt", 0o644).unwrap();
+
+        let result = fs.create_file(ROOT_INODE, "dup.txt", 0o644);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_directory_inode_api() {
+        let fs = create_test_fs(1);
+        let inode_num = fs.create_directory(ROOT_INODE, "new_dir", 0o755).unwrap();
+
+        let inode = fs.get_inode(inode_num).unwrap();
+        assert!(inode.is_dir());
+    }
+
+    #[test]
+    fn test_create_directory_already_exists() {
+        let fs = create_test_fs(1);
+        fs.create_directory(ROOT_INODE, "dup_dir", 0o755).unwrap();
+
+        let result = fs.create_directory(ROOT_INODE, "dup_dir", 0o755);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_remove_file_inode_api() {
+        let fs = create_test_fs(1);
+        fs.create_file(ROOT_INODE, "to_remove.txt", 0o644).unwrap();
+
+        fs.remove_file(ROOT_INODE, "to_remove.txt").unwrap();
+
+        let result = fs.lookup(ROOT_INODE, "to_remove.txt").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_remove_file_not_found() {
+        let fs = create_test_fs(1);
+        let result = fs.remove_file(ROOT_INODE, "nonexistent.txt");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_remove_file_is_directory() {
+        let fs = create_test_fs(1);
+        fs.create_directory(ROOT_INODE, "a_dir", 0o755).unwrap();
+
+        let result = fs.remove_file(ROOT_INODE, "a_dir");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_remove_directory_inode_api() {
+        let fs = create_test_fs(1);
+        fs.create_directory(ROOT_INODE, "to_rmdir", 0o755).unwrap();
+
+        fs.remove_directory(ROOT_INODE, "to_rmdir").unwrap();
+
+        let result = fs.lookup(ROOT_INODE, "to_rmdir").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_remove_directory_not_found() {
+        let fs = create_test_fs(1);
+        let result = fs.remove_directory(ROOT_INODE, "nonexistent_dir");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_remove_directory_not_a_dir() {
+        let fs = create_test_fs(1);
+        fs.create_file(ROOT_INODE, "a_file.txt", 0o644).unwrap();
+
+        let result = fs.remove_directory(ROOT_INODE, "a_file.txt");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_remove_directory_not_empty() {
+        let fs = create_test_fs(1);
+        fs.create_directory(ROOT_INODE, "nonempty", 0o755).unwrap();
+        let dir_inode = fs.lookup(ROOT_INODE, "nonempty").unwrap().unwrap();
+        fs.create_file(dir_inode, "child.txt", 0o644).unwrap();
+
+        let result = fs.remove_directory(ROOT_INODE, "nonempty");
+        assert!(result.is_err());
+    }
+
+    // ========================================================================
+    // rename_entry Tests
+    // ========================================================================
+
+    #[test]
+    fn test_rename_entry_file() {
+        let fs = create_test_fs(1);
+        fs.create_file(ROOT_INODE, "old_name.txt", 0o644).unwrap();
+
+        fs.rename_entry(ROOT_INODE, "old_name.txt", ROOT_INODE, "new_name.txt")
+            .unwrap();
+
+        assert!(fs.lookup(ROOT_INODE, "old_name.txt").unwrap().is_none());
+        assert!(fs.lookup(ROOT_INODE, "new_name.txt").unwrap().is_some());
+    }
+
+    #[test]
+    fn test_rename_entry_directory() {
+        let fs = create_test_fs(1);
+        fs.create_directory(ROOT_INODE, "old_dir", 0o755).unwrap();
+
+        fs.rename_entry(ROOT_INODE, "old_dir", ROOT_INODE, "new_dir")
+            .unwrap();
+
+        assert!(fs.lookup(ROOT_INODE, "old_dir").unwrap().is_none());
+        assert!(fs.lookup(ROOT_INODE, "new_dir").unwrap().is_some());
+    }
+
+    #[test]
+    fn test_rename_entry_to_different_parent() {
+        let fs = create_test_fs(1);
+        fs.create_file(ROOT_INODE, "moveme.txt", 0o644).unwrap();
+        fs.create_directory(ROOT_INODE, "target_dir", 0o755).unwrap();
+
+        let target_inode = fs.lookup(ROOT_INODE, "target_dir").unwrap().unwrap();
+        fs.rename_entry(ROOT_INODE, "moveme.txt", target_inode, "moved.txt")
+            .unwrap();
+
+        assert!(fs.lookup(ROOT_INODE, "moveme.txt").unwrap().is_none());
+        assert!(fs.lookup(target_inode, "moved.txt").unwrap().is_some());
+    }
+
+    #[test]
+    fn test_rename_entry_overwrite_file() {
+        let fs = create_test_fs(1);
+        fs.create_file(ROOT_INODE, "src.txt", 0o644).unwrap();
+        fs.create_file(ROOT_INODE, "dest.txt", 0o644).unwrap();
+
+        // Rename src.txt to dest.txt (should overwrite)
+        fs.rename_entry(ROOT_INODE, "src.txt", ROOT_INODE, "dest.txt")
+            .unwrap();
+
+        assert!(fs.lookup(ROOT_INODE, "src.txt").unwrap().is_none());
+        assert!(fs.lookup(ROOT_INODE, "dest.txt").unwrap().is_some());
+    }
+
+    #[test]
+    fn test_rename_entry_overwrite_nonempty_dir() {
+        let fs = create_test_fs(1);
+        fs.create_directory(ROOT_INODE, "src_dir", 0o755).unwrap();
+        fs.create_directory(ROOT_INODE, "dest_dir", 0o755).unwrap();
+
+        let dest_inode = fs.lookup(ROOT_INODE, "dest_dir").unwrap().unwrap();
+        fs.create_file(dest_inode, "child.txt", 0o644).unwrap();
+
+        // Should fail because dest_dir is not empty
+        let result = fs.rename_entry(ROOT_INODE, "src_dir", ROOT_INODE, "dest_dir");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rename_entry_not_found() {
+        let fs = create_test_fs(1);
+        let result = fs.rename_entry(ROOT_INODE, "nonexistent", ROOT_INODE, "target");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rename_directory_updates_dotdot() {
+        let fs = create_test_fs(1);
+        fs.create_directory(ROOT_INODE, "src_parent", 0o755).unwrap();
+        fs.create_directory(ROOT_INODE, "dest_parent", 0o755).unwrap();
+
+        let src_parent = fs.lookup(ROOT_INODE, "src_parent").unwrap().unwrap();
+        let dest_parent = fs.lookup(ROOT_INODE, "dest_parent").unwrap().unwrap();
+
+        fs.create_directory(src_parent, "child_dir", 0o755).unwrap();
+
+        // Move child_dir to dest_parent
+        fs.rename_entry(src_parent, "child_dir", dest_parent, "child_dir")
+            .unwrap();
+
+        // Check .. entry in child_dir points to dest_parent
+        let child_inode = fs.lookup(dest_parent, "child_dir").unwrap().unwrap();
+        let entries = fs.readdir_by_inode(child_inode).unwrap();
+        let dotdot = entries.iter().find(|e| e.name_str().ok() == Some(".."));
+        assert!(dotdot.is_some());
+        assert_eq!(dotdot.unwrap().inode, dest_parent);
+    }
+
+    // ========================================================================
+    // truncate_file Tests
+    // ========================================================================
+
+    #[test]
+    fn test_truncate_file_shrink() {
+        let fs = create_test_fs(1);
+        fs.create_file(ROOT_INODE, "trunc.txt", 0o644).unwrap();
+        let inode_num = fs.lookup(ROOT_INODE, "trunc.txt").unwrap().unwrap();
+
+        // Write some data
+        let data = vec![0x42u8; 10000];
+        fs.write_by_inode(inode_num, 0, &data).unwrap();
+
+        // Truncate to smaller size
+        fs.truncate_file(inode_num, 100).unwrap();
+
+        let inode = fs.get_inode(inode_num).unwrap();
+        assert_eq!(inode.size, 100);
+    }
+
+    #[test]
+    fn test_truncate_file_grow() {
+        let fs = create_test_fs(1);
+        fs.create_file(ROOT_INODE, "grow.txt", 0o644).unwrap();
+        let inode_num = fs.lookup(ROOT_INODE, "grow.txt").unwrap().unwrap();
+
+        // Truncate to larger size
+        fs.truncate_file(inode_num, 1000).unwrap();
+
+        let inode = fs.get_inode(inode_num).unwrap();
+        assert_eq!(inode.size, 1000);
+    }
+
+    #[test]
+    fn test_truncate_file_is_directory() {
+        let fs = create_test_fs(1);
+        // Truncating a directory should fail
+        let result = fs.truncate_file(ROOT_INODE, 100);
+        assert!(result.is_err());
+    }
+
+    // ========================================================================
+    // inode_to_attr Tests
+    // ========================================================================
+
+    #[test]
+    fn test_inode_to_attr_file() {
+        let fs = create_test_fs(1);
+        fs.create_file(ROOT_INODE, "attr_test.txt", 0o644).unwrap();
+        let inode_num = fs.lookup(ROOT_INODE, "attr_test.txt").unwrap().unwrap();
+        let inode = fs.get_inode(inode_num).unwrap();
+
+        let attr = fs.inode_to_attr(&inode);
+        assert_eq!(attr.file_type, FileType::RegularFile);
+        assert_eq!(attr.perm, 0o644);
+    }
+
+    #[test]
+    fn test_inode_to_attr_directory() {
+        let fs = create_test_fs(1);
+        let inode = fs.get_inode(ROOT_INODE).unwrap();
+
+        let attr = fs.inode_to_attr(&inode);
+        assert_eq!(attr.file_type, FileType::Directory);
+    }
+
+    // ========================================================================
+    // fsck Tests
+    // ========================================================================
+
+    #[test]
+    fn test_fsck_runs_on_new_filesystem() {
+        let fs = create_test_fs(1);
+        let result = fs.fsck().unwrap();
+
+        // Verify fsck executes and scans inodes
+        assert!(result.inodes_scanned > 0);
+        assert!(!result.messages.is_empty());
+    }
+
+    #[test]
+    fn test_fsck_after_operations() {
+        let mut fs = create_test_fs(1);
+
+        // Do some operations
+        fs.create(Path::new("/test.txt"), 0o644).unwrap();
+        fs.write(Path::new("/test.txt"), 0, b"hello").unwrap();
+        fs.mkdir(Path::new("/testdir"), 0o755).unwrap();
+
+        // Verify fsck runs without error
+        let result = fs.fsck().unwrap();
+        assert!(result.inodes_scanned > 0);
+    }
+
+    #[test]
+    fn test_fsck_repair_runs() {
+        let fs = create_test_fs(1);
+        let result = fs.fsck_repair().unwrap();
+
+        // Verify fsck_repair executes
+        assert!(result.inodes_scanned > 0);
+    }
+
+    // ========================================================================
+    // get_statfs Tests
+    // ========================================================================
+
+    #[test]
+    fn test_get_statfs() {
+        let fs = create_test_fs(1);
+        let (total, free, avail) = fs.get_statfs().unwrap();
+
+        assert!(total > 0);
+        assert!(free > 0);
+        assert_eq!(free, avail); // In our implementation these are equal
+        assert!(free <= total);
+    }
+
+    // ========================================================================
+    // EncryptedFilesystem trait Tests
+    // ========================================================================
+
+    #[test]
+    fn test_utimens() {
+        let mut fs = create_test_fs(1);
+        fs.create(Path::new("/utime.txt"), 0o644).unwrap();
+
+        let new_atime = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000000);
+        let new_mtime = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(2000000);
+
+        fs.utimens(Path::new("/utime.txt"), Some(new_atime), Some(new_mtime))
+            .unwrap();
+
+        let attr = fs.getattr(Path::new("/utime.txt")).unwrap();
+        assert_eq!(
+            attr.atime
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            1000000
+        );
+        assert_eq!(
+            attr.mtime
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            2000000
+        );
+    }
+
+    #[test]
+    fn test_flush() {
+        let mut fs = create_test_fs(1);
+        fs.create(Path::new("/flush_test.txt"), 0o644).unwrap();
+        fs.write(Path::new("/flush_test.txt"), 0, b"data").unwrap();
+
+        // flush() wraps sync()
+        fs.flush().unwrap();
+    }
+
+    // ========================================================================
+    // Error Path Tests
+    // ========================================================================
+
+    #[test]
+    fn test_getattr_not_found() {
+        let fs = create_test_fs(1);
+        let result = fs.getattr(Path::new("/nonexistent"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_not_found() {
+        let fs = create_test_fs(1);
+        let result = fs.read(Path::new("/nonexistent"), 0, 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_write_not_found() {
+        let mut fs = create_test_fs(1);
+        let result = fs.write(Path::new("/nonexistent"), 0, b"data");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mkdir_parent_not_found() {
+        let mut fs = create_test_fs(1);
+        let result = fs.mkdir(Path::new("/nonexistent/child"), 0o755);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unlink_not_found() {
+        let mut fs = create_test_fs(1);
+        let result = fs.unlink(Path::new("/nonexistent"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rmdir_not_found() {
+        let mut fs = create_test_fs(1);
+        let result = fs.rmdir(Path::new("/nonexistent"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rename_src_not_found() {
+        let mut fs = create_test_fs(1);
+        let result = fs.rename(Path::new("/nonexistent"), Path::new("/target"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_chmod_not_found() {
+        let mut fs = create_test_fs(1);
+        let result = fs.chmod(Path::new("/nonexistent"), 0o755);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_chown_not_found() {
+        let mut fs = create_test_fs(1);
+        let result = fs.chown(Path::new("/nonexistent"), 1000, 1000);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_truncate_not_found() {
+        let mut fs = create_test_fs(1);
+        let result = fs.truncate(Path::new("/nonexistent"), 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_truncate_is_directory() {
+        let mut fs = create_test_fs(1);
+        fs.mkdir(Path::new("/adir"), 0o755).unwrap();
+
+        let result = fs.truncate(Path::new("/adir"), 100);
+        assert!(result.is_err());
+    }
+
+    // ========================================================================
+    // Volume Too Small Test
+    // ========================================================================
+
+    #[test]
+    fn test_mkfs_volume_too_small() {
+        let volume_size = 1024; // Very small
+        let master_key = MasterKey::generate();
+        let backend = Box::new(MemoryBackend::new(volume_size as usize));
+
+        let result = VolumeIOFilesystem::mkfs(&master_key, volume_size, backend, "TooSmall");
+        assert!(result.is_err());
+    }
+
+    // ========================================================================
+    // Open Existing Filesystem Test
+    // ========================================================================
+
+    #[test]
+    fn test_open_existing_filesystem() {
+        use std::sync::Arc;
+
+        // Create a shared backend
+        let volume_size = 1024 * 1024;
+        let master_key = MasterKey::generate();
+        let shared_storage = Arc::new(std::sync::RwLock::new(vec![0u8; volume_size as usize]));
+
+        // Create filesystem using SharedMemoryBackend
+        {
+            let backend = Box::new(SharedMemoryBackend {
+                data: shared_storage.clone(),
+            });
+            let mut fs =
+                VolumeIOFilesystem::mkfs(&master_key, volume_size, backend, "Test").unwrap();
+            fs.create(Path::new("/test.txt"), 0o644).unwrap();
+            fs.write(Path::new("/test.txt"), 0, b"hello").unwrap();
+            fs.sync().unwrap();
+        }
+
+        // Re-open
+        {
+            let backend = Box::new(SharedMemoryBackend {
+                data: shared_storage.clone(),
+            });
+            let fs = VolumeIOFilesystem::open(&master_key, volume_size, backend).unwrap();
+
+            // Verify file exists
+            let attr = fs.getattr(Path::new("/test.txt")).unwrap();
+            assert_eq!(attr.size, 5);
+        }
+    }
+
+    /// A shared memory backend for testing open()
+    struct SharedMemoryBackend {
+        data: Arc<std::sync::RwLock<Vec<u8>>>,
+    }
+
+    impl StorageBackend for SharedMemoryBackend {
+        fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> std::io::Result<usize> {
+            let data = self.data.read().unwrap();
+            let start = offset as usize;
+            let end = start + buf.len();
+            if end > data.len() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "read past end",
+                ));
+            }
+            buf.copy_from_slice(&data[start..end]);
+            Ok(buf.len())
+        }
+
+        fn write_at(&mut self, offset: u64, buf: &[u8]) -> std::io::Result<usize> {
+            let mut data = self.data.write().unwrap();
+            let start = offset as usize;
+            let end = start + buf.len();
+            if end > data.len() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "write past end",
+                ));
+            }
+            data[start..end].copy_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+
+        fn size(&self) -> std::io::Result<u64> {
+            Ok(self.data.read().unwrap().len() as u64)
+        }
+    }
 }

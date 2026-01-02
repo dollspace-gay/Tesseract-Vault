@@ -29,42 +29,11 @@ use super::super::filesystem::FilesystemError;
 use super::super::format::{InodeType, FS_BLOCK_SIZE, ROOT_INODE};
 use super::super::io::{FileBackend, StorageBackend};
 use super::super::volumeio_fs::{VolumeIOFilesystem, VolumeIOFsError};
+use super::winfsp_utils::{
+    filetime_to_unix, inode_type_to_attributes, normalize_path, systemtime_to_filetime,
+    unix_to_filetime, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_READONLY, INVALID_FILE_ATTRIBUTES,
+};
 use super::{MountError, MountOptions, Result};
-
-/// Windows file attribute constants
-const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
-const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
-const FILE_ATTRIBUTE_READONLY: u32 = 0x01;
-const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-const INVALID_FILE_ATTRIBUTES: u32 = 0xFFFFFFFF;
-
-/// Convert Windows FILETIME (100-nanosecond intervals since 1601) to Unix timestamp
-fn filetime_to_unix(filetime: u64) -> u64 {
-    const WINDOWS_TICK: u64 = 10_000_000; // 100ns intervals per second
-    const UNIX_EPOCH_FILETIME: u64 = 116_444_736_000_000_000; // 1970-01-01 in FILETIME
-
-    if filetime < UNIX_EPOCH_FILETIME {
-        0
-    } else {
-        (filetime - UNIX_EPOCH_FILETIME) / WINDOWS_TICK
-    }
-}
-
-/// Convert Unix timestamp to Windows FILETIME
-fn unix_to_filetime(unix_time: u64) -> u64 {
-    const WINDOWS_TICK: u64 = 10_000_000;
-    const UNIX_EPOCH_FILETIME: u64 = 116_444_736_000_000_000;
-
-    UNIX_EPOCH_FILETIME + (unix_time * WINDOWS_TICK)
-}
-
-/// Convert SystemTime to Windows FILETIME
-fn systemtime_to_filetime(time: SystemTime) -> u64 {
-    match time.duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(duration) => unix_to_filetime(duration.as_secs()),
-        Err(_) => unix_to_filetime(0),
-    }
-}
 
 /// File context - holds the inode number for the opened file/directory
 #[derive(Clone)]
@@ -94,15 +63,6 @@ impl WinFspAdapter {
         Self {
             fs,
             path_cache: RwLock::new(cache),
-        }
-    }
-
-    /// Converts InodeType to Windows file attributes
-    fn inode_type_to_attributes(it: InodeType) -> u32 {
-        match it {
-            InodeType::Directory => FILE_ATTRIBUTE_DIRECTORY,
-            InodeType::File => FILE_ATTRIBUTE_NORMAL,
-            InodeType::Symlink => FILE_ATTRIBUTE_REPARSE_POINT,
         }
     }
 
@@ -141,18 +101,6 @@ impl WinFspAdapter {
         let wide_slice: &[u16] = u16_path.as_slice();
         let os_str = OsString::from_wide(wide_slice);
         PathBuf::from(os_str)
-    }
-
-    /// Normalize path for internal use (remove leading backslash, convert to forward slashes)
-    fn normalize_path(path: &Path) -> PathBuf {
-        let path_str = path.to_string_lossy();
-        let normalized = path_str.trim_start_matches('\\').replace('\\', "/");
-
-        if normalized.is_empty() {
-            PathBuf::from("/")
-        } else {
-            PathBuf::from(format!("/{}", normalized))
-        }
     }
 
     /// Resolve a path to an inode number
@@ -234,7 +182,7 @@ impl WinFspAdapter {
             InodeType::File
         };
 
-        file_info.file_attributes = Self::inode_type_to_attributes(file_type);
+        file_info.file_attributes = inode_type_to_attributes(file_type);
         file_info.reparse_tag = 0;
         file_info.file_size = inode.size;
         file_info.allocation_size =
@@ -280,7 +228,7 @@ impl FileSystemContext for WinFspAdapter {
         _reparse_point_resolver: impl FnOnce(&U16CStr) -> Option<FileSecurity>,
     ) -> FspResult<FileSecurity> {
         let path = Self::u16_to_path(file_name);
-        let normalized_path = Self::normalize_path(&path);
+        let normalized_path = normalize_path(&path);
 
         let inode_num = self.resolve_path(&normalized_path)?;
         let inode = self.fs.get_inode(inode_num).map_err(Self::error_to_fsp)?;
@@ -296,7 +244,7 @@ impl FileSystemContext for WinFspAdapter {
         Ok(FileSecurity {
             reparse: false,
             sz_security_descriptor: 0,
-            attributes: Self::inode_type_to_attributes(file_type),
+            attributes: inode_type_to_attributes(file_type),
         })
     }
 
@@ -308,7 +256,7 @@ impl FileSystemContext for WinFspAdapter {
         file_info: &mut OpenFileInfo,
     ) -> FspResult<Self::FileContext> {
         let path = Self::u16_to_path(file_name);
-        let normalized_path = Self::normalize_path(&path);
+        let normalized_path = normalize_path(&path);
 
         let inode_num = self.resolve_path(&normalized_path)?;
         self.fill_file_info_from_inode(inode_num, file_info.as_mut())?;
@@ -337,7 +285,7 @@ impl FileSystemContext for WinFspAdapter {
         file_info: &mut OpenFileInfo,
     ) -> FspResult<Self::FileContext> {
         let path = Self::u16_to_path(file_name);
-        let normalized_path = Self::normalize_path(&path);
+        let normalized_path = normalize_path(&path);
 
         let (parent_inode, name) = self.get_parent_and_name(&normalized_path)?;
 
@@ -481,8 +429,8 @@ impl FileSystemContext for WinFspAdapter {
     ) -> FspResult<()> {
         let old_path = Self::u16_to_path(file_name);
         let new_path = Self::u16_to_path(new_file_name);
-        let old_normalized = Self::normalize_path(&old_path);
-        let new_normalized = Self::normalize_path(&new_path);
+        let old_normalized = normalize_path(&old_path);
+        let new_normalized = normalize_path(&new_path);
 
         let (old_parent, old_name) = self.get_parent_and_name(&old_normalized)?;
         let (new_parent, new_name) = self.get_parent_and_name(&new_normalized)?;
@@ -596,7 +544,7 @@ impl FileSystemContext for WinFspAdapter {
                     InodeType::File
                 };
 
-                file_info.file_attributes = Self::inode_type_to_attributes(file_type);
+                file_info.file_attributes = inode_type_to_attributes(file_type);
                 file_info.file_size = entry_inode.size;
                 file_info.allocation_size =
                     entry_inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
@@ -649,7 +597,7 @@ impl FileSystemContext for WinFspAdapter {
             InodeType::File
         };
 
-        file_info.file_attributes = Self::inode_type_to_attributes(file_type);
+        file_info.file_attributes = inode_type_to_attributes(file_type);
         file_info.file_size = inode.size;
         file_info.allocation_size =
             inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;

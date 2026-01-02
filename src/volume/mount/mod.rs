@@ -13,6 +13,10 @@ pub mod fuse;
 #[cfg(feature = "encrypted-volumes")]
 pub mod winfsp;
 
+/// Pure utility functions for WinFSP, testable without the driver.
+#[cfg(target_os = "windows")]
+pub mod winfsp_utils;
+
 use std::path::Path;
 use thiserror::Error;
 

@@ -1227,4 +1227,607 @@ mod tests {
         assert_eq!(second.data.volume_id, "vol2");
         assert!(!commands.has_pending());
     }
+
+    #[test]
+    fn test_chunk_hash_to_hex() {
+        let hash = ChunkHash::compute(b"test data");
+        let hex = hash.to_hex();
+        assert_eq!(hex.len(), 64); // 32 bytes = 64 hex chars
+        assert!(hex.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_chunk_hash_as_bytes() {
+        let hash = ChunkHash::compute(b"test");
+        let bytes = hash.as_bytes();
+        assert_eq!(bytes.len(), HASH_SIZE);
+    }
+
+    #[test]
+    fn test_chunk_hash_from_bytes() {
+        let bytes = [42u8; HASH_SIZE];
+        let hash = ChunkHash::from_bytes(bytes);
+        assert_eq!(hash.as_bytes(), &bytes);
+    }
+
+    #[test]
+    fn test_chunk_hash_default() {
+        let hash = ChunkHash::default();
+        assert_eq!(hash, ChunkHash::zero());
+        assert_eq!(hash.as_bytes(), &[0u8; HASH_SIZE]);
+    }
+
+    #[test]
+    fn test_chunk_hash_empty_data() {
+        let hash = ChunkHash::compute(b"");
+        assert_ne!(hash, ChunkHash::zero());
+    }
+
+    #[test]
+    fn test_chunk_state_timestamps() {
+        let hash = ChunkHash::compute(b"data");
+        let state = ChunkState::new(hash);
+
+        assert!(state.local_modified > 0);
+        assert_eq!(state.last_synced, 0);
+        assert!(!state.exists_in_cloud);
+    }
+
+    #[test]
+    fn test_chunk_state_mark_synced_updates_timestamp() {
+        let hash = ChunkHash::compute(b"data");
+        let mut state = ChunkState::new(hash);
+
+        let before_sync = state.last_synced;
+        state.mark_synced();
+
+        assert!(state.last_synced >= before_sync);
+        assert!(state.exists_in_cloud);
+        assert_eq!(state.synced_hash, state.local_hash);
+    }
+
+    #[test]
+    fn test_sync_manifest_get_chunk_none() {
+        let manifest = SyncManifest::new("test".to_string(), 1024, 64, 4096, b"salt");
+        assert!(manifest.get_chunk(0).is_none());
+        assert!(manifest.get_chunk(100).is_none());
+    }
+
+    #[test]
+    fn test_sync_manifest_total_chunks_calculation() {
+        // Exact division
+        let manifest1 = SyncManifest::new("test".to_string(), 1024, 256, 4096, b"salt");
+        assert_eq!(manifest1.total_chunks, 4);
+
+        // Non-exact division (should round up)
+        let manifest2 = SyncManifest::new("test".to_string(), 1000, 256, 4096, b"salt");
+        assert_eq!(manifest2.total_chunks, 4); // 1000 / 256 = 3.9, rounds up to 4
+    }
+
+    #[test]
+    fn test_sync_manifest_version() {
+        let manifest = SyncManifest::new("test".to_string(), 1024, 64, 4096, b"salt");
+        assert_eq!(manifest.version, 1);
+    }
+
+    #[test]
+    fn test_encryption_params_clone() {
+        let params = EncryptionParams {
+            sector_size: 4096,
+            kdf_salt_hash: ChunkHash::compute(b"salt"),
+        };
+
+        let cloned = params.clone();
+        assert_eq!(cloned.sector_size, params.sector_size);
+        assert_eq!(cloned.kdf_salt_hash, params.kdf_salt_hash);
+    }
+
+    #[test]
+    fn test_encryption_params_debug() {
+        let params = EncryptionParams {
+            sector_size: 512,
+            kdf_salt_hash: ChunkHash::zero(),
+        };
+
+        let debug_str = format!("{:?}", params);
+        assert!(debug_str.contains("EncryptionParams"));
+        assert!(debug_str.contains("sector_size"));
+    }
+
+    #[test]
+    fn test_sync_config_default() {
+        let config = SyncConfig::default();
+        assert_eq!(config.max_concurrent_uploads, 4);
+        assert!(config.retry_failed);
+        assert_eq!(config.max_retries, 3);
+        assert!(!config.compress_chunks);
+    }
+
+    #[test]
+    fn test_sync_config_clone() {
+        let config = SyncConfig {
+            max_concurrent_uploads: 8,
+            retry_failed: false,
+            max_retries: 5,
+            compress_chunks: true,
+        };
+
+        let cloned = config.clone();
+        assert_eq!(cloned.max_concurrent_uploads, 8);
+        assert!(!cloned.retry_failed);
+        assert_eq!(cloned.max_retries, 5);
+        assert!(cloned.compress_chunks);
+    }
+
+    #[test]
+    fn test_sync_config_debug() {
+        let config = SyncConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("SyncConfig"));
+    }
+
+    #[test]
+    fn test_sync_error_display() {
+        let io_err = SyncError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "file not found",
+        ));
+        assert!(io_err.to_string().contains("I/O error"));
+
+        let manifest_err = SyncError::ManifestValidation;
+        assert!(manifest_err.to_string().contains("validation failed"));
+
+        let chunk_err = SyncError::ChunkSync(42, "upload failed".to_string());
+        assert!(chunk_err.to_string().contains("42"));
+        assert!(chunk_err.to_string().contains("upload failed"));
+
+        let backend_err = SyncError::Backend("connection timeout".to_string());
+        assert!(backend_err.to_string().contains("connection timeout"));
+
+        let not_found = SyncError::ManifestNotFound;
+        assert!(not_found.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_sync_stats_default() {
+        let stats = SyncStats::default();
+        assert_eq!(stats.chunks_uploaded, 0);
+        assert_eq!(stats.chunks_skipped, 0);
+        assert_eq!(stats.bytes_uploaded, 0);
+        assert_eq!(stats.duration_ms, 0);
+        assert!(stats.errors.is_empty());
+    }
+
+    #[test]
+    fn test_sync_stats_clone() {
+        let mut stats = SyncStats::default();
+        stats.chunks_uploaded = 10;
+        stats.bytes_uploaded = 1024;
+
+        let cloned = stats.clone();
+        assert_eq!(cloned.chunks_uploaded, 10);
+        assert_eq!(cloned.bytes_uploaded, 1024);
+    }
+
+    #[test]
+    fn test_sync_stats_debug() {
+        let stats = SyncStats::default();
+        let debug_str = format!("{:?}", stats);
+        assert!(debug_str.contains("SyncStats"));
+    }
+
+    #[test]
+    fn test_chunk_tracker_from_manifest() {
+        let manifest = SyncManifest::new("vol".to_string(), 1024, 64, 4096, b"salt");
+        let tracker = ChunkTracker::from_manifest(manifest);
+
+        assert!(!tracker.is_manifest_dirty());
+        assert_eq!(tracker.dirty_count(), 0);
+    }
+
+    #[test]
+    fn test_chunk_tracker_get_chunk_hash() {
+        let mut tracker = ChunkTracker::new("vol".to_string(), 1024, 64, 4096, b"salt");
+
+        // Initially no hash for chunk 0
+        assert!(tracker.get_chunk_hash(0).is_none());
+
+        // After writing, hash should be available
+        tracker.record_write(0, b"test data");
+        let hash = tracker.get_chunk_hash(0);
+        assert!(hash.is_some());
+        assert_eq!(hash.unwrap(), ChunkHash::compute(b"test data"));
+    }
+
+    #[test]
+    fn test_chunk_tracker_mark_manifest_saved() {
+        let mut tracker = ChunkTracker::new("vol".to_string(), 1024, 64, 4096, b"salt");
+        assert!(tracker.is_manifest_dirty());
+
+        tracker.mark_manifest_saved();
+        assert!(!tracker.is_manifest_dirty());
+
+        // Writing should make it dirty again
+        tracker.record_write(0, b"data");
+        assert!(tracker.is_manifest_dirty());
+    }
+
+    #[test]
+    fn test_chunk_tracker_manifest_access() {
+        let tracker = ChunkTracker::new("test-vol".to_string(), 2048, 128, 4096, b"salt");
+        let manifest = tracker.manifest();
+
+        assert_eq!(manifest.volume_id, "test-vol");
+        assert_eq!(manifest.volume_size, 2048);
+        assert_eq!(manifest.chunk_size, 128);
+    }
+
+    #[test]
+    fn test_cloud_wipe_commands_default() {
+        let commands = CloudWipeCommands::default();
+        assert!(!commands.has_pending());
+        assert!(commands.updated_at > 0);
+    }
+
+    #[test]
+    fn test_cloud_wipe_commands_pop_empty() {
+        let mut commands = CloudWipeCommands::new();
+        assert!(commands.pop().is_none());
+    }
+
+    #[test]
+    fn test_reserved_chunk_indices() {
+        assert_eq!(WIPE_COMMAND_CHUNK_INDEX, u64::MAX - 1);
+        assert_eq!(WIPE_CONFIG_CHUNK_INDEX, u64::MAX - 2);
+        // Ensure they don't overlap
+        assert_ne!(WIPE_COMMAND_CHUNK_INDEX, WIPE_CONFIG_CHUNK_INDEX);
+    }
+
+    #[test]
+    fn test_hash_size_constant() {
+        assert_eq!(HASH_SIZE, 32);
+    }
+
+    // ========================================================================
+    // Additional SyncError Tests
+    // ========================================================================
+
+    #[test]
+    fn test_sync_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+        let sync_err: SyncError = io_err.into();
+        assert!(matches!(sync_err, SyncError::Io(_)));
+        assert!(sync_err.to_string().contains("I/O error"));
+    }
+
+    #[test]
+    fn test_sync_error_debug() {
+        let err = SyncError::ManifestValidation;
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("ManifestValidation"));
+    }
+
+    #[test]
+    fn test_sync_error_chunk_sync_details() {
+        let err = SyncError::ChunkSync(123, "network timeout".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("123"));
+        assert!(msg.contains("network timeout"));
+    }
+
+    #[test]
+    fn test_sync_error_backend_details() {
+        let err = SyncError::Backend("S3 rate limit exceeded".to_string());
+        assert!(err.to_string().contains("S3 rate limit exceeded"));
+    }
+
+    // ========================================================================
+    // Additional SyncStats Tests
+    // ========================================================================
+
+    #[test]
+    fn test_sync_stats_success_rate_all_errors() {
+        let mut stats = SyncStats::default();
+        stats.errors.push((0, "err1".to_string()));
+        stats.errors.push((1, "err2".to_string()));
+
+        // 0 uploaded, 2 errors -> 0% success
+        assert_eq!(stats.success_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_sync_stats_success_rate_mixed() {
+        let mut stats = SyncStats::default();
+        stats.chunks_uploaded = 3;
+        stats.errors.push((0, "err".to_string()));
+
+        // 3 / 4 = 75%
+        assert_eq!(stats.success_rate(), 75.0);
+    }
+
+    #[test]
+    fn test_sync_stats_with_bytes_and_duration() {
+        let mut stats = SyncStats::default();
+        stats.chunks_uploaded = 5;
+        stats.chunks_skipped = 2;
+        stats.bytes_uploaded = 1024 * 1024; // 1 MB
+        stats.duration_ms = 5000; // 5 seconds
+
+        assert!(stats.is_success());
+        assert_eq!(stats.success_rate(), 100.0);
+    }
+
+    // ========================================================================
+    // Additional ChunkState Tests
+    // ========================================================================
+
+    #[test]
+    fn test_chunk_state_update_local_changes_hash() {
+        let hash1 = ChunkHash::compute(b"original");
+        let hash2 = ChunkHash::compute(b"modified");
+        let mut state = ChunkState::new(hash1);
+
+        state.update_local(hash2);
+        assert_eq!(state.local_hash, hash2);
+        assert!(state.needs_sync());
+    }
+
+    #[test]
+    fn test_chunk_state_mark_synced_sets_exists_in_cloud() {
+        let hash = ChunkHash::compute(b"data");
+        let mut state = ChunkState::new(hash);
+
+        assert!(!state.exists_in_cloud);
+        state.mark_synced();
+        assert!(state.exists_in_cloud);
+    }
+
+    #[test]
+    fn test_chunk_state_after_multiple_updates() {
+        let mut state = ChunkState::new(ChunkHash::compute(b"v1"));
+
+        // Update multiple times
+        state.update_local(ChunkHash::compute(b"v2"));
+        state.update_local(ChunkHash::compute(b"v3"));
+
+        // Should still need sync
+        assert!(state.needs_sync());
+
+        // Mark synced
+        state.mark_synced();
+        assert!(!state.needs_sync());
+
+        // Update with same hash
+        state.update_local(ChunkHash::compute(b"v3"));
+        assert!(!state.needs_sync()); // Same hash, no sync needed
+    }
+
+    // ========================================================================
+    // Additional SyncManifest Tests
+    // ========================================================================
+
+    #[test]
+    fn test_sync_manifest_update_existing_chunk() {
+        let mut manifest = SyncManifest::new("test".to_string(), 1024, 64, 4096, b"salt");
+
+        // First write
+        manifest.update_chunk(0, ChunkHash::compute(b"v1"));
+        let initial_hash = manifest.get_chunk(0).unwrap().local_hash;
+
+        // Update same chunk with different data
+        manifest.update_chunk(0, ChunkHash::compute(b"v2"));
+        let updated_hash = manifest.get_chunk(0).unwrap().local_hash;
+
+        assert_ne!(initial_hash, updated_hash);
+        assert_eq!(manifest.chunks.len(), 1); // Still just one chunk
+    }
+
+    #[test]
+    fn test_sync_manifest_mark_nonexistent_chunk_synced() {
+        let mut manifest = SyncManifest::new("test".to_string(), 1024, 64, 4096, b"salt");
+
+        // Try to mark a nonexistent chunk as synced (should be no-op)
+        manifest.mark_chunk_synced(999);
+
+        // Should not create a new chunk
+        assert!(manifest.get_chunk(999).is_none());
+    }
+
+    #[test]
+    fn test_sync_manifest_chunks_needing_sync_empty() {
+        let manifest = SyncManifest::new("test".to_string(), 1024, 64, 4096, b"salt");
+        assert!(manifest.chunks_needing_sync().is_empty());
+        assert_eq!(manifest.dirty_count(), 0);
+    }
+
+    #[test]
+    fn test_sync_manifest_from_bytes_invalid() {
+        let invalid_json = b"not valid json";
+        let result = SyncManifest::from_bytes(invalid_json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sync_manifest_encryption_params() {
+        let manifest = SyncManifest::new("test".to_string(), 1024, 64, 4096, b"salt");
+
+        assert_eq!(manifest.encryption_params.sector_size, 4096);
+        assert_eq!(
+            manifest.encryption_params.kdf_salt_hash,
+            ChunkHash::compute(b"salt")
+        );
+    }
+
+    #[test]
+    fn test_sync_manifest_last_updated() {
+        let manifest = SyncManifest::new("test".to_string(), 1024, 64, 4096, b"salt");
+        assert!(manifest.last_updated > 0);
+    }
+
+    // ========================================================================
+    // Additional ChunkTracker Tests
+    // ========================================================================
+
+    #[test]
+    fn test_chunk_tracker_record_synced_nonexistent() {
+        let mut tracker = ChunkTracker::new("vol".to_string(), 1024, 64, 4096, b"salt");
+
+        // Record synced for a chunk that doesn't exist (should be no-op)
+        tracker.record_synced(999);
+
+        // Should not create a chunk
+        assert!(tracker.get_chunk_hash(999).is_none());
+    }
+
+    #[test]
+    fn test_chunk_tracker_get_dirty_chunks_order() {
+        let mut tracker = ChunkTracker::new("vol".to_string(), 1024, 64, 4096, b"salt");
+
+        tracker.record_write(5, b"chunk5");
+        tracker.record_write(2, b"chunk2");
+        tracker.record_write(8, b"chunk8");
+
+        let dirty = tracker.get_dirty_chunks();
+        assert_eq!(dirty.len(), 3);
+        assert!(dirty.contains(&5));
+        assert!(dirty.contains(&2));
+        assert!(dirty.contains(&8));
+    }
+
+    #[test]
+    fn test_chunk_tracker_chunk_needs_sync_nonexistent() {
+        let tracker = ChunkTracker::new("vol".to_string(), 1024, 64, 4096, b"salt");
+        assert!(!tracker.chunk_needs_sync(999));
+    }
+
+    // ========================================================================
+    // Additional CloudWipeCommands Tests
+    // ========================================================================
+
+    #[test]
+    fn test_cloud_wipe_commands_multiple_push() {
+        use crate::volume::remote_wipe::{WipeCommandType, WipeToken};
+
+        let mut commands = CloudWipeCommands::new();
+        let token = WipeToken::generate();
+
+        commands.push(WipeCommand::new(&token, "vol1", WipeCommandType::Lock));
+        commands.push(WipeCommand::new(&token, "vol2", WipeCommandType::DestroyKeys));
+        commands.push(WipeCommand::new(&token, "vol3", WipeCommandType::CheckIn));
+
+        assert_eq!(commands.commands.len(), 3);
+        assert!(commands.has_pending());
+    }
+
+    #[test]
+    fn test_cloud_wipe_commands_updated_at_changes() {
+        use crate::volume::remote_wipe::{WipeCommandType, WipeToken};
+
+        let mut commands = CloudWipeCommands::new();
+        let initial_time = commands.updated_at;
+
+        // Sleep briefly to ensure time advances
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        let token = WipeToken::generate();
+        commands.push(WipeCommand::new(&token, "vol", WipeCommandType::Lock));
+
+        // Updated_at should have changed (or at least be >= initial)
+        assert!(commands.updated_at >= initial_time);
+    }
+
+    #[test]
+    fn test_cloud_wipe_commands_from_bytes_invalid() {
+        let invalid_json = b"invalid json data";
+        let result = CloudWipeCommands::from_bytes(invalid_json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cloud_wipe_commands_roundtrip_empty() {
+        let commands = CloudWipeCommands::new();
+        let bytes = commands.to_bytes().unwrap();
+        let restored = CloudWipeCommands::from_bytes(&bytes).unwrap();
+
+        assert!(!restored.has_pending());
+        assert!(restored.commands.is_empty());
+    }
+
+    // ========================================================================
+    // ChunkHash Additional Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_chunk_hash_large_data() {
+        let large_data = vec![0xABu8; 1024 * 1024]; // 1 MB
+        let hash = ChunkHash::compute(&large_data);
+        assert_ne!(hash, ChunkHash::zero());
+    }
+
+    #[test]
+    fn test_chunk_hash_copy_trait() {
+        let hash1 = ChunkHash::compute(b"test");
+        let hash2 = hash1; // Copy
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_chunk_hash_clone_trait() {
+        let hash1 = ChunkHash::compute(b"test");
+        let hash2 = hash1.clone();
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_chunk_hash_hash_trait() {
+        use std::collections::HashSet;
+
+        let hash1 = ChunkHash::compute(b"data1");
+        let hash2 = ChunkHash::compute(b"data2");
+        let hash3 = ChunkHash::compute(b"data1");
+
+        let mut set = HashSet::new();
+        set.insert(hash1);
+        set.insert(hash2);
+        set.insert(hash3); // Same as hash1, shouldn't add
+
+        assert_eq!(set.len(), 2);
+    }
+
+    // ========================================================================
+    // SyncConfig Additional Tests
+    // ========================================================================
+
+    #[test]
+    fn test_sync_config_custom_values() {
+        let config = SyncConfig {
+            max_concurrent_uploads: 16,
+            retry_failed: false,
+            max_retries: 10,
+            compress_chunks: true,
+        };
+
+        assert_eq!(config.max_concurrent_uploads, 16);
+        assert!(!config.retry_failed);
+        assert_eq!(config.max_retries, 10);
+        assert!(config.compress_chunks);
+    }
+
+    // ========================================================================
+    // EncryptionParams Tests
+    // ========================================================================
+
+    #[test]
+    fn test_encryption_params_serialize_deserialize() {
+        let params = EncryptionParams {
+            sector_size: 512,
+            kdf_salt_hash: ChunkHash::compute(b"test-salt"),
+        };
+
+        let json = serde_json::to_string(&params).unwrap();
+        let restored: EncryptionParams = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.sector_size, 512);
+        assert_eq!(restored.kdf_salt_hash, params.kdf_salt_hash);
+    }
 }

@@ -30,6 +30,10 @@ pub use yubikey::*;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod tpm;
 
+/// Pure utility functions for TPM operations, testable without hardware.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod tpm_utils;
+
 use crate::error::Result;
 use zeroize::Zeroizing;
 

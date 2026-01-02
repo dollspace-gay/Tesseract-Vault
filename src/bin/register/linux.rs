@@ -73,9 +73,12 @@ pub fn uninstall() -> std::io::Result<()> {
 
 /// Get user's home directory
 fn get_home_dir() -> std::io::Result<PathBuf> {
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::NotFound, "HOME environment variable not set"))
+    std::env::var("HOME").map(PathBuf::from).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "HOME environment variable not set",
+        )
+    })
 }
 
 /// Install .desktop file for the application
@@ -144,12 +147,18 @@ fn update_mime_database(home: &Path) -> std::io::Result<()> {
             Ok(())
         }
         Ok(status) => {
-            eprintln!("Warning: update-mime-database exited with status: {}", status);
+            eprintln!(
+                "Warning: update-mime-database exited with status: {}",
+                status
+            );
             Ok(())
         }
         Err(e) => {
             eprintln!("Warning: Failed to run update-mime-database: {}", e);
-            eprintln!("You may need to run: update-mime-database {}", mime_dir.display());
+            eprintln!(
+                "You may need to run: update-mime-database {}",
+                mime_dir.display()
+            );
             Ok(())
         }
     }

@@ -7,15 +7,14 @@
 //!
 //! Uses VolumeIOFilesystem for persistent, encrypted storage.
 
+use fuser::{
+    FileAttr as FuseFileAttr, FileType as FuseFileType, Filesystem, MountOption, ReplyAttr,
+    ReplyData, ReplyDirectory, ReplyEntry, ReplyWrite, Request, TimeOrNow,
+};
+use libc::{EEXIST, EINVAL, EIO, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
-use fuser::{
-    FileAttr as FuseFileAttr, FileType as FuseFileType, Filesystem,
-    ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry, ReplyWrite, Request,
-    MountOption, TimeOrNow,
-};
-use libc::{EEXIST, EINVAL, EIO, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY};
 
 use super::super::container::Container;
 use super::super::filesystem::FilesystemError;
@@ -117,18 +116,16 @@ impl Filesystem for PersistentFuseAdapter {
         };
 
         match self.fs.lookup(parent as u32, name_str) {
-            Ok(Some(inode_num)) => {
-                match self.fs.get_inode(inode_num) {
-                    Ok(inode) => {
-                        let fuse_attr = self.inode_to_fuse_attr(&inode, inode_num as u64);
-                        let ttl = Duration::from_secs(1);
-                        reply.entry(&ttl, &fuse_attr, 0);
-                    }
-                    Err(e) => {
-                        reply.error(Self::error_to_errno(e));
-                    }
+            Ok(Some(inode_num)) => match self.fs.get_inode(inode_num) {
+                Ok(inode) => {
+                    let fuse_attr = self.inode_to_fuse_attr(&inode, inode_num as u64);
+                    let ttl = Duration::from_secs(1);
+                    reply.entry(&ttl, &fuse_attr, 0);
                 }
-            }
+                Err(e) => {
+                    reply.error(Self::error_to_errno(e));
+                }
+            },
             Ok(None) => {
                 reply.error(ENOENT);
             }
@@ -244,19 +241,20 @@ impl Filesystem for PersistentFuseAdapter {
             }
         };
 
-        match self.fs.create_directory(parent as u32, name_str, mode as u16) {
-            Ok(inode_num) => {
-                match self.fs.get_inode(inode_num) {
-                    Ok(inode) => {
-                        let fuse_attr = self.inode_to_fuse_attr(&inode, inode_num as u64);
-                        let ttl = Duration::from_secs(1);
-                        reply.entry(&ttl, &fuse_attr, 0);
-                    }
-                    Err(e) => {
-                        reply.error(Self::error_to_errno(e));
-                    }
+        match self
+            .fs
+            .create_directory(parent as u32, name_str, mode as u16)
+        {
+            Ok(inode_num) => match self.fs.get_inode(inode_num) {
+                Ok(inode) => {
+                    let fuse_attr = self.inode_to_fuse_attr(&inode, inode_num as u64);
+                    let ttl = Duration::from_secs(1);
+                    reply.entry(&ttl, &fuse_attr, 0);
                 }
-            }
+                Err(e) => {
+                    reply.error(Self::error_to_errno(e));
+                }
+            },
             Err(e) => {
                 reply.error(Self::error_to_errno(e));
             }
@@ -327,7 +325,10 @@ impl Filesystem for PersistentFuseAdapter {
             }
         };
 
-        match self.fs.rename_entry(parent as u32, old_name, newparent as u32, new_name) {
+        match self
+            .fs
+            .rename_entry(parent as u32, old_name, newparent as u32, new_name)
+        {
             Ok(()) => {
                 reply.ok();
             }
@@ -494,13 +495,13 @@ impl Filesystem for PersistentFuseAdapter {
                 let free_blocks = free_bytes / block_size;
 
                 reply.statfs(
-                    total_blocks,  // Total blocks
-                    free_blocks,   // Free blocks
-                    free_blocks,   // Available blocks (same as free for now)
-                    0,             // Total inodes (0 = unlimited)
-                    0,             // Free inodes
+                    total_blocks,      // Total blocks
+                    free_blocks,       // Free blocks
+                    free_blocks,       // Available blocks (same as free for now)
+                    0,                 // Total inodes (0 = unlimited)
+                    0,                 // Free inodes
                     block_size as u32, // Block size
-                    255,           // Max filename length
+                    255,               // Max filename length
                     block_size as u32, // Fragment size
                 );
             }
@@ -555,9 +556,9 @@ pub fn mount(
 
     // Open container to get the master key
     let container = if let Some(hidden_offset) = options.hidden_offset {
-        let hidden_pwd = options.hidden_password
-            .as_deref()
-            .ok_or_else(|| MountError::Other("Hidden password required for hidden volume mount".to_string()))?;
+        let hidden_pwd = options.hidden_password.as_deref().ok_or_else(|| {
+            MountError::Other("Hidden password required for hidden volume mount".to_string())
+        })?;
 
         let outer = Container::open(container_path, password)?;
         outer.open_hidden_volume(hidden_pwd, hidden_offset)?
@@ -566,7 +567,8 @@ pub fn mount(
     };
 
     // Get master key from container
-    let master_key = container.master_key()
+    let master_key = container
+        .master_key()
         .ok_or_else(|| MountError::Other("Container is locked".to_string()))?
         .clone();
 

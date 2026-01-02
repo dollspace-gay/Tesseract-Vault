@@ -75,10 +75,10 @@ impl KeyDerivation for Argon2Kdf {
 
     fn generate_salt(&self) -> Vec<u8> {
         let mut bytes = [0u8; Salt::RECOMMENDED_LENGTH];
-        OsRng.try_fill_bytes(&mut bytes)
+        OsRng
+            .try_fill_bytes(&mut bytes)
             .expect("Failed to generate random salt bytes");
-        let salt = SaltString::encode_b64(&bytes)
-            .expect("Failed to encode salt");
+        let salt = SaltString::encode_b64(&bytes).expect("Failed to encode salt");
         salt.as_str().as_bytes().to_vec()
     }
 }
@@ -88,10 +88,10 @@ impl KeyDerivation for Argon2Kdf {
 /// This is a convenience function for generating salts in the proper format.
 pub fn generate_salt_string() -> SaltString {
     let mut bytes = [0u8; Salt::RECOMMENDED_LENGTH];
-    OsRng.try_fill_bytes(&mut bytes)
+    OsRng
+        .try_fill_bytes(&mut bytes)
         .expect("Failed to generate random salt bytes");
-    SaltString::encode_b64(&bytes)
-        .expect("Failed to encode salt")
+    SaltString::encode_b64(&bytes).expect("Failed to encode salt")
 }
 
 #[cfg(test)]
@@ -107,7 +107,10 @@ mod tests {
         let key1 = kdf.derive_key(password, salt).unwrap();
         let key2 = kdf.derive_key(password, salt).unwrap();
 
-        assert_eq!(*key1, *key2, "Same password and salt should produce same key");
+        assert_eq!(
+            *key1, *key2,
+            "Same password and salt should produce same key"
+        );
     }
 
     #[test]
@@ -120,7 +123,10 @@ mod tests {
         let key1 = kdf.derive_key(password1, salt).unwrap();
         let key2 = kdf.derive_key(password2, salt).unwrap();
 
-        assert_ne!(*key1, *key2, "Different passwords should produce different keys");
+        assert_ne!(
+            *key1, *key2,
+            "Different passwords should produce different keys"
+        );
     }
 
     #[test]
@@ -133,7 +139,10 @@ mod tests {
         let key1 = kdf.derive_key(password, salt1).unwrap();
         let key2 = kdf.derive_key(password, salt2).unwrap();
 
-        assert_ne!(*key1, *key2, "Different salts should produce different keys");
+        assert_ne!(
+            *key1, *key2,
+            "Different salts should produce different keys"
+        );
     }
 
     #[test]
@@ -173,6 +182,10 @@ mod tests {
         let salt1 = generate_salt_string();
         let salt2 = generate_salt_string();
 
-        assert_ne!(salt1.as_str(), salt2.as_str(), "Generated salt strings should be unique");
+        assert_ne!(
+            salt1.as_str(),
+            salt2.as_str(),
+            "Generated salt strings should be unique"
+        );
     }
 }

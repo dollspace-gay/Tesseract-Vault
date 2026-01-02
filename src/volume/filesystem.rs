@@ -248,7 +248,12 @@ pub trait EncryptedFilesystem {
     /// * `path` - Path to the file
     /// * `atime` - New access time (None to keep current)
     /// * `mtime` - New modification time (None to keep current)
-    fn utimens(&mut self, path: &Path, atime: Option<SystemTime>, mtime: Option<SystemTime>) -> Result<()>;
+    fn utimens(
+        &mut self,
+        path: &Path,
+        atime: Option<SystemTime>,
+        mtime: Option<SystemTime>,
+    ) -> Result<()>;
 
     /// Flush any cached data to disk
     fn flush(&mut self) -> Result<()>;

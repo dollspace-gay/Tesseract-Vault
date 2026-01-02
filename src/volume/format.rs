@@ -279,7 +279,12 @@ impl Superblock {
 
         // Take first 4 bytes of hash as checksum
         let hash = hasher.finalize();
-        u32::from_le_bytes([hash.as_bytes()[0], hash.as_bytes()[1], hash.as_bytes()[2], hash.as_bytes()[3]])
+        u32::from_le_bytes([
+            hash.as_bytes()[0],
+            hash.as_bytes()[1],
+            hash.as_bytes()[2],
+            hash.as_bytes()[3],
+        ])
     }
 
     /// Updates the checksum field

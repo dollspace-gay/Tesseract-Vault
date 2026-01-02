@@ -89,7 +89,10 @@ impl std::fmt::Debug for S3Credentials {
         f.debug_struct("S3Credentials")
             .field("access_key_id", &self.access_key_id)
             .field("secret_access_key", &"[REDACTED]")
-            .field("session_token", &self.session_token.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "session_token",
+                &self.session_token.as_ref().map(|_| "[REDACTED]"),
+            )
             .finish()
     }
 }
@@ -236,7 +239,11 @@ impl S3Client {
 
     /// Gets an object from S3
     pub async fn get_object(&self, key: &str) -> io::Result<Option<Vec<u8>>> {
-        let url = format!("{}/{}", self.config.region.endpoint_url(&self.config.bucket), key);
+        let url = format!(
+            "{}/{}",
+            self.config.region.endpoint_url(&self.config.bucket),
+            key
+        );
         let now = SystemTime::now();
         let headers = self.sign_request("GET", key, &[], now)?;
 
@@ -246,13 +253,19 @@ impl S3Client {
         }
 
         let response = request.send().await.map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, format!("S3 GET request failed: {}", e))
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("S3 GET request failed: {}", e),
+            )
         })?;
 
         match response.status() {
             StatusCode::OK => {
                 let bytes = response.bytes().await.map_err(|e| {
-                    io::Error::new(io::ErrorKind::Other, format!("Failed to read response body: {}", e))
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Failed to read response body: {}", e),
+                    )
                 })?;
                 Ok(Some(bytes.to_vec()))
             }
@@ -266,7 +279,11 @@ impl S3Client {
 
     /// Puts an object to S3
     pub async fn put_object(&self, key: &str, data: &[u8]) -> io::Result<()> {
-        let url = format!("{}/{}", self.config.region.endpoint_url(&self.config.bucket), key);
+        let url = format!(
+            "{}/{}",
+            self.config.region.endpoint_url(&self.config.bucket),
+            key
+        );
         let now = SystemTime::now();
         let headers = self.sign_request("PUT", key, data, now)?;
 
@@ -276,7 +293,10 @@ impl S3Client {
         }
 
         let response = request.send().await.map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, format!("S3 PUT request failed: {}", e))
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("S3 PUT request failed: {}", e),
+            )
         })?;
 
         if response.status().is_success() {
@@ -291,7 +311,11 @@ impl S3Client {
 
     /// Deletes an object from S3
     pub async fn delete_object(&self, key: &str) -> io::Result<()> {
-        let url = format!("{}/{}", self.config.region.endpoint_url(&self.config.bucket), key);
+        let url = format!(
+            "{}/{}",
+            self.config.region.endpoint_url(&self.config.bucket),
+            key
+        );
         let now = SystemTime::now();
         let headers = self.sign_request("DELETE", key, &[], now)?;
 
@@ -301,7 +325,10 @@ impl S3Client {
         }
 
         let response = request.send().await.map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, format!("S3 DELETE request failed: {}", e))
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("S3 DELETE request failed: {}", e),
+            )
         })?;
 
         // 204 No Content is the expected success response
@@ -310,14 +337,22 @@ impl S3Client {
         } else {
             Err(io::Error::new(
                 io::ErrorKind::Other,
-                format!("S3 DELETE failed with status {}: {}", response.status(), key),
+                format!(
+                    "S3 DELETE failed with status {}: {}",
+                    response.status(),
+                    key
+                ),
             ))
         }
     }
 
     /// Checks if an object exists
     pub async fn head_object(&self, key: &str) -> io::Result<bool> {
-        let url = format!("{}/{}", self.config.region.endpoint_url(&self.config.bucket), key);
+        let url = format!(
+            "{}/{}",
+            self.config.region.endpoint_url(&self.config.bucket),
+            key
+        );
         let now = SystemTime::now();
         let headers = self.sign_request("HEAD", key, &[], now)?;
 
@@ -327,7 +362,10 @@ impl S3Client {
         }
 
         let response = request.send().await.map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, format!("S3 HEAD request failed: {}", e))
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("S3 HEAD request failed: {}", e),
+            )
         })?;
 
         Ok(response.status().is_success())
@@ -370,11 +408,10 @@ impl S3Client {
 
         // Create string to sign
         let algorithm = "AWS4-HMAC-SHA256";
-        let credential_scope = format!(
-            "{}/{}/s3/aws4_request",
-            date_stamp, self.config.region.name
-        );
-        let canonical_request_hash = hex::encode(blake3::hash(canonical_request.as_bytes()).as_bytes());
+        let credential_scope =
+            format!("{}/{}/s3/aws4_request", date_stamp, self.config.region.name);
+        let canonical_request_hash =
+            hex::encode(blake3::hash(canonical_request.as_bytes()).as_bytes());
         let string_to_sign = format!(
             "{}\n{}\n{}\n{}",
             algorithm, amz_date, credential_scope, canonical_request_hash
@@ -386,11 +423,7 @@ impl S3Client {
         // Create authorization header
         let authorization = format!(
             "{} Credential={}/{}, SignedHeaders={}, Signature={}",
-            algorithm,
-            self.credentials.access_key_id,
-            credential_scope,
-            signed_headers,
-            signature
+            algorithm, self.credentials.access_key_id, credential_scope, signed_headers, signature
         );
 
         let mut headers = vec![
@@ -403,7 +436,10 @@ impl S3Client {
         // Add content-length for PUT requests
         if method == "PUT" {
             headers.push(("Content-Length".to_string(), payload.len().to_string()));
-            headers.push(("Content-Type".to_string(), "application/octet-stream".to_string()));
+            headers.push((
+                "Content-Type".to_string(),
+                "application/octet-stream".to_string(),
+            ));
         }
 
         // Add session token if present
@@ -507,20 +543,20 @@ impl S3StorageBackend {
 }
 
 impl AsyncStorageBackend for S3StorageBackend {
-    fn read_chunk<'a>(&'a self, chunk_index: u64, _chunk_size: u64) -> AsyncResult<'a, Option<Vec<u8>>> {
+    fn read_chunk<'a>(
+        &'a self,
+        chunk_index: u64,
+        _chunk_size: u64,
+    ) -> AsyncResult<'a, Option<Vec<u8>>> {
         let key = self.client.config.chunk_key(chunk_index);
 
-        Box::pin(async move {
-            self.client.get_object(&key).await
-        })
+        Box::pin(async move { self.client.get_object(&key).await })
     }
 
     fn write_chunk<'a>(&'a self, chunk_index: u64, data: &'a [u8]) -> AsyncResult<'a, ()> {
         let key = self.client.config.chunk_key(chunk_index);
 
-        Box::pin(async move {
-            self.client.put_object(&key, data).await
-        })
+        Box::pin(async move { self.client.put_object(&key, data).await })
     }
 
     fn flush<'a>(&'a self) -> AsyncResult<'a, ()> {
@@ -536,9 +572,7 @@ impl AsyncStorageBackend for S3StorageBackend {
     fn delete_chunk<'a>(&'a self, chunk_index: u64) -> AsyncResult<'a, ()> {
         let key = self.client.config.chunk_key(chunk_index);
 
-        Box::pin(async move {
-            self.client.delete_object(&key).await
-        })
+        Box::pin(async move { self.client.delete_object(&key).await })
     }
 }
 

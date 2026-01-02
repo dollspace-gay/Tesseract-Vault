@@ -17,9 +17,8 @@ use std::thread;
 use tempfile::TempDir;
 
 use tesseract_lib::volume::{
-    Container, VolumeIOFilesystem, MemoryBackend, StorageBackend,
-    InodeType, ROOT_INODE, FS_BLOCK_SIZE,
-    keyslot::MasterKey,
+    keyslot::MasterKey, Container, InodeType, MemoryBackend, StorageBackend, VolumeIOFilesystem,
+    FS_BLOCK_SIZE, ROOT_INODE,
 };
 
 /// Test helper to create a temporary directory for tests
@@ -49,7 +48,8 @@ fn test_container_create_basic() {
         1024 * 1024, // 1 MB
         "test_password_123",
         TEST_SECTOR_SIZE,
-    ).expect("Failed to create container");
+    )
+    .expect("Failed to create container");
 
     assert!(path.exists());
     assert!(container.is_unlocked());
@@ -62,9 +62,9 @@ fn test_container_create_various_sizes() {
 
     // Test minimum viable size (slightly larger than metadata)
     let sizes: [u64; 3] = [
-        256 * 1024,        // 256 KB
-        1024 * 1024,       // 1 MB
-        10 * 1024 * 1024,  // 10 MB
+        256 * 1024,       // 256 KB
+        1024 * 1024,      // 1 MB
+        10 * 1024 * 1024, // 10 MB
     ];
 
     for (i, size) in sizes.iter().enumerate() {
@@ -108,8 +108,8 @@ fn test_container_open_correct_password() {
     }
 
     // Open with correct password
-    let container = Container::open(&path, password)
-        .expect("Failed to open container with correct password");
+    let container =
+        Container::open(&path, password).expect("Failed to open container with correct password");
 
     assert!(container.is_unlocked());
 }
@@ -121,8 +121,9 @@ fn test_container_open_wrong_password() {
 
     // Create container
     {
-        let _container = Container::create(&path, 1024 * 1024, "correct_password", TEST_SECTOR_SIZE)
-            .expect("Failed to create container");
+        let _container =
+            Container::create(&path, 1024 * 1024, "correct_password", TEST_SECTOR_SIZE)
+                .expect("Failed to create container");
     }
 
     // Open with wrong password
@@ -154,7 +155,9 @@ fn test_change_password() {
         .expect("Failed to create container");
 
     // Change to new password
-    container.change_password("new_password").expect("Failed to change password");
+    container
+        .change_password("new_password")
+        .expect("Failed to change password");
 
     drop(container);
 
@@ -163,7 +166,8 @@ fn test_change_password() {
     assert!(result.is_err());
 
     // New password should work
-    let container = Container::open(&path, "new_password").expect("Failed to open with new password");
+    let container =
+        Container::open(&path, "new_password").expect("Failed to open with new password");
     assert!(container.is_unlocked());
 }
 
@@ -197,8 +201,9 @@ fn test_filesystem_create_and_open() {
     // Create filesystem
     {
         let backend = SharedMemoryBackend::new(Arc::clone(&backend_data));
-        let fs = VolumeIOFilesystem::mkfs(&master_key, volume_size, Box::new(backend), "TestVolume")
-            .expect("Failed to create filesystem");
+        let fs =
+            VolumeIOFilesystem::mkfs(&master_key, volume_size, Box::new(backend), "TestVolume")
+                .expect("Failed to create filesystem");
         fs.sync().expect("Failed to sync");
     }
 
@@ -225,7 +230,10 @@ impl SharedMemoryBackend {
 
 impl StorageBackend for SharedMemoryBackend {
     fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> std::io::Result<usize> {
-        let data = self.data.read().map_err(|_| std::io::Error::other("lock poisoned"))?;
+        let data = self
+            .data
+            .read()
+            .map_err(|_| std::io::Error::other("lock poisoned"))?;
         let start = offset as usize;
         let end = (start + buf.len()).min(data.len());
         if start >= data.len() {
@@ -237,7 +245,10 @@ impl StorageBackend for SharedMemoryBackend {
     }
 
     fn write_at(&mut self, offset: u64, buf: &[u8]) -> std::io::Result<usize> {
-        let mut data = self.data.write().map_err(|_| std::io::Error::other("lock poisoned"))?;
+        let mut data = self
+            .data
+            .write()
+            .map_err(|_| std::io::Error::other("lock poisoned"))?;
         let start = offset as usize;
         let end = start + buf.len();
         if end > data.len() {
@@ -252,7 +263,10 @@ impl StorageBackend for SharedMemoryBackend {
     }
 
     fn size(&self) -> std::io::Result<u64> {
-        let data = self.data.read().map_err(|_| std::io::Error::other("lock poisoned"))?;
+        let data = self
+            .data
+            .read()
+            .map_err(|_| std::io::Error::other("lock poisoned"))?;
         Ok(data.len() as u64)
     }
 }
@@ -270,13 +284,15 @@ fn test_create_file() {
         .expect("Failed to create filesystem");
 
     // Create a file in root directory
-    let inode = fs.create_file(ROOT_INODE, "test.txt", 0o644)
+    let inode = fs
+        .create_file(ROOT_INODE, "test.txt", 0o644)
         .expect("Failed to create file");
 
     assert!(inode > ROOT_INODE);
 
     // Verify file exists
-    let lookup_result = fs.lookup(ROOT_INODE, "test.txt")
+    let lookup_result = fs
+        .lookup(ROOT_INODE, "test.txt")
         .expect("Failed to lookup file");
     assert_eq!(lookup_result, Some(inode));
 }
@@ -290,17 +306,20 @@ fn test_write_and_read_file() {
         .expect("Failed to create filesystem");
 
     // Create file
-    let inode = fs.create_file(ROOT_INODE, "data.txt", 0o644)
+    let inode = fs
+        .create_file(ROOT_INODE, "data.txt", 0o644)
         .expect("Failed to create file");
 
     // Write data
     let test_data = b"Hello, encrypted world! This is test data for the volume integration tests.";
-    let written = fs.write_by_inode(inode, 0, test_data)
+    let written = fs
+        .write_by_inode(inode, 0, test_data)
         .expect("Failed to write data");
     assert_eq!(written as usize, test_data.len());
 
     // Read data back
-    let read_data = fs.read_by_inode(inode, 0, test_data.len() as u32)
+    let read_data = fs
+        .read_by_inode(inode, 0, test_data.len() as u32)
         .expect("Failed to read data");
     assert_eq!(read_data, test_data);
 }
@@ -313,17 +332,23 @@ fn test_write_large_file() {
     let fs = VolumeIOFilesystem::mkfs(&master_key, volume_size, backend, "TestVolume")
         .expect("Failed to create filesystem");
 
-    let inode = fs.create_file(ROOT_INODE, "large.bin", 0o644)
+    let inode = fs
+        .create_file(ROOT_INODE, "large.bin", 0o644)
         .expect("Failed to create file");
 
     // Write data larger than one block
-    let large_data: Vec<u8> = (0..=255u8).cycle().take(FS_BLOCK_SIZE as usize * 3).collect();
-    let written = fs.write_by_inode(inode, 0, &large_data)
+    let large_data: Vec<u8> = (0..=255u8)
+        .cycle()
+        .take(FS_BLOCK_SIZE as usize * 3)
+        .collect();
+    let written = fs
+        .write_by_inode(inode, 0, &large_data)
         .expect("Failed to write large data");
     assert_eq!(written as usize, large_data.len());
 
     // Read back and verify
-    let read_data = fs.read_by_inode(inode, 0, large_data.len() as u32)
+    let read_data = fs
+        .read_by_inode(inode, 0, large_data.len() as u32)
         .expect("Failed to read large data");
     assert_eq!(read_data, large_data);
 }
@@ -336,14 +361,17 @@ fn test_file_offset_write() {
     let fs = VolumeIOFilesystem::mkfs(&master_key, volume_size, backend, "TestVolume")
         .expect("Failed to create filesystem");
 
-    let inode = fs.create_file(ROOT_INODE, "offset.txt", 0o644)
+    let inode = fs
+        .create_file(ROOT_INODE, "offset.txt", 0o644)
         .expect("Failed to create file");
 
     // Write at offset 0
-    fs.write_by_inode(inode, 0, b"AAAA").expect("Failed to write at offset 0");
+    fs.write_by_inode(inode, 0, b"AAAA")
+        .expect("Failed to write at offset 0");
 
     // Write at offset 100
-    fs.write_by_inode(inode, 100, b"BBBB").expect("Failed to write at offset 100");
+    fs.write_by_inode(inode, 100, b"BBBB")
+        .expect("Failed to write at offset 100");
 
     // Read and verify the written data
     let data = fs.read_by_inode(inode, 0, 104).expect("Failed to read");
@@ -361,7 +389,8 @@ fn test_truncate_file() {
     let fs = VolumeIOFilesystem::mkfs(&master_key, volume_size, backend, "TestVolume")
         .expect("Failed to create filesystem");
 
-    let inode = fs.create_file(ROOT_INODE, "truncate.txt", 0o644)
+    let inode = fs
+        .create_file(ROOT_INODE, "truncate.txt", 0o644)
         .expect("Failed to create file");
 
     // Write data
@@ -389,18 +418,21 @@ fn test_remove_file() {
         .expect("Failed to create filesystem");
 
     // Create file
-    let inode = fs.create_file(ROOT_INODE, "delete_me.txt", 0o644)
+    let inode = fs
+        .create_file(ROOT_INODE, "delete_me.txt", 0o644)
         .expect("Failed to create file");
 
     // Write some data
-    fs.write_by_inode(inode, 0, b"some data").expect("Failed to write");
+    fs.write_by_inode(inode, 0, b"some data")
+        .expect("Failed to write");
 
     // Remove file
     fs.remove_file(ROOT_INODE, "delete_me.txt")
         .expect("Failed to remove file");
 
     // Verify file no longer exists
-    let lookup = fs.lookup(ROOT_INODE, "delete_me.txt")
+    let lookup = fs
+        .lookup(ROOT_INODE, "delete_me.txt")
         .expect("Failed to lookup");
     assert!(lookup.is_none());
 }
@@ -417,7 +449,8 @@ fn test_create_directory() {
     let fs = VolumeIOFilesystem::mkfs(&master_key, volume_size, backend, "TestVolume")
         .expect("Failed to create filesystem");
 
-    let dir_inode = fs.create_directory(ROOT_INODE, "subdir", 0o755)
+    let dir_inode = fs
+        .create_directory(ROOT_INODE, "subdir", 0o755)
         .expect("Failed to create directory");
 
     // Verify directory exists
@@ -438,15 +471,19 @@ fn test_nested_directories() {
         .expect("Failed to create filesystem");
 
     // Create nested structure: /a/b/c
-    let dir_a = fs.create_directory(ROOT_INODE, "a", 0o755)
+    let dir_a = fs
+        .create_directory(ROOT_INODE, "a", 0o755)
         .expect("Failed to create dir a");
-    let dir_b = fs.create_directory(dir_a, "b", 0o755)
+    let dir_b = fs
+        .create_directory(dir_a, "b", 0o755)
         .expect("Failed to create dir b");
-    let dir_c = fs.create_directory(dir_b, "c", 0o755)
+    let dir_c = fs
+        .create_directory(dir_b, "c", 0o755)
         .expect("Failed to create dir c");
 
     // Create file in deepest directory
-    let file_inode = fs.create_file(dir_c, "deep.txt", 0o644)
+    let file_inode = fs
+        .create_file(dir_c, "deep.txt", 0o644)
         .expect("Failed to create file in deep dir");
 
     // Verify file is accessible
@@ -463,9 +500,12 @@ fn test_readdir() {
         .expect("Failed to create filesystem");
 
     // Create some files and directories
-    fs.create_file(ROOT_INODE, "file1.txt", 0o644).expect("create file1");
-    fs.create_file(ROOT_INODE, "file2.txt", 0o644).expect("create file2");
-    fs.create_directory(ROOT_INODE, "dir1", 0o755).expect("create dir1");
+    fs.create_file(ROOT_INODE, "file1.txt", 0o644)
+        .expect("create file1");
+    fs.create_file(ROOT_INODE, "file2.txt", 0o644)
+        .expect("create file2");
+    fs.create_directory(ROOT_INODE, "dir1", 0o755)
+        .expect("create dir1");
 
     // Read directory
     let entries = fs.readdir_by_inode(ROOT_INODE).expect("Failed to readdir");
@@ -474,7 +514,8 @@ fn test_readdir() {
     assert!(entries.len() >= 3);
 
     // Verify our entries exist
-    let names: Vec<_> = entries.iter()
+    let names: Vec<_> = entries
+        .iter()
         .filter_map(|e| e.name_str().ok())
         .collect::<Vec<_>>();
     assert!(names.contains(&"file1.txt"));
@@ -498,7 +539,9 @@ fn test_remove_empty_directory() {
         .expect("Failed to remove empty directory");
 
     // Verify it's gone
-    let lookup = fs.lookup(ROOT_INODE, "empty_dir").expect("Failed to lookup");
+    let lookup = fs
+        .lookup(ROOT_INODE, "empty_dir")
+        .expect("Failed to lookup");
     assert!(lookup.is_none());
 }
 
@@ -511,7 +554,8 @@ fn test_remove_nonempty_directory_fails() {
         .expect("Failed to create filesystem");
 
     // Create directory with file inside
-    let dir_inode = fs.create_directory(ROOT_INODE, "nonempty", 0o755)
+    let dir_inode = fs
+        .create_directory(ROOT_INODE, "nonempty", 0o755)
         .expect("Failed to create directory");
     fs.create_file(dir_inode, "file.txt", 0o644)
         .expect("Failed to create file in dir");
@@ -534,9 +578,11 @@ fn test_rename_file() {
         .expect("Failed to create filesystem");
 
     // Create file with content
-    let inode = fs.create_file(ROOT_INODE, "old_name.txt", 0o644)
+    let inode = fs
+        .create_file(ROOT_INODE, "old_name.txt", 0o644)
         .expect("Failed to create file");
-    fs.write_by_inode(inode, 0, b"test content").expect("Failed to write");
+    fs.write_by_inode(inode, 0, b"test content")
+        .expect("Failed to write");
 
     // Rename file
     fs.rename_entry(ROOT_INODE, "old_name.txt", ROOT_INODE, "new_name.txt")
@@ -564,12 +610,19 @@ fn test_move_file_between_directories() {
         .expect("Failed to create filesystem");
 
     // Create directories
-    let dir1 = fs.create_directory(ROOT_INODE, "dir1", 0o755).expect("create dir1");
-    let dir2 = fs.create_directory(ROOT_INODE, "dir2", 0o755).expect("create dir2");
+    let dir1 = fs
+        .create_directory(ROOT_INODE, "dir1", 0o755)
+        .expect("create dir1");
+    let dir2 = fs
+        .create_directory(ROOT_INODE, "dir2", 0o755)
+        .expect("create dir2");
 
     // Create file in dir1
-    let inode = fs.create_file(dir1, "file.txt", 0o644).expect("create file");
-    fs.write_by_inode(inode, 0, b"moveable content").expect("write");
+    let inode = fs
+        .create_file(dir1, "file.txt", 0o644)
+        .expect("create file");
+    fs.write_by_inode(inode, 0, b"moveable content")
+        .expect("write");
 
     // Move to dir2
     fs.rename_entry(dir1, "file.txt", dir2, "moved.txt")
@@ -598,8 +651,10 @@ fn test_fsck_clean_filesystem() {
         .expect("Failed to create filesystem");
 
     // Create some structure
-    fs.create_file(ROOT_INODE, "file.txt", 0o644).expect("create file");
-    fs.create_directory(ROOT_INODE, "dir", 0o755).expect("create dir");
+    fs.create_file(ROOT_INODE, "file.txt", 0o644)
+        .expect("create file");
+    fs.create_directory(ROOT_INODE, "dir", 0o755)
+        .expect("create dir");
     fs.sync().expect("sync");
 
     // Run fsck
@@ -642,9 +697,15 @@ fn test_recovery_key_unlock() {
 
     // Generate and add a recovery key
     let recovery_key = Container::generate_recovery_key();
-    assert_eq!(recovery_key.len(), 64, "Recovery key should be 64 hex chars");
+    assert_eq!(
+        recovery_key.len(),
+        64,
+        "Recovery key should be 64 hex chars"
+    );
 
-    container.add_recovery_key(&recovery_key).expect("Failed to add recovery key");
+    container
+        .add_recovery_key(&recovery_key)
+        .expect("Failed to add recovery key");
 
     drop(container);
 
@@ -674,7 +735,8 @@ fn test_header_export_and_restore() {
             .expect("Failed to create container");
 
         // Export header backup
-        container.export_header_backup(&backup_path, password)
+        container
+            .export_header_backup(&backup_path, password)
             .expect("Failed to export header backup");
     }
 
@@ -682,10 +744,11 @@ fn test_header_export_and_restore() {
     assert!(backup_path.exists());
 
     // Restore from backup (simulating header corruption recovery)
-    let mut container = Container::open(&container_file, password)
-        .expect("Failed to open container");
+    let mut container =
+        Container::open(&container_file, password).expect("Failed to open container");
 
-    container.restore_from_backup(&backup_path, password)
+    container
+        .restore_from_backup(&backup_path, password)
         .expect("Failed to restore from backup");
 }
 
@@ -700,7 +763,7 @@ fn test_concurrent_file_operations() {
     let backend: Box<dyn StorageBackend> = Box::new(MemoryBackend::new(volume_size as usize));
     let fs = Arc::new(
         VolumeIOFilesystem::mkfs(&master_key, volume_size, backend, "TestVolume")
-            .expect("Failed to create filesystem")
+            .expect("Failed to create filesystem"),
     );
 
     // Create files for each thread
@@ -723,12 +786,14 @@ fn test_concurrent_file_operations() {
         let handle = thread::spawn(move || {
             for f in 0..files_per_thread {
                 let name = format!("thread_{}_file_{}.txt", t, f);
-                let inode = fs_clone.lookup(ROOT_INODE, &name)
+                let inode = fs_clone
+                    .lookup(ROOT_INODE, &name)
                     .expect("lookup failed")
                     .expect("file not found");
 
                 let data = format!("Data from thread {} file {}", t, f);
-                fs_clone.write_by_inode(inode, 0, data.as_bytes())
+                fs_clone
+                    .write_by_inode(inode, 0, data.as_bytes())
                     .expect("write failed");
             }
         });
@@ -744,12 +809,14 @@ fn test_concurrent_file_operations() {
     for t in 0..num_threads {
         for f in 0..files_per_thread {
             let name = format!("thread_{}_file_{}.txt", t, f);
-            let inode = fs.lookup(ROOT_INODE, &name)
+            let inode = fs
+                .lookup(ROOT_INODE, &name)
                 .expect("lookup failed")
                 .expect("file not found");
 
             let expected = format!("Data from thread {} file {}", t, f);
-            let data = fs.read_by_inode(inode, 0, expected.len() as u32)
+            let data = fs
+                .read_by_inode(inode, 0, expected.len() as u32)
                 .expect("read failed");
             assert_eq!(String::from_utf8_lossy(&data), expected);
         }
@@ -768,7 +835,8 @@ fn test_lookup_nonexistent_file() {
     let fs = VolumeIOFilesystem::mkfs(&master_key, volume_size, backend, "TestVolume")
         .expect("Failed to create filesystem");
 
-    let result = fs.lookup(ROOT_INODE, "nonexistent.txt")
+    let result = fs
+        .lookup(ROOT_INODE, "nonexistent.txt")
         .expect("lookup should succeed");
     assert!(result.is_none());
 }
@@ -823,7 +891,8 @@ fn test_read_beyond_file_size() {
     let fs = VolumeIOFilesystem::mkfs(&master_key, volume_size, backend, "TestVolume")
         .expect("Failed to create filesystem");
 
-    let inode = fs.create_file(ROOT_INODE, "small.txt", 0o644)
+    let inode = fs
+        .create_file(ROOT_INODE, "small.txt", 0o644)
         .expect("create file");
     fs.write_by_inode(inode, 0, b"small").expect("write");
 
@@ -845,10 +914,12 @@ fn test_data_persists_after_sync() {
     // Create filesystem and write data
     {
         let backend = SharedMemoryBackend::new(Arc::clone(&backend_data));
-        let fs = VolumeIOFilesystem::mkfs(&master_key, volume_size, Box::new(backend), "TestVolume")
-            .expect("Failed to create filesystem");
+        let fs =
+            VolumeIOFilesystem::mkfs(&master_key, volume_size, Box::new(backend), "TestVolume")
+                .expect("Failed to create filesystem");
 
-        let inode = fs.create_file(ROOT_INODE, "persistent.txt", 0o644)
+        let inode = fs
+            .create_file(ROOT_INODE, "persistent.txt", 0o644)
             .expect("create file");
         fs.write_by_inode(inode, 0, b"persistent data")
             .expect("write");
@@ -860,7 +931,8 @@ fn test_data_persists_after_sync() {
     let fs = VolumeIOFilesystem::open(&master_key, volume_size, Box::new(backend2))
         .expect("Failed to open filesystem");
 
-    let inode = fs.lookup(ROOT_INODE, "persistent.txt")
+    let inode = fs
+        .lookup(ROOT_INODE, "persistent.txt")
         .expect("lookup")
         .expect("file not found");
     let data = fs.read_by_inode(inode, 0, 15).expect("read");

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use tesseract_lib::crypto::pqc::{MlKemKeyPair, encapsulate};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::alloc::{GlobalAlloc, Layout};
 use tesseract_lib::crypto::kdf::Argon2Kdf;
+use tesseract_lib::crypto::pqc::{encapsulate, MlKemKeyPair};
 use tesseract_lib::crypto::{Encryptor, KeyDerivation};
 use tesseract_lib::SecureAllocator;
-use std::alloc::{GlobalAlloc, Layout};
 
 fn bench_ml_kem_keypair_generation(c: &mut Criterion) {
     c.bench_function("ml_kem_1024_keypair_generation", |b| {
@@ -140,7 +140,9 @@ fn bench_hybrid_mode_operations(c: &mut Criterion) {
         let ciphertext = encryptor.encrypt(&*hybrid_key, &nonce, &plaintext).unwrap();
 
         b.iter(|| {
-            let decrypted = encryptor.decrypt(&*hybrid_key, &nonce, &ciphertext).unwrap();
+            let decrypted = encryptor
+                .decrypt(&*hybrid_key, &nonce, &ciphertext)
+                .unwrap();
             black_box(decrypted)
         });
     });
@@ -163,7 +165,10 @@ fn bench_concurrent_pqc_operations(c: &mut Criterion) {
     });
 
     let keypairs: Vec<_> = (0..4).map(|_| MlKemKeyPair::generate()).collect();
-    let public_keys: Vec<_> = keypairs.iter().map(|kp| kp.encapsulation_key().to_vec()).collect();
+    let public_keys: Vec<_> = keypairs
+        .iter()
+        .map(|kp| kp.encapsulation_key().to_vec())
+        .collect();
 
     group.bench_function("parallel_encapsulation_4", |b| {
         b.iter(|| {
@@ -242,7 +247,9 @@ fn bench_pqc_data_sizes(c: &mut Criterion) {
             let ciphertext = encryptor.encrypt(&*hybrid_key, &nonce, &plaintext).unwrap();
 
             b.iter(|| {
-                let decrypted = encryptor.decrypt(&*hybrid_key, &nonce, &ciphertext).unwrap();
+                let decrypted = encryptor
+                    .decrypt(&*hybrid_key, &nonce, &ciphertext)
+                    .unwrap();
                 black_box(decrypted)
             });
         });
@@ -252,7 +259,9 @@ fn bench_pqc_data_sizes(c: &mut Criterion) {
 }
 
 fn bench_volume_header_pqc(c: &mut Criterion) {
-    use tesseract_lib::volume::header::{VolumeHeader, PqVolumeMetadata, PqAlgorithm, PQ_METADATA_SIZE};
+    use tesseract_lib::volume::header::{
+        PqAlgorithm, PqVolumeMetadata, VolumeHeader, PQ_METADATA_SIZE,
+    };
 
     let mut group = c.benchmark_group("volume_header_pqc");
 
@@ -271,8 +280,10 @@ fn bench_volume_header_pqc(c: &mut Criterion) {
     let edk_array = [0u8; ENCRYPTED_DK_SIZE]; // Placeholder for benchmark
 
     let ek_bytes = keypair.encapsulation_key();
-    ek_array[..ek_bytes.len().min(MLKEM1024_EK_SIZE)].copy_from_slice(&ek_bytes[..ek_bytes.len().min(MLKEM1024_EK_SIZE)]);
-    ct_array[..ciphertext.len().min(MLKEM1024_CT_SIZE)].copy_from_slice(&ciphertext[..ciphertext.len().min(MLKEM1024_CT_SIZE)]);
+    ek_array[..ek_bytes.len().min(MLKEM1024_EK_SIZE)]
+        .copy_from_slice(&ek_bytes[..ek_bytes.len().min(MLKEM1024_EK_SIZE)]);
+    ct_array[..ciphertext.len().min(MLKEM1024_CT_SIZE)]
+        .copy_from_slice(&ciphertext[..ciphertext.len().min(MLKEM1024_CT_SIZE)]);
 
     let pq_metadata = PqVolumeMetadata {
         algorithm: PqAlgorithm::MlKem1024,
@@ -288,10 +299,10 @@ fn bench_volume_header_pqc(c: &mut Criterion) {
         b.iter(|| {
             let header = VolumeHeader::new_with_pqc(
                 1024 * 1024 * 1024, // 1GB volume
-                4096,                // 4KB sectors
-                [0x42u8; 32],        // salt
-                [0x43u8; 12],        // header IV
-                pq_size,             // PQ metadata size
+                4096,               // 4KB sectors
+                [0x42u8; 32],       // salt
+                [0x43u8; 12],       // header IV
+                pq_size,            // PQ metadata size
             );
             black_box(header)
         });
@@ -358,7 +369,11 @@ fn bench_volume_header_pqc(c: &mut Criterion) {
     });
 
     // Verify bincode serialization produces expected size
-    assert_eq!(pq_bytes.len(), PQ_METADATA_SIZE, "PQ metadata size mismatch");
+    assert_eq!(
+        pq_bytes.len(),
+        PQ_METADATA_SIZE,
+        "PQ metadata size mismatch"
+    );
 
     group.finish();
 }

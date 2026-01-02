@@ -165,7 +165,9 @@ impl EncryptedMemoryPool {
     /// let allocation = pool.allocate(4096).unwrap();
     /// ```
     pub fn allocate(&self, size: usize) -> Result<EncryptedAllocation> {
-        let mut inner = self.inner.lock()
+        let mut inner = self
+            .inner
+            .lock()
             .map_err(|_| CryptorError::Cryptography("Pool mutex poisoned".to_string()))?;
 
         // Generate unique nonce for this allocation
@@ -182,19 +184,20 @@ impl EncryptedMemoryPool {
         let encryption_key = Zeroizing::new(*inner.master_key);
 
         // For High/Maximum security, use locked memory
-        let locked = if security_level == SecurityLevel::High || security_level == SecurityLevel::Maximum {
-            let data_vec = vec![0u8; size];
-            match LockedMemory::new(data_vec) {
-                Ok(locked) => Some(locked),
-                Err(_) => {
-                    // Fall back to best-effort if locking fails
-                    let (locked, _) = LockedMemory::new_best_effort(vec![0u8; size]);
-                    Some(locked)
+        let locked =
+            if security_level == SecurityLevel::High || security_level == SecurityLevel::Maximum {
+                let data_vec = vec![0u8; size];
+                match LockedMemory::new(data_vec) {
+                    Ok(locked) => Some(locked),
+                    Err(_) => {
+                        // Fall back to best-effort if locking fails
+                        let (locked, _) = LockedMemory::new_best_effort(vec![0u8; size]);
+                        Some(locked)
+                    }
                 }
-            }
-        } else {
-            None
-        };
+            } else {
+                None
+            };
 
         Ok(EncryptedAllocation {
             data: vec![0u8; size],
@@ -207,21 +210,24 @@ impl EncryptedMemoryPool {
 
     /// Returns the security level of this pool.
     pub fn security_level(&self) -> SecurityLevel {
-        self.inner.lock()
+        self.inner
+            .lock()
             .map(|inner| inner.security_level)
             .unwrap_or(SecurityLevel::Standard)
     }
 
     /// Returns the number of allocations made from this pool.
     pub fn allocation_count(&self) -> usize {
-        self.inner.lock()
+        self.inner
+            .lock()
             .map(|inner| inner.allocation_count)
             .unwrap_or(0)
     }
 
     /// Returns the total bytes allocated from this pool.
     pub fn bytes_allocated(&self) -> usize {
-        self.inner.lock()
+        self.inner
+            .lock()
             .map(|inner| inner.bytes_allocated)
             .unwrap_or(0)
     }
@@ -236,7 +242,9 @@ impl EncryptedMemoryPool {
     /// Existing allocations will continue to use their original keys.
     /// Only new allocations will use the rotated key.
     pub fn rotate_key(&self) -> Result<()> {
-        let mut inner = self.inner.lock()
+        let mut inner = self
+            .inner
+            .lock()
             .map_err(|_| CryptorError::Cryptography("Pool mutex poisoned".to_string()))?;
 
         // Generate new master key

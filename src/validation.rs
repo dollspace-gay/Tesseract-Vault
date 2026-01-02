@@ -171,7 +171,9 @@ pub fn validate_password(password: &str) -> Result<()> {
 
         return Err(CryptorError::PasswordValidation(format!(
             "Password strength score {} is below required minimum of {} (scale 0-4). {}",
-            u8::from(score), u8::from(MIN_ENTROPY_SCORE), feedback_msg
+            u8::from(score),
+            u8::from(MIN_ENTROPY_SCORE),
+            feedback_msg
         )));
     }
 

@@ -76,7 +76,10 @@ impl std::fmt::Debug for DropboxCredentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DropboxCredentials")
             .field("access_token", &"[REDACTED]")
-            .field("refresh_token", &self.refresh_token.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "[REDACTED]"),
+            )
             .finish()
     }
 }
@@ -213,17 +216,25 @@ impl DropboxClient {
         let arg = DownloadArg {
             path: path.to_string(),
         };
-        let arg_json = serde_json::to_string(&arg)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let arg_json =
+            serde_json::to_string(&arg).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         let response = self
             .http_client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.credentials.token()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.credentials.token()),
+            )
             .header("Dropbox-API-Arg", arg_json)
             .send()
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Dropbox download failed: {}", e)))?;
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Dropbox download failed: {}", e),
+                )
+            })?;
 
         match response.status() {
             StatusCode::OK => {
@@ -239,7 +250,10 @@ impl DropboxClient {
                 if error_text.contains("not_found") {
                     Ok(None)
                 } else {
-                    Err(io::Error::new(io::ErrorKind::Other, format!("Dropbox error: {}", error_text)))
+                    Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Dropbox error: {}", error_text),
+                    ))
                 }
             }
             status => {
@@ -262,19 +276,27 @@ impl DropboxClient {
             autorename: false,
             mute: true,
         };
-        let arg_json = serde_json::to_string(&arg)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let arg_json =
+            serde_json::to_string(&arg).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         let response = self
             .http_client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.credentials.token()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.credentials.token()),
+            )
             .header("Dropbox-API-Arg", arg_json)
             .header("Content-Type", "application/octet-stream")
             .body(data.to_vec())
             .send()
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Dropbox upload failed: {}", e)))?;
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Dropbox upload failed: {}", e),
+                )
+            })?;
 
         if response.status().is_success() {
             Ok(())
@@ -298,12 +320,20 @@ impl DropboxClient {
         let response = self
             .http_client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.credentials.token()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.credentials.token()),
+            )
             .header("Content-Type", "application/json")
             .json(&arg)
             .send()
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Dropbox delete failed: {}", e)))?;
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Dropbox delete failed: {}", e),
+                )
+            })?;
 
         match response.status() {
             s if s.is_success() => Ok(()),
@@ -313,7 +343,10 @@ impl DropboxClient {
                 if error_text.contains("not_found") {
                     Ok(())
                 } else {
-                    Err(io::Error::new(io::ErrorKind::Other, format!("Dropbox error: {}", error_text)))
+                    Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Dropbox error: {}", error_text),
+                    ))
                 }
             }
             status => {
@@ -338,12 +371,20 @@ impl DropboxClient {
         let response = self
             .http_client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.credentials.token()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.credentials.token()),
+            )
             .header("Content-Type", "application/json")
             .json(&arg)
             .send()
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Dropbox metadata failed: {}", e)))?;
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Dropbox metadata failed: {}", e),
+                )
+            })?;
 
         match response.status() {
             StatusCode::OK => {
@@ -383,20 +424,20 @@ impl DropboxStorageBackend {
 }
 
 impl AsyncStorageBackend for DropboxStorageBackend {
-    fn read_chunk<'a>(&'a self, chunk_index: u64, _chunk_size: u64) -> AsyncResult<'a, Option<Vec<u8>>> {
+    fn read_chunk<'a>(
+        &'a self,
+        chunk_index: u64,
+        _chunk_size: u64,
+    ) -> AsyncResult<'a, Option<Vec<u8>>> {
         let path = self.client.config.chunk_path(chunk_index);
 
-        Box::pin(async move {
-            self.client.download(&path).await
-        })
+        Box::pin(async move { self.client.download(&path).await })
     }
 
     fn write_chunk<'a>(&'a self, chunk_index: u64, data: &'a [u8]) -> AsyncResult<'a, ()> {
         let path = self.client.config.chunk_path(chunk_index);
 
-        Box::pin(async move {
-            self.client.upload(&path, data).await
-        })
+        Box::pin(async move { self.client.upload(&path, data).await })
     }
 
     fn flush<'a>(&'a self) -> AsyncResult<'a, ()> {
@@ -412,9 +453,7 @@ impl AsyncStorageBackend for DropboxStorageBackend {
     fn delete_chunk<'a>(&'a self, chunk_index: u64) -> AsyncResult<'a, ()> {
         let path = self.client.config.chunk_path(chunk_index);
 
-        Box::pin(async move {
-            self.client.delete(&path).await
-        })
+        Box::pin(async move { self.client.delete(&path).await })
     }
 }
 
@@ -434,8 +473,14 @@ mod tests {
     #[test]
     fn test_dropbox_config_chunk_path() {
         let config = DropboxConfig::new("/Apps/Tesseract/my-volume".to_string());
-        assert_eq!(config.chunk_path(0), "/Apps/Tesseract/my-volume/chunk-00000000");
-        assert_eq!(config.chunk_path(255), "/Apps/Tesseract/my-volume/chunk-000000ff");
+        assert_eq!(
+            config.chunk_path(0),
+            "/Apps/Tesseract/my-volume/chunk-00000000"
+        );
+        assert_eq!(
+            config.chunk_path(255),
+            "/Apps/Tesseract/my-volume/chunk-000000ff"
+        );
     }
 
     #[test]

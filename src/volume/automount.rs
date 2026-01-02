@@ -6,11 +6,10 @@
 //! system startup after the OS has loaded, with support for password prompts,
 //! TPM unsealing, and systemd/Windows service integration.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
 
 /// Errors that can occur during auto-mount operations
 #[derive(Debug, Error)]
@@ -229,20 +228,21 @@ impl AutoMountService {
                 // In a real implementation, this would prompt the user
                 // For now, we return an error as we can't prompt in a library
                 return Err(AutoMountError::AuthFailed(
-                    "Password prompt not supported in library context".to_string()
+                    "Password prompt not supported in library context".to_string(),
                 ));
             }
             AutoMountAuth::Tpm { .. } => {
                 // TPM unsealing not yet implemented
                 return Err(AutoMountError::AuthFailed(
-                    "TPM authentication not yet implemented".to_string()
+                    "TPM authentication not yet implemented".to_string(),
                 ));
             }
             AutoMountAuth::Keyring { entry_name } => {
                 // Keyring lookup not yet implemented
-                return Err(AutoMountError::AuthFailed(
-                    format!("Keyring lookup not yet implemented for '{}'", entry_name)
-                ));
+                return Err(AutoMountError::AuthFailed(format!(
+                    "Keyring lookup not yet implemented for '{}'",
+                    entry_name
+                )));
             }
             AutoMountAuth::None => {
                 // No authentication - use empty password (for recovery key scenarios)
@@ -267,7 +267,8 @@ impl AutoMountService {
             .map_err(|e| AutoMountError::MountFailed(e.to_string()))?;
 
         // Track the mounted volume
-        self.mounted_ids.insert(config.id.clone(), config.container_path.clone());
+        self.mounted_ids
+            .insert(config.id.clone(), config.container_path.clone());
 
         Ok(())
     }
@@ -290,10 +291,16 @@ impl AutoMountService {
     /// - The mount operation fails
     pub fn mount_with_password(&mut self, volume_id: &str, password: &str) -> Result<()> {
         // Find the volume config
-        let volume_config = self.config.get_volume(volume_id)
-            .ok_or_else(|| AutoMountError::ConfigError(
-                format!("Volume '{}' not found in configuration", volume_id)
-            ))?.clone();
+        let volume_config = self
+            .config
+            .get_volume(volume_id)
+            .ok_or_else(|| {
+                AutoMountError::ConfigError(format!(
+                    "Volume '{}' not found in configuration",
+                    volume_id
+                ))
+            })?
+            .clone();
 
         // Create mount options
         let options = super::mount::MountOptions {
@@ -312,7 +319,10 @@ impl AutoMountService {
             .map_err(|e| AutoMountError::MountFailed(e.to_string()))?;
 
         // Track the mounted volume
-        self.mounted_ids.insert(volume_config.id.clone(), volume_config.container_path.clone());
+        self.mounted_ids.insert(
+            volume_config.id.clone(),
+            volume_config.container_path.clone(),
+        );
 
         Ok(())
     }
@@ -333,9 +343,10 @@ impl AutoMountService {
                 .map_err(|e| AutoMountError::MountFailed(e.to_string()))?;
             Ok(())
         } else {
-            Err(AutoMountError::MountFailed(
-                format!("Volume '{}' is not mounted", volume_id)
-            ))
+            Err(AutoMountError::MountFailed(format!(
+                "Volume '{}' is not mounted",
+                volume_id
+            )))
         }
     }
 
@@ -472,12 +483,9 @@ mod tests {
     fn test_add_remove_volume() {
         let mut config = AutoMountConfig::new();
 
-        let volume = VolumeConfigBuilder::new(
-            "vol1",
-            "My Volume",
-            "/path/to/container",
-            "/mnt/encrypted",
-        ).build();
+        let volume =
+            VolumeConfigBuilder::new("vol1", "My Volume", "/path/to/container", "/mnt/encrypted")
+                .build();
 
         config.add_volume(volume);
         assert_eq!(config.volumes.len(), 1);
@@ -491,12 +499,9 @@ mod tests {
     fn test_get_volume() {
         let mut config = AutoMountConfig::new();
 
-        let volume = VolumeConfigBuilder::new(
-            "vol1",
-            "My Volume",
-            "/path/to/container",
-            "/mnt/encrypted",
-        ).build();
+        let volume =
+            VolumeConfigBuilder::new("vol1", "My Volume", "/path/to/container", "/mnt/encrypted")
+                .build();
 
         config.add_volume(volume);
 
@@ -532,14 +537,10 @@ mod tests {
     fn test_save_load_config() {
         let mut config = AutoMountConfig::new();
 
-        let volume = VolumeConfigBuilder::new(
-            "vol1",
-            "Test Volume",
-            "/path/to/container",
-            "/mnt/test",
-        )
-        .auth(AutoMountAuth::PasswordPrompt)
-        .build();
+        let volume =
+            VolumeConfigBuilder::new("vol1", "Test Volume", "/path/to/container", "/mnt/test")
+                .auth(AutoMountAuth::PasswordPrompt)
+                .build();
 
         config.add_volume(volume);
 

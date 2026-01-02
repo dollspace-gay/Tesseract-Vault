@@ -41,21 +41,13 @@
 //! assert_eq!(sanitized, 0); // Zero strategy sets all timestamps to 0
 //! ```
 
-mod sanitizer;
 mod padding;
+mod sanitizer;
 
+pub use padding::{calculate_padded_size, generate_padding, PaddingGenerator, PaddingStrategy};
 pub use sanitizer::{
-    MetadataSanitizer,
-    SanitizationOptions,
+    MetadataSanitizer, SanitizationError, SanitizationOptions, SanitizationResult,
     TimestampStrategy,
-    SanitizationResult,
-    SanitizationError,
-};
-pub use padding::{
-    PaddingGenerator,
-    PaddingStrategy,
-    generate_padding,
-    calculate_padded_size,
 };
 
 #[cfg(test)]

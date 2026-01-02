@@ -53,18 +53,18 @@
 //! - **Both Directions**: Protects against both overflow and underflow
 //! - **Page Aligned**: Uses OS-level page protection for maximum security
 
+use rand::Rng;
 use std::ptr::NonNull;
 use thiserror::Error;
 use zeroize::Zeroize;
-use rand::Rng;
 
 #[cfg(unix)]
-use libc::{mprotect, mmap, munmap, PROT_NONE, PROT_READ, PROT_WRITE, MAP_PRIVATE, MAP_ANONYMOUS};
+use libc::{mmap, mprotect, munmap, MAP_ANONYMOUS, MAP_PRIVATE, PROT_NONE, PROT_READ, PROT_WRITE};
 
 #[cfg(windows)]
 use winapi::um::memoryapi::{VirtualAlloc, VirtualFree, VirtualProtect};
 #[cfg(windows)]
-use winapi::um::winnt::{PAGE_NOACCESS, PAGE_READWRITE, MEM_COMMIT, MEM_RESERVE, MEM_RELEASE};
+use winapi::um::winnt::{MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_NOACCESS, PAGE_READWRITE};
 
 /// Errors that can occur with guarded allocations
 #[derive(Debug, Error)]
@@ -151,9 +151,8 @@ impl GuardedAllocation {
         let back_canary = rand::rng().random::<u64>();
 
         // Calculate data pointer (after front guard page and canary)
-        let data_ptr = unsafe {
-            NonNull::new_unchecked(base_ptr.as_ptr().add(PAGE_SIZE + CANARY_SIZE))
-        };
+        let data_ptr =
+            unsafe { NonNull::new_unchecked(base_ptr.as_ptr().add(PAGE_SIZE + CANARY_SIZE)) };
 
         // Write canaries
         unsafe {
@@ -256,8 +255,7 @@ impl GuardedAllocation {
             Self::protect_page(self.base_ptr.as_ptr(), false)?;
 
             // Back guard page (at offset: total_size - PAGE_SIZE)
-            let back_guard_ptr = self.base_ptr.as_ptr()
-                .add(self.total_size - PAGE_SIZE);
+            let back_guard_ptr = self.base_ptr.as_ptr().add(self.total_size - PAGE_SIZE);
             Self::protect_page(back_guard_ptr, false)?;
         }
 
@@ -313,16 +311,12 @@ impl GuardedAllocation {
 
     /// Get the data region as a slice
     pub fn as_slice(&self) -> &[u8] {
-        unsafe {
-            std::slice::from_raw_parts(self.data_ptr.as_ptr(), self.data_size)
-        }
+        unsafe { std::slice::from_raw_parts(self.data_ptr.as_ptr(), self.data_size) }
     }
 
     /// Get the data region as a mutable slice
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
-        unsafe {
-            std::slice::from_raw_parts_mut(self.data_ptr.as_ptr(), self.data_size)
-        }
+        unsafe { std::slice::from_raw_parts_mut(self.data_ptr.as_ptr(), self.data_size) }
     }
 
     /// Verify that canaries are intact
@@ -392,15 +386,13 @@ impl Drop for GuardedAllocation {
         // Unprotect guard pages before deallocation
         unsafe {
             let _ = Self::protect_page(self.base_ptr.as_ptr(), true);
-            let back_guard_ptr = self.base_ptr.as_ptr()
-                .add(self.total_size - PAGE_SIZE);
+            let back_guard_ptr = self.base_ptr.as_ptr().add(self.total_size - PAGE_SIZE);
             let _ = Self::protect_page(back_guard_ptr, true);
         }
 
         // Zero out data region
-        let data_slice = unsafe {
-            std::slice::from_raw_parts_mut(self.data_ptr.as_ptr(), self.data_size)
-        };
+        let data_slice =
+            unsafe { std::slice::from_raw_parts_mut(self.data_ptr.as_ptr(), self.data_size) };
         data_slice.zeroize();
 
         // Deallocate using platform-specific API

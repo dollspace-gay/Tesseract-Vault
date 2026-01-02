@@ -9,15 +9,17 @@
 use std::env;
 use std::path::PathBuf;
 
-#[cfg(target_os = "windows")]
-mod windows;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "windows")]
+mod windows;
 
 /// Get the path to the GUI executable
 fn get_gui_exe_path() -> PathBuf {
     let current_exe = env::current_exe().expect("Failed to get current executable path");
-    let exe_dir = current_exe.parent().expect("Failed to get executable directory");
+    let exe_dir = current_exe
+        .parent()
+        .expect("Failed to get executable directory");
 
     #[cfg(target_os = "windows")]
     {

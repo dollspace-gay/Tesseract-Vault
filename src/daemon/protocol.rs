@@ -4,8 +4,8 @@
 //!
 //! Uses a simple JSON-based protocol over Unix domain sockets (or named pipes on Windows)
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Commands that can be sent to the daemon
 #[derive(Debug, Clone, Serialize, Deserialize)]

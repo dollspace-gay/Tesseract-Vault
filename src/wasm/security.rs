@@ -12,9 +12,9 @@
 //! - Timing attack protections
 //! - Security best practices documentation
 
-use wasm_bindgen::prelude::*;
-use sha2::{Sha256, Sha384, Sha512, Digest};
 use base64::Engine;
+use sha2::{Digest, Sha256, Sha384, Sha512};
+use wasm_bindgen::prelude::*;
 
 /// Generate Subresource Integrity (SRI) hash for a WASM file
 ///
@@ -47,21 +47,34 @@ pub fn generate_sri_hash(wasm_bytes: &[u8], algorithm: &str) -> Result<String, J
             let mut hasher = Sha256::new();
             hasher.update(wasm_bytes);
             let result = hasher.finalize();
-            format!("sha256-{}", base64::engine::general_purpose::STANDARD.encode(&result))
+            format!(
+                "sha256-{}",
+                base64::engine::general_purpose::STANDARD.encode(&result)
+            )
         }
         "sha384" => {
             let mut hasher = Sha384::new();
             hasher.update(wasm_bytes);
             let result = hasher.finalize();
-            format!("sha384-{}", base64::engine::general_purpose::STANDARD.encode(&result))
+            format!(
+                "sha384-{}",
+                base64::engine::general_purpose::STANDARD.encode(&result)
+            )
         }
         "sha512" => {
             let mut hasher = Sha512::new();
             hasher.update(wasm_bytes);
             let result = hasher.finalize();
-            format!("sha512-{}", base64::engine::general_purpose::STANDARD.encode(&result))
+            format!(
+                "sha512-{}",
+                base64::engine::general_purpose::STANDARD.encode(&result)
+            )
         }
-        _ => return Err(JsValue::from_str("Invalid algorithm. Use 'sha256', 'sha384', or 'sha512'")),
+        _ => {
+            return Err(JsValue::from_str(
+                "Invalid algorithm. Use 'sha256', 'sha384', or 'sha512'",
+            ))
+        }
     };
 
     Ok(hash)
@@ -94,9 +107,7 @@ pub fn generate_csp_header(
     allow_eval: bool,
     additional_sources: Option<Vec<String>>,
 ) -> String {
-    let mut directives = vec![
-        "default-src 'self'".to_string(),
-    ];
+    let mut directives = vec!["default-src 'self'".to_string()];
 
     // Script sources
     let mut script_src = vec!["'self'"];
@@ -207,26 +218,38 @@ pub fn check_security_features() -> Result<String, JsValue> {
     use wasm_bindgen::JsCast;
     use web_sys::{Crypto, Window};
 
-    let window = web_sys::window()
-        .ok_or_else(|| JsValue::from_str("No window object available"))?;
+    let window =
+        web_sys::window().ok_or_else(|| JsValue::from_str("No window object available"))?;
 
     let mut features = Vec::new();
 
     // Check for Crypto API
     let crypto_available = window.crypto().is_ok();
-    features.push(format!("{{\"feature\": \"Web Crypto API\", \"available\": {}}}", crypto_available));
+    features.push(format!(
+        "{{\"feature\": \"Web Crypto API\", \"available\": {}}}",
+        crypto_available
+    ));
 
     // Check for secure context (HTTPS)
     let is_secure = window.is_secure_context();
-    features.push(format!("{{\"feature\": \"Secure Context (HTTPS)\", \"available\": {}}}", is_secure));
+    features.push(format!(
+        "{{\"feature\": \"Secure Context (HTTPS)\", \"available\": {}}}",
+        is_secure
+    ));
 
     // Check for Worker support
     let worker_available = js_sys::eval("typeof Worker !== 'undefined'")
         .map(|v| v.is_truthy())
         .unwrap_or(false);
-    features.push(format!("{{\"feature\": \"Web Workers\", \"available\": {}}}", worker_available));
+    features.push(format!(
+        "{{\"feature\": \"Web Workers\", \"available\": {}}}",
+        worker_available
+    ));
 
-    Ok(format!("{{\"security_features\": [{}]}}", features.join(", ")))
+    Ok(format!(
+        "{{\"security_features\": [{}]}}",
+        features.join(", ")
+    ))
 }
 
 /// Generate a random nonce with cryptographically secure randomness
@@ -248,7 +271,9 @@ pub fn check_security_features() -> Result<String, JsValue> {
 #[wasm_bindgen]
 pub fn generate_secure_nonce(length: usize) -> Result<Vec<u8>, JsValue> {
     if length == 0 || length > 1024 {
-        return Err(JsValue::from_str("Invalid nonce length (must be 1-1024 bytes)"));
+        return Err(JsValue::from_str(
+            "Invalid nonce length (must be 1-1024 bytes)",
+        ));
     }
 
     let mut nonce = vec![0u8; length];

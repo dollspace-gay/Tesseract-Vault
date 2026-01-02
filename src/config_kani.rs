@@ -8,8 +8,8 @@
 #![cfg(kani)]
 
 use crate::config::{
-    CryptoConfig, ARGON2_LANES, ARGON2_MEM_COST_KIB, ARGON2_TIME_COST, MAGIC_BYTES,
-    MAX_SALT_LEN, NONCE_LEN,
+    CryptoConfig, ARGON2_LANES, ARGON2_MEM_COST_KIB, ARGON2_TIME_COST, MAGIC_BYTES, MAX_SALT_LEN,
+    NONCE_LEN,
 };
 
 /// Verify AES-GCM nonce length is exactly 96 bits (12 bytes).

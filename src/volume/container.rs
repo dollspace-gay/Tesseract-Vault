@@ -60,23 +60,23 @@
 //! - **Key Derivation**: Argon2id with high memory/time parameters prevents brute-force
 //! - **Secure Deletion**: Master keys are zeroized in memory on drop
 
+use rand::RngCore;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use rand::RngCore;
 use thiserror::Error;
 use zeroize::Zeroizing;
 
-use super::header::{VolumeHeader, PqVolumeMetadata, HEADER_SIZE, PQC_PADDING_SIZE};
+use super::header::{PqVolumeMetadata, VolumeHeader, HEADER_SIZE, PQC_PADDING_SIZE};
 use super::keyslot::{KeySlots, MasterKey};
+use crate::config::CryptoConfig;
+use crate::crypto::aes_gcm::AesGcmEncryptor;
+use crate::crypto::kdf::Argon2Kdf;
 #[cfg(feature = "post-quantum")]
-use crate::crypto::pqc::{MlKemKeyPair, encapsulate};
+use crate::crypto::pqc::{encapsulate, MlKemKeyPair};
 #[cfg(feature = "post-quantum")]
 use crate::crypto::streaming::derive_hybrid_key;
-use crate::crypto::kdf::Argon2Kdf;
-use crate::crypto::{KeyDerivation, Encryptor};
-use crate::crypto::aes_gcm::AesGcmEncryptor;
-use crate::config::CryptoConfig;
+use crate::crypto::{Encryptor, KeyDerivation};
 #[cfg(feature = "yubikey")]
 use crate::hsm::yubikey::YubiKey;
 #[cfg(feature = "yubikey")]
@@ -265,8 +265,10 @@ impl Container {
 
         // Derive password key via Argon2
         let kdf = Argon2Kdf::new(CryptoConfig::default());
-        let password_key = Zeroizing::new(kdf.derive_key(password.as_bytes(), &salt)
-            .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?);
+        let password_key = Zeroizing::new(
+            kdf.derive_key(password.as_bytes(), &salt)
+                .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?,
+        );
 
         // Encrypt ML-KEM decapsulation key with password key
         let encryptor = AesGcmEncryptor::new();
@@ -274,7 +276,8 @@ impl Container {
         rand::rng().fill_bytes(&mut nonce);
 
         let dk_bytes = keypair.decapsulation_key();
-        let encrypted_dk = encryptor.encrypt(&password_key, &nonce, dk_bytes)
+        let encrypted_dk = encryptor
+            .encrypt(&password_key, &nonce, dk_bytes)
             .map_err(|e| ContainerError::Other(format!("DK encryption failed: {}", e)))?;
 
         // Combine nonce + encrypted_dk for storage (matches streaming.rs format)
@@ -291,8 +294,11 @@ impl Container {
         ct_bytes.copy_from_slice(&ciphertext);
 
         // Verify sizes match exactly
-        debug_assert_eq!(encrypted_dk_with_nonce.len(), 3196,
-            "encrypted_dk_with_nonce should be exactly 3196 bytes: nonce(12) + ciphertext(3168+16)");
+        debug_assert_eq!(
+            encrypted_dk_with_nonce.len(),
+            3196,
+            "encrypted_dk_with_nonce should be exactly 3196 bytes: nonce(12) + ciphertext(3168+16)"
+        );
 
         edk_bytes.copy_from_slice(&encrypted_dk_with_nonce);
 
@@ -323,13 +329,8 @@ impl Container {
         let hybrid_key = derive_hybrid_key(&password_key, &pq_shared_secret);
 
         // Create V2 volume header with PQ metadata
-        let header = VolumeHeader::new_with_pqc(
-            size,
-            sector_size,
-            salt,
-            header_iv,
-            pq_metadata_size,
-        );
+        let header =
+            VolumeHeader::new_with_pqc(size, sector_size, salt, header_iv, pq_metadata_size);
 
         // Create key slots and add first password using hybrid key
         let mut key_slots = KeySlots::new();
@@ -444,7 +445,7 @@ impl Container {
         // Verify YubiKey is available
         if !yubikey.is_available() {
             return Err(ContainerError::Other(
-                "YubiKey not available. Please insert YubiKey and try again.".to_string()
+                "YubiKey not available. Please insert YubiKey and try again.".to_string(),
             ));
         }
 
@@ -459,7 +460,8 @@ impl Container {
 
         // === YubiKey 2FA: Derive combined key ===
         // Use salt as challenge for YubiKey
-        let combined_key = yubikey.derive_key(password.as_bytes(), &salt, &salt)
+        let combined_key = yubikey
+            .derive_key(password.as_bytes(), &salt, &salt)
             .map_err(|e| ContainerError::Other(format!("YubiKey key derivation failed: {}", e)))?;
 
         // === V2 PQC: Generate ML-KEM-1024 keypair ===
@@ -473,11 +475,13 @@ impl Container {
         rand::rng().fill_bytes(&mut nonce);
 
         // Convert combined_key to fixed array
-        let combined_key_array: [u8; 32] = combined_key[..].try_into()
+        let combined_key_array: [u8; 32] = combined_key[..]
+            .try_into()
             .map_err(|_| ContainerError::Other("Invalid key length".to_string()))?;
 
         let dk_bytes = keypair.decapsulation_key();
-        let encrypted_dk = encryptor.encrypt(&combined_key_array, &nonce, dk_bytes)
+        let encrypted_dk = encryptor
+            .encrypt(&combined_key_array, &nonce, dk_bytes)
             .map_err(|e| ContainerError::Other(format!("DK encryption failed: {}", e)))?;
 
         // Combine nonce + encrypted_dk for storage
@@ -508,7 +512,8 @@ impl Container {
         if pq_metadata_bytes.len() > PQ_METADATA_RESERVED {
             return Err(ContainerError::InvalidSize(format!(
                 "PQ metadata ({} bytes) exceeds reserved space ({} bytes)",
-                pq_metadata_bytes.len(), PQ_METADATA_RESERVED
+                pq_metadata_bytes.len(),
+                PQ_METADATA_RESERVED
             )));
         }
 
@@ -516,13 +521,8 @@ impl Container {
         let hybrid_key = derive_hybrid_key(&combined_key_array, &pq_shared_secret);
 
         // Create V2 volume header with PQ metadata and YubiKey flag
-        let mut header = VolumeHeader::new_with_pqc(
-            size,
-            sector_size,
-            salt,
-            header_iv,
-            pq_metadata_size,
-        );
+        let mut header =
+            VolumeHeader::new_with_pqc(size, sector_size, salt, header_iv, pq_metadata_size);
 
         // Set YubiKey 2FA requirement flag
         header.set_yubikey_required(true);
@@ -552,7 +552,8 @@ impl Container {
         if keyslots_bytes.len() > KEYSLOTS_SIZE {
             return Err(ContainerError::InvalidSize(format!(
                 "Key slots data ({} bytes) exceeds maximum size ({})",
-                keyslots_bytes.len(), KEYSLOTS_SIZE
+                keyslots_bytes.len(),
+                KEYSLOTS_SIZE
             )));
         }
 
@@ -621,7 +622,7 @@ impl Container {
         // Check if YubiKey 2FA is required
         if header.requires_yubikey() {
             return Err(ContainerError::Other(
-                "This volume requires YubiKey 2FA. Use open_with_yubikey() instead.".to_string()
+                "This volume requires YubiKey 2FA. Use open_with_yubikey() instead.".to_string(),
             ));
         }
 
@@ -634,8 +635,10 @@ impl Container {
 
             // Derive password key via Argon2
             let kdf = Argon2Kdf::new(CryptoConfig::default());
-            let password_key = Zeroizing::new(kdf.derive_key(password.as_bytes(), header.salt())
-                .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?);
+            let password_key = Zeroizing::new(
+                kdf.derive_key(password.as_bytes(), header.salt())
+                    .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?,
+            );
 
             // Decrypt ML-KEM decapsulation key with password key
             // encrypted_decapsulation_key format: nonce (12 bytes) + encrypted_dk (3168) + auth tag (16)
@@ -647,14 +650,19 @@ impl Container {
             // ciphertext = encrypted_dk (3168) + tag (16) = 3184 bytes
             let ciphertext = &encrypted_dk[12..];
 
-            let dk_bytes = encryptor.decrypt(&password_key, nonce, ciphertext)
-                .map_err(|_| ContainerError::KeySlot(super::keyslot::KeySlotError::DecryptionFailed))?;
+            let dk_bytes = encryptor
+                .decrypt(&password_key, nonce, ciphertext)
+                .map_err(|_| {
+                    ContainerError::KeySlot(super::keyslot::KeySlotError::DecryptionFailed)
+                })?;
 
             // Decapsulate to get PQ shared secret using raw ciphertext bytes
             let ciphertext_bytes = &pq_metadata.ciphertext;
 
             let pq_shared_secret = crate::crypto::pqc::decapsulate(&dk_bytes, ciphertext_bytes)
-                .map_err(|e| ContainerError::Other(format!("ML-KEM decapsulation failed: {}", e)))?;
+                .map_err(|e| {
+                    ContainerError::Other(format!("ML-KEM decapsulation failed: {}", e))
+                })?;
 
             // Derive hybrid key
             let hybrid_key = derive_hybrid_key(&password_key, &pq_shared_secret);
@@ -764,7 +772,11 @@ impl Container {
     /// - The YubiKey is not available (for YubiKey-protected volumes)
     /// - The password or YubiKey is incorrect
     #[cfg(feature = "yubikey")]
-    pub fn open_with_yubikey(path: impl AsRef<Path>, password: &str, yubikey: &YubiKey) -> Result<Self> {
+    pub fn open_with_yubikey(
+        path: impl AsRef<Path>,
+        password: &str,
+        yubikey: &YubiKey,
+    ) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
 
         // Open the file
@@ -780,7 +792,7 @@ impl Container {
         // If volume requires YubiKey, verify it's available
         if header.requires_yubikey() && !yubikey.is_available() {
             return Err(ContainerError::Other(
-                "YubiKey not available. Please insert YubiKey and try again.".to_string()
+                "YubiKey not available. Please insert YubiKey and try again.".to_string(),
             ));
         }
 
@@ -794,8 +806,11 @@ impl Container {
             // Derive key based on whether YubiKey is required
             let decryption_key: [u8; 32] = if header.requires_yubikey() {
                 // Use YubiKey 2FA: password + YubiKey → combined key
-                let combined_key = yubikey.derive_key(password.as_bytes(), header.salt(), header.salt())
-                    .map_err(|e| ContainerError::Other(format!("YubiKey key derivation failed: {}", e)))?;
+                let combined_key = yubikey
+                    .derive_key(password.as_bytes(), header.salt(), header.salt())
+                    .map_err(|e| {
+                        ContainerError::Other(format!("YubiKey key derivation failed: {}", e))
+                    })?;
 
                 let mut key_array = [0u8; 32];
                 key_array.copy_from_slice(&combined_key[..32]);
@@ -803,7 +818,8 @@ impl Container {
             } else {
                 // Standard password-only derivation
                 let kdf = Argon2Kdf::new(CryptoConfig::default());
-                let key = kdf.derive_key(password.as_bytes(), header.salt())
+                let key = kdf
+                    .derive_key(password.as_bytes(), header.salt())
                     .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?;
                 let mut key_array = [0u8; 32];
                 key_array.copy_from_slice(&key[..32]);
@@ -816,12 +832,17 @@ impl Container {
             let nonce = &encrypted_dk[0..12];
             let ciphertext = &encrypted_dk[12..];
 
-            let dk_bytes = encryptor.decrypt(&decryption_key, nonce, ciphertext)
-                .map_err(|_| ContainerError::KeySlot(super::keyslot::KeySlotError::DecryptionFailed))?;
+            let dk_bytes = encryptor
+                .decrypt(&decryption_key, nonce, ciphertext)
+                .map_err(|_| {
+                    ContainerError::KeySlot(super::keyslot::KeySlotError::DecryptionFailed)
+                })?;
 
             // Decapsulate to get PQ shared secret
-            let pq_shared_secret = crate::crypto::pqc::decapsulate(&dk_bytes, &pq_metadata.ciphertext)
-                .map_err(|e| ContainerError::Other(format!("ML-KEM decapsulation failed: {}", e)))?;
+            let pq_shared_secret =
+                crate::crypto::pqc::decapsulate(&dk_bytes, &pq_metadata.ciphertext).map_err(
+                    |e| ContainerError::Other(format!("ML-KEM decapsulation failed: {}", e)),
+                )?;
 
             // Derive hybrid key
             let hybrid_key = derive_hybrid_key(&decryption_key, &pq_shared_secret);
@@ -912,7 +933,9 @@ impl Container {
     /// - The container file is not open
     /// - Writing fails
     fn write_backup_header(&mut self) -> Result<()> {
-        let file = self.file.as_mut()
+        let file = self
+            .file
+            .as_mut()
             .ok_or_else(|| ContainerError::Other("Container file not open".to_string()))?;
 
         // Get file size to calculate backup header offset
@@ -944,7 +967,9 @@ impl Container {
     /// - Reading fails
     /// - The backup header is invalid
     fn read_backup_header(&mut self) -> Result<VolumeHeader> {
-        let file = self.file.as_mut()
+        let file = self
+            .file
+            .as_mut()
             .ok_or_else(|| ContainerError::Other("Container file not open".to_string()))?;
 
         // Get file size to calculate backup header offset
@@ -1005,25 +1030,29 @@ impl Container {
     /// - V2 volumes: Re-encrypts ML-KEM decapsulation key with new password,
     ///   then updates key slot with new hybrid key
     pub fn change_password(&mut self, new_password: &str) -> Result<()> {
-        let master_key = self.master_key.as_ref()
-            .ok_or_else(|| ContainerError::Other(
-                "Container must be unlocked to change password".to_string()
-            ))?;
+        let master_key = self.master_key.as_ref().ok_or_else(|| {
+            ContainerError::Other("Container must be unlocked to change password".to_string())
+        })?;
 
         if self.header.has_pqc() {
             // === V2 PQC: Re-encrypt DK and update key slot ===
             // Verify we have a valid PQ state (shared secret available means volume is unlocked)
             if self.pq_shared_secret.is_none() {
-                return Err(ContainerError::Other("PQ shared secret not available".to_string()));
+                return Err(ContainerError::Other(
+                    "PQ shared secret not available".to_string(),
+                ));
             }
 
             // Derive new password key via Argon2
             let kdf = Argon2Kdf::new(CryptoConfig::default());
-            let new_password_key = kdf.derive_key(new_password.as_bytes(), self.header.salt())
+            let new_password_key = kdf
+                .derive_key(new_password.as_bytes(), self.header.salt())
                 .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?;
 
             // Read current PQ metadata to get the decapsulation key
-            let file = self.file.as_mut()
+            let file = self
+                .file
+                .as_mut()
                 .ok_or_else(|| ContainerError::Other("Container file not open".to_string()))?;
             file.seek(SeekFrom::Start(HEADER_SIZE as u64))?;
             let pq_metadata = PqVolumeMetadata::read_from(file, self.header.pq_metadata_size())?;
@@ -1056,7 +1085,9 @@ impl Container {
             // Generate new ML-KEM keypair
             let new_keypair = MlKemKeyPair::generate();
             let (new_ciphertext, new_shared_secret) = encapsulate(new_keypair.encapsulation_key())
-                .map_err(|e| ContainerError::Other(format!("ML-KEM encapsulation failed: {}", e)))?;
+                .map_err(|e| {
+                    ContainerError::Other(format!("ML-KEM encapsulation failed: {}", e))
+                })?;
 
             // Encrypt new DK with new password
             let encryptor = AesGcmEncryptor::new();
@@ -1064,7 +1095,8 @@ impl Container {
             rand::rng().fill_bytes(&mut nonce);
 
             let dk_bytes = new_keypair.decapsulation_key();
-            let encrypted_dk = encryptor.encrypt(&new_password_key, &nonce, dk_bytes)
+            let encrypted_dk = encryptor
+                .encrypt(&new_password_key, &nonce, dk_bytes)
                 .map_err(|e| ContainerError::Other(format!("DK encryption failed: {}", e)))?;
 
             // Build new encrypted_dk_with_nonce
@@ -1090,7 +1122,9 @@ impl Container {
             };
 
             // Write updated PQ metadata
-            let file = self.file.as_mut()
+            let file = self
+                .file
+                .as_mut()
                 .ok_or_else(|| ContainerError::Other("Container file not open".to_string()))?;
             file.seek(SeekFrom::Start(HEADER_SIZE as u64))?;
             let pq_bytes = new_pq_metadata.to_bytes()?;
@@ -1102,7 +1136,8 @@ impl Container {
             let hybrid_key = derive_hybrid_key(&new_password_key, &new_shared_secret);
 
             // Update slot 0 with new hybrid key
-            self.key_slots.update_slot_with_derived_key(0, master_key, &hybrid_key)?;
+            self.key_slots
+                .update_slot_with_derived_key(0, master_key, &hybrid_key)?;
 
             // Update stored shared secret
             self.pq_shared_secret = Some(new_shared_secret);
@@ -1250,10 +1285,12 @@ impl Container {
     ///
     /// Returns an error if the container is locked or filesystem initialization fails
     pub fn mount_filesystem(&self) -> Result<super::operations::InMemoryFilesystem> {
-        use super::operations::InMemoryFilesystem;
         use super::filesystem::EncryptedFilesystem;
+        use super::operations::InMemoryFilesystem;
 
-        let master_key = self.master_key.as_ref()
+        let master_key = self
+            .master_key
+            .as_ref()
             .ok_or_else(|| super::keyslot::KeySlotError::NoActiveSlots)?;
 
         let mut fs = InMemoryFilesystem::new();
@@ -1265,7 +1302,9 @@ impl Container {
 
     /// Writes updated key slots to disk
     fn write_keyslots(&mut self) -> Result<()> {
-        let file = self.file.as_mut()
+        let file = self
+            .file
+            .as_mut()
             .ok_or_else(|| io::Error::other("Container file not open"))?;
 
         // Seek to key slots position (fixed offset in new layout)
@@ -1301,11 +1340,18 @@ impl Container {
     /// The backup contains all key slots and volume metadata. It should be
     /// stored securely. Anyone with access to the backup and the backup password
     /// can decrypt the volume.
-    pub fn export_header_backup(&self, backup_path: impl AsRef<Path>, password: &str) -> Result<()> {
-        use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}};
+    pub fn export_header_backup(
+        &self,
+        backup_path: impl AsRef<Path>,
+        password: &str,
+    ) -> Result<()> {
+        use crate::config::CryptoConfig;
         use crate::crypto::kdf::Argon2Kdf;
         use crate::crypto::KeyDerivation;
-        use crate::config::CryptoConfig;
+        use aes_gcm::{
+            aead::{Aead, KeyInit},
+            Aes256Gcm, Nonce,
+        };
         use zeroize::Zeroizing;
 
         // Serialize header and key slots
@@ -1325,14 +1371,17 @@ impl Container {
 
         // Derive encryption key from password
         let kdf = Argon2Kdf::new(CryptoConfig::default());
-        let key = Zeroizing::new(kdf.derive_key(password.as_bytes(), &salt)
-            .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?);
+        let key = Zeroizing::new(
+            kdf.derive_key(password.as_bytes(), &salt)
+                .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?,
+        );
 
         // Encrypt the backup
         let cipher = Aes256Gcm::new_from_slice(&key[..])
             .map_err(|e| ContainerError::Other(format!("Cipher creation failed: {}", e)))?;
         let nonce = Nonce::from(nonce_bytes);
-        let ciphertext = cipher.encrypt(&nonce, backup_data.as_ref())
+        let ciphertext = cipher
+            .encrypt(&nonce, backup_data.as_ref())
             .map_err(|e| ContainerError::Other(format!("Encryption failed: {}", e)))?;
 
         // Create backup file with magic header
@@ -1376,11 +1425,18 @@ impl Container {
     /// # Warning
     ///
     /// This overwrites the current header and key slots. Use with caution!
-    pub fn restore_from_backup(&mut self, backup_path: impl AsRef<Path>, password: &str) -> Result<()> {
-        use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}};
+    pub fn restore_from_backup(
+        &mut self,
+        backup_path: impl AsRef<Path>,
+        password: &str,
+    ) -> Result<()> {
+        use crate::config::CryptoConfig;
         use crate::crypto::kdf::Argon2Kdf;
         use crate::crypto::KeyDerivation;
-        use crate::config::CryptoConfig;
+        use aes_gcm::{
+            aead::{Aead, KeyInit},
+            Aes256Gcm, Nonce,
+        };
         use zeroize::Zeroizing;
 
         // Read backup file
@@ -1390,7 +1446,9 @@ impl Container {
         let mut magic = [0u8; 8];
         backup_file.read_exact(&mut magic)?;
         if &magic != b"SCBAK01\0" {
-            return Err(ContainerError::Other("Invalid backup file format".to_string()));
+            return Err(ContainerError::Other(
+                "Invalid backup file format".to_string(),
+            ));
         }
 
         // Read salt and nonce
@@ -1405,15 +1463,20 @@ impl Container {
 
         // Derive decryption key from password
         let kdf = Argon2Kdf::new(CryptoConfig::default());
-        let key = Zeroizing::new(kdf.derive_key(password.as_bytes(), &salt)
-            .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?);
+        let key = Zeroizing::new(
+            kdf.derive_key(password.as_bytes(), &salt)
+                .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?,
+        );
 
         // Decrypt the backup
         let cipher = Aes256Gcm::new_from_slice(&key[..])
             .map_err(|e| ContainerError::Other(format!("Cipher creation failed: {}", e)))?;
         let nonce = Nonce::from(nonce_bytes);
-        let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref())
-            .map_err(|_| ContainerError::Other("Decryption failed: incorrect password or corrupted backup".to_string()))?;
+        let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref()).map_err(|_| {
+            ContainerError::Other(
+                "Decryption failed: incorrect password or corrupted backup".to_string(),
+            )
+        })?;
 
         // Split into header and keyslots
         if plaintext.len() < HEADER_SIZE {
@@ -1428,7 +1491,9 @@ impl Container {
         let key_slots: KeySlots = bincode::deserialize(keyslots_bytes)?;
 
         // Write to container file
-        let file = self.file.as_mut()
+        let file = self
+            .file
+            .as_mut()
             .ok_or_else(|| ContainerError::Other("Container file not open".to_string()))?;
 
         // Write header
@@ -1457,20 +1522,28 @@ impl Container {
     pub fn verify_header(&self) -> Result<()> {
         // Check magic bytes are preserved
         if self.header.salt().len() != 32 {
-            return Err(ContainerError::Other("Invalid header: bad salt size".to_string()));
+            return Err(ContainerError::Other(
+                "Invalid header: bad salt size".to_string(),
+            ));
         }
 
         if self.header.header_iv().len() != 12 {
-            return Err(ContainerError::Other("Invalid header: bad IV size".to_string()));
+            return Err(ContainerError::Other(
+                "Invalid header: bad IV size".to_string(),
+            ));
         }
 
         if self.header.sector_size() == 0 || !self.header.sector_size().is_multiple_of(512) {
-            return Err(ContainerError::Other("Invalid header: bad sector size".to_string()));
+            return Err(ContainerError::Other(
+                "Invalid header: bad sector size".to_string(),
+            ));
         }
 
         // Verify at least one key slot is active
         if self.key_slots.active_count() == 0 {
-            return Err(ContainerError::Other("Invalid header: no active key slots".to_string()));
+            return Err(ContainerError::Other(
+                "Invalid header: no active key slots".to_string(),
+            ));
         }
 
         Ok(())
@@ -1516,7 +1589,7 @@ impl Container {
         // Ensure container is unlocked
         if !self.is_unlocked() {
             return Err(ContainerError::Other(
-                "Container must be unlocked to resize".to_string()
+                "Container must be unlocked to resize".to_string(),
             ));
         }
 
@@ -1534,7 +1607,9 @@ impl Container {
         let new_total_size = self.metadata_size() + new_size + HEADER_SIZE as u64;
 
         // Get file handle
-        let file = self.file.as_mut()
+        let file = self
+            .file
+            .as_mut()
             .ok_or_else(|| ContainerError::Other("Container file not open".to_string()))?;
 
         // Resize the file
@@ -1625,7 +1700,7 @@ impl Container {
         // Ensure container is unlocked
         if !self.is_unlocked() {
             return Err(ContainerError::Other(
-                "Container must be unlocked to create hidden volume".to_string()
+                "Container must be unlocked to create hidden volume".to_string(),
             ));
         }
 
@@ -1658,12 +1733,7 @@ impl Container {
         rand::rng().fill_bytes(&mut hidden_iv);
 
         // Create hidden volume header
-        let hidden_header = VolumeHeader::new(
-            hidden_size,
-            sector_size,
-            hidden_salt,
-            hidden_iv,
-        );
+        let hidden_header = VolumeHeader::new(hidden_size, sector_size, hidden_salt, hidden_iv);
 
         // Create key slots for hidden volume
         let mut hidden_keyslots = KeySlots::new();
@@ -1673,7 +1743,9 @@ impl Container {
         let absolute_offset = METADATA_SIZE as u64 + hidden_offset;
 
         // Get file handle
-        let file = self.file.as_mut()
+        let file = self
+            .file
+            .as_mut()
             .ok_or_else(|| ContainerError::Other("Container file not open".to_string()))?;
 
         // Write hidden volume header
@@ -1718,7 +1790,7 @@ impl Container {
         // Validate offset
         if hidden_offset + METADATA_SIZE as u64 > outer_data_size {
             return Err(ContainerError::Other(
-                "Invalid offset for hidden volume".to_string()
+                "Invalid offset for hidden volume".to_string(),
             ));
         }
 
@@ -1726,10 +1798,7 @@ impl Container {
         let absolute_offset = METADATA_SIZE as u64 + hidden_offset;
 
         // Open the file
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&self.path)?;
+        let mut file = OpenOptions::new().read(true).write(true).open(&self.path)?;
 
         // Seek to hidden volume header
         file.seek(SeekFrom::Start(absolute_offset))?;
@@ -1761,7 +1830,7 @@ impl Container {
             header: hidden_header,
             key_slots: hidden_keyslots,
             master_key: Some(hidden_master_key),
-            pq_shared_secret: None,  // V1 format for plausible deniability
+            pq_shared_secret: None, // V1 format for plausible deniability
             file: Some(file),
         })
     }
@@ -1862,9 +1931,7 @@ impl Container {
              3. Use this key to reset your password if forgotten\n\
              4. To reset password, use: secure-cryptor recover <container> --recovery-key <key>\n\n\
              WARNING: Anyone with this recovery key can access your encrypted volume.\n",
-            name,
-            timestamp,
-            recovery_key
+            name, timestamp, recovery_key
         );
 
         let mut file = OpenOptions::new()
@@ -1907,22 +1974,22 @@ impl Container {
         // Validate recovery key format (should be 64 hex characters)
         if recovery_key.len() != 64 {
             return Err(ContainerError::Other(
-                "Invalid recovery key: must be 64 hex characters".to_string()
+                "Invalid recovery key: must be 64 hex characters".to_string(),
             ));
         }
 
         // Validate that it's valid hex
         if hex::decode(recovery_key).is_err() {
             return Err(ContainerError::Other(
-                "Invalid recovery key: contains non-hex characters".to_string()
+                "Invalid recovery key: contains non-hex characters".to_string(),
             ));
         }
 
         // Try to unlock with recovery key
-        let master_key = self.key_slots.unlock(recovery_key)
-            .map_err(|_| ContainerError::Other(
-                "Recovery key not found or invalid".to_string()
-            ))?;
+        let master_key = self
+            .key_slots
+            .unlock(recovery_key)
+            .map_err(|_| ContainerError::Other("Recovery key not found or invalid".to_string()))?;
 
         // Update master key in container
         self.master_key = Some(master_key.clone());
@@ -1934,15 +2001,15 @@ impl Container {
             1
         } else {
             // Add new password slot
-            self.key_slots.find_free_slot()
-                .ok_or_else(|| ContainerError::KeySlot(
-                    super::keyslot::KeySlotError::AllSlotsFull
-                ))?
+            self.key_slots.find_free_slot().ok_or_else(|| {
+                ContainerError::KeySlot(super::keyslot::KeySlotError::AllSlotsFull)
+            })?
         };
 
         // Update or add the password slot
         if self.key_slots.is_slot_active(slot_index) {
-            self.key_slots.change_password(&master_key, slot_index, new_password)?;
+            self.key_slots
+                .change_password(&master_key, slot_index, new_password)?;
         } else {
             self.key_slots.add_slot(&master_key, new_password)?;
         }
@@ -1976,39 +2043,41 @@ impl Container {
         // Validate recovery key format
         if recovery_key.len() != 64 {
             return Err(ContainerError::Other(
-                "Invalid recovery key: must be 64 hex characters".to_string()
+                "Invalid recovery key: must be 64 hex characters".to_string(),
             ));
         }
 
         // Validate that it's valid hex
         if hex::decode(recovery_key).is_err() {
             return Err(ContainerError::Other(
-                "Invalid recovery key: contains non-hex characters".to_string()
+                "Invalid recovery key: contains non-hex characters".to_string(),
             ));
         }
 
         // Get master key
-        let master_key = self.master_key.as_ref()
-            .ok_or_else(|| ContainerError::Other(
-                "Container must be unlocked to add recovery key".to_string()
-            ))?;
+        let master_key = self.master_key.as_ref().ok_or_else(|| {
+            ContainerError::Other("Container must be unlocked to add recovery key".to_string())
+        })?;
 
         // Add recovery key to a slot
         let slot_index = if self.header.has_pqc() {
             // V2 PQC: Use hybrid key derivation
-            let pq_shared_secret = self.pq_shared_secret.as_ref()
-                .ok_or_else(|| ContainerError::Other("PQ shared secret not available".to_string()))?;
+            let pq_shared_secret = self.pq_shared_secret.as_ref().ok_or_else(|| {
+                ContainerError::Other("PQ shared secret not available".to_string())
+            })?;
 
             // Derive recovery key via Argon2
             let kdf = Argon2Kdf::new(CryptoConfig::default());
-            let recovery_key_derived = kdf.derive_key(recovery_key.as_bytes(), self.header.salt())
+            let recovery_key_derived = kdf
+                .derive_key(recovery_key.as_bytes(), self.header.salt())
                 .map_err(|e| ContainerError::Other(format!("Key derivation failed: {}", e)))?;
 
             // Derive hybrid key
             let hybrid_key = derive_hybrid_key(&recovery_key_derived, pq_shared_secret);
 
             // Add slot with hybrid key
-            self.key_slots.add_slot_with_derived_key(master_key, &hybrid_key)?
+            self.key_slots
+                .add_slot_with_derived_key(master_key, &hybrid_key)?
         } else {
             // V1: Use password-based derivation
             self.key_slots.add_slot(master_key, recovery_key)?
@@ -2053,7 +2122,8 @@ mod tests {
             1024 * 1024, // 1 MB
             "TestPassword123!",
             4096,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(path.exists());
         assert_eq!(container.data_size(), 1024 * 1024);
@@ -2091,12 +2161,7 @@ mod tests {
         let path = temp_path("lock");
         cleanup(&path);
 
-        let mut container = Container::create(
-            &path,
-            1024 * 1024,
-            "TestPassword!",
-            4096,
-        ).unwrap();
+        let mut container = Container::create(&path, 1024 * 1024, "TestPassword!", 4096).unwrap();
 
         assert!(container.is_unlocked());
 
@@ -2122,12 +2187,15 @@ mod tests {
     #[test]
     fn test_pq_metadata_size_within_limits() {
         // Verify that current ML-KEM-1024 PQ metadata fits within reserved space
-        use super::super::header::{PQ_METADATA_SIZE, PqVolumeMetadata, PqAlgorithm};
+        use super::super::header::{PqAlgorithm, PqVolumeMetadata, PQ_METADATA_SIZE};
 
         // Current PQ metadata size should be well under the 8KB limit
-        assert!(PQ_METADATA_SIZE < PQ_METADATA_RESERVED,
+        assert!(
+            PQ_METADATA_SIZE < PQ_METADATA_RESERVED,
             "PQ metadata size ({}) should be less than reserved space ({})",
-            PQ_METADATA_SIZE, PQ_METADATA_RESERVED);
+            PQ_METADATA_SIZE,
+            PQ_METADATA_RESERVED
+        );
 
         // Verify actual serialization fits
         let metadata = PqVolumeMetadata {
@@ -2138,9 +2206,12 @@ mod tests {
             reserved_padding: [0u8; PQC_PADDING_SIZE],
         };
         let bytes = metadata.to_bytes().unwrap();
-        assert!(bytes.len() <= PQ_METADATA_RESERVED,
+        assert!(
+            bytes.len() <= PQ_METADATA_RESERVED,
             "Serialized PQ metadata ({} bytes) exceeds reserved space ({} bytes)",
-            bytes.len(), PQ_METADATA_RESERVED);
+            bytes.len(),
+            PQ_METADATA_RESERVED
+        );
     }
 
     #[test]
@@ -2167,19 +2238,17 @@ mod tests {
         let path = temp_path("mount_fs");
         cleanup(&path);
 
-        let container = Container::create(
-            &path,
-            1024 * 1024,
-            "TestPassword!",
-            4096,
-        ).unwrap();
+        let container = Container::create(&path, 1024 * 1024, "TestPassword!", 4096).unwrap();
 
         // Mount the filesystem
         let fs = container.mount_filesystem().unwrap();
 
         // Verify root directory exists
         let root_attr = fs.getattr(Path::new("/")).unwrap();
-        assert_eq!(root_attr.file_type, super::super::filesystem::FileType::Directory);
+        assert_eq!(
+            root_attr.file_type,
+            super::super::filesystem::FileType::Directory
+        );
 
         cleanup(&path);
     }
@@ -2189,12 +2258,7 @@ mod tests {
         let path = temp_path("mount_locked");
         cleanup(&path);
 
-        let mut container = Container::create(
-            &path,
-            1024 * 1024,
-            "TestPassword!",
-            4096,
-        ).unwrap();
+        let mut container = Container::create(&path, 1024 * 1024, "TestPassword!", 4096).unwrap();
 
         // Lock the container
         container.lock();
@@ -2214,15 +2278,13 @@ mod tests {
         cleanup(&backup_path);
 
         // Create a container
-        let container = Container::create(
-            &container_path,
-            1024 * 1024,
-            "ContainerPassword!",
-            4096,
-        ).unwrap();
+        let container =
+            Container::create(&container_path, 1024 * 1024, "ContainerPassword!", 4096).unwrap();
 
         // Export header backup
-        container.export_header_backup(&backup_path, "BackupPassword123!").unwrap();
+        container
+            .export_header_backup(&backup_path, "BackupPassword123!")
+            .unwrap();
         assert!(backup_path.exists());
 
         // Verify backup file has magic bytes
@@ -2237,7 +2299,9 @@ mod tests {
         let mut container = Container::open(&container_path, "ContainerPassword!").unwrap();
 
         // Restore from backup
-        container.restore_from_backup(&backup_path, "BackupPassword123!").unwrap();
+        container
+            .restore_from_backup(&backup_path, "BackupPassword123!")
+            .unwrap();
 
         // Verify it still works
         assert!(container.verify_header().is_ok());
@@ -2254,14 +2318,11 @@ mod tests {
         cleanup(&container_path);
         cleanup(&backup_path);
 
-        let container = Container::create(
-            &container_path,
-            1024 * 1024,
-            "Password!",
-            4096,
-        ).unwrap();
+        let container = Container::create(&container_path, 1024 * 1024, "Password!", 4096).unwrap();
 
-        container.export_header_backup(&backup_path, "BackupPass!").unwrap();
+        container
+            .export_header_backup(&backup_path, "BackupPass!")
+            .unwrap();
         drop(container);
 
         // Try to restore with wrong password
@@ -2278,12 +2339,7 @@ mod tests {
         let path = temp_path("verify");
         cleanup(&path);
 
-        let container = Container::create(
-            &path,
-            1024 * 1024,
-            "Test!",
-            4096,
-        ).unwrap();
+        let container = Container::create(&path, 1024 * 1024, "Test!", 4096).unwrap();
 
         // Verify header is valid
         assert!(container.verify_header().is_ok());
@@ -2313,12 +2369,7 @@ mod tests {
         let path = temp_path("invalid_recovery");
         cleanup(&path);
 
-        let mut container = Container::create(
-            &path,
-            1024 * 1024,
-            "Password1!",
-            4096,
-        ).unwrap();
+        let mut container = Container::create(&path, 1024 * 1024, "Password1!", 4096).unwrap();
 
         // Try to add invalid recovery key (wrong length)
         let result = container.add_recovery_key("tooshort");
@@ -2338,11 +2389,8 @@ mod tests {
         cleanup(&export_path);
 
         // Export recovery key
-        Container::export_recovery_key_file(
-            &recovery_key,
-            &export_path,
-            Some("Test Container"),
-        ).unwrap();
+        Container::export_recovery_key_file(&recovery_key, &export_path, Some("Test Container"))
+            .unwrap();
 
         // Verify file was created
         assert!(export_path.exists());
@@ -2362,12 +2410,7 @@ mod tests {
         let path = temp_path("no_recovery");
         cleanup(&path);
 
-        let mut container = Container::create(
-            &path,
-            1024 * 1024,
-            "Password1!",
-            4096,
-        ).unwrap();
+        let mut container = Container::create(&path, 1024 * 1024, "Password1!", 4096).unwrap();
 
         // Try to reset password with a recovery key that wasn't added
         let fake_recovery_key = Container::generate_recovery_key();
@@ -2383,12 +2426,7 @@ mod tests {
         cleanup(&path);
 
         let initial_size = 1024 * 1024; // 1 MB
-        let mut container = Container::create(
-            &path,
-            initial_size,
-            "Password!",
-            4096,
-        ).unwrap();
+        let mut container = Container::create(&path, initial_size, "Password!", 4096).unwrap();
 
         // Verify initial size
         assert_eq!(container.size(), initial_size);
@@ -2423,12 +2461,7 @@ mod tests {
         cleanup(&path);
 
         let initial_size = 2 * 1024 * 1024; // 2 MB
-        let mut container = Container::create(
-            &path,
-            initial_size,
-            "Password!",
-            4096,
-        ).unwrap();
+        let mut container = Container::create(&path, initial_size, "Password!", 4096).unwrap();
 
         // Shrink to 1 MB
         let new_size = 1024 * 1024;
@@ -2455,12 +2488,7 @@ mod tests {
         let path = temp_path("resize_invalid");
         cleanup(&path);
 
-        let mut container = Container::create(
-            &path,
-            1024 * 1024,
-            "Password!",
-            4096,
-        ).unwrap();
+        let mut container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
 
         // Try to resize to less than one sector
         let result = container.resize(1024);
@@ -2474,12 +2502,7 @@ mod tests {
         let path = temp_path("resize_locked");
         cleanup(&path);
 
-        let mut container = Container::create(
-            &path,
-            1024 * 1024,
-            "Password!",
-            4096,
-        ).unwrap();
+        let mut container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
 
         // Lock the container
         container.lock();
@@ -2497,12 +2520,7 @@ mod tests {
         cleanup(&path);
 
         let data_size = 1024 * 1024;
-        let container = Container::create(
-            &path,
-            data_size,
-            "Password!",
-            4096,
-        ).unwrap();
+        let container = Container::create(&path, data_size, "Password!", 4096).unwrap();
 
         assert_eq!(container.size(), data_size);
         // total_size = front metadata (20KB) + data + backup header (4KB)
@@ -2518,17 +2536,14 @@ mod tests {
         cleanup(&path);
 
         let outer_size = 10 * 1024 * 1024; // 10 MB
-        let mut outer = Container::create(
-            &path,
-            outer_size,
-            "OuterPassword!",
-            4096,
-        ).unwrap();
+        let mut outer = Container::create(&path, outer_size, "OuterPassword!", 4096).unwrap();
 
         // Create hidden volume (1 MB at offset 5 MB from start of outer data)
         let hidden_size = 1024 * 1024;
         let offset = 5 * 1024 * 1024;
-        outer.create_hidden_volume(hidden_size, "HiddenPassword!", offset).unwrap();
+        outer
+            .create_hidden_volume(hidden_size, "HiddenPassword!", offset)
+            .unwrap();
 
         // Drop to release file handle
         drop(outer);
@@ -2546,17 +2561,14 @@ mod tests {
         cleanup(&path);
 
         let outer_size = 10 * 1024 * 1024; // 10 MB
-        let mut outer = Container::create(
-            &path,
-            outer_size,
-            "OuterPassword!",
-            4096,
-        ).unwrap();
+        let mut outer = Container::create(&path, outer_size, "OuterPassword!", 4096).unwrap();
 
         // Create hidden volume at offset 5 MB
         let hidden_size = 1024 * 1024;
         let offset = 5 * 1024 * 1024;
-        outer.create_hidden_volume(hidden_size, "HiddenPassword!", offset).unwrap();
+        outer
+            .create_hidden_volume(hidden_size, "HiddenPassword!", offset)
+            .unwrap();
 
         // Drop to release file handle
         drop(outer);
@@ -2576,16 +2588,13 @@ mod tests {
         cleanup(&path);
 
         let outer_size = 10 * 1024 * 1024;
-        let mut outer = Container::create(
-            &path,
-            outer_size,
-            "OuterPassword!",
-            4096,
-        ).unwrap();
+        let mut outer = Container::create(&path, outer_size, "OuterPassword!", 4096).unwrap();
 
         let hidden_size = 1024 * 1024;
         let offset = 5 * 1024 * 1024;
-        outer.create_hidden_volume(hidden_size, "HiddenPassword!", offset).unwrap();
+        outer
+            .create_hidden_volume(hidden_size, "HiddenPassword!", offset)
+            .unwrap();
 
         // Drop to release file handle
         drop(outer);
@@ -2604,12 +2613,7 @@ mod tests {
         cleanup(&path);
 
         let outer_size = 10 * 1024 * 1024;
-        let mut outer = Container::create(
-            &path,
-            outer_size,
-            "OuterPassword!",
-            4096,
-        ).unwrap();
+        let mut outer = Container::create(&path, outer_size, "OuterPassword!", 4096).unwrap();
 
         // Try to create hidden volume larger than available space
         let hidden_size = 20 * 1024 * 1024; // Larger than outer
@@ -2626,12 +2630,7 @@ mod tests {
         cleanup(&path);
 
         let outer_size = 10 * 1024 * 1024;
-        let mut outer = Container::create(
-            &path,
-            outer_size,
-            "OuterPassword!",
-            4096,
-        ).unwrap();
+        let mut outer = Container::create(&path, outer_size, "OuterPassword!", 4096).unwrap();
 
         // Try to create hidden volume with offset beyond outer volume
         let hidden_size = 1024 * 1024;
@@ -2651,17 +2650,14 @@ mod tests {
         cleanup(&path);
 
         let outer_size = 10 * 1024 * 1024;
-        let mut outer = Container::create(
-            &path,
-            outer_size,
-            "OuterPassword!",
-            4096,
-        ).unwrap();
+        let mut outer = Container::create(&path, outer_size, "OuterPassword!", 4096).unwrap();
 
         // Create hidden volume at offset 5 MB
         let hidden_size = 1024 * 1024;
         let offset = 5 * 1024 * 1024;
-        outer.create_hidden_volume(hidden_size, "HiddenPassword!", offset).unwrap();
+        outer
+            .create_hidden_volume(hidden_size, "HiddenPassword!", offset)
+            .unwrap();
 
         // Drop outer to release file handle
         drop(outer);
@@ -2670,7 +2666,9 @@ mod tests {
         let outer = Container::open(&path, "OuterPassword!").unwrap();
         let mut outer_fs = outer.mount_filesystem().unwrap();
         outer_fs.create(Path::new("/outer.txt"), 0o644).unwrap();
-        outer_fs.write(Path::new("/outer.txt"), 0, b"Outer data").unwrap();
+        outer_fs
+            .write(Path::new("/outer.txt"), 0, b"Outer data")
+            .unwrap();
 
         // Verify outer data
         let outer_data = outer_fs.read(Path::new("/outer.txt"), 0, 100).unwrap();
@@ -2683,7 +2681,9 @@ mod tests {
         let hidden = outer.open_hidden_volume("HiddenPassword!", offset).unwrap();
         let mut hidden_fs = hidden.mount_filesystem().unwrap();
         hidden_fs.create(Path::new("/hidden.txt"), 0o644).unwrap();
-        hidden_fs.write(Path::new("/hidden.txt"), 0, b"Hidden data").unwrap();
+        hidden_fs
+            .write(Path::new("/hidden.txt"), 0, b"Hidden data")
+            .unwrap();
 
         // Verify hidden filesystem has different data
         let hidden_data = hidden_fs.read(Path::new("/hidden.txt"), 0, 100).unwrap();
@@ -2701,12 +2701,7 @@ mod tests {
         cleanup(&path);
 
         let outer_size = 10 * 1024 * 1024;
-        let mut outer = Container::create(
-            &path,
-            outer_size,
-            "OuterPassword!",
-            4096,
-        ).unwrap();
+        let mut outer = Container::create(&path, outer_size, "OuterPassword!", 4096).unwrap();
 
         let offset = 5 * 1024 * 1024;
 
@@ -2714,7 +2709,9 @@ mod tests {
         assert!(!outer.has_hidden_volume(offset));
 
         // Create hidden volume
-        outer.create_hidden_volume(1024 * 1024, "HiddenPassword!", offset).unwrap();
+        outer
+            .create_hidden_volume(1024 * 1024, "HiddenPassword!", offset)
+            .unwrap();
 
         // Drop to release file handle
         drop(outer);

@@ -133,7 +133,8 @@ impl ProgressTracker {
 
         // Trigger callback if registered and throttle has elapsed
         if let Some(callback) = &self.callback {
-            let should_call = self.last_callback_time
+            let should_call = self
+                .last_callback_time
                 .map(|last| last.elapsed() >= self.callback_throttle)
                 .unwrap_or(true);
 
@@ -433,12 +434,23 @@ mod tests {
         tracker.update(1500);
 
         let bps = tracker.bytes_per_second();
-        assert!(bps.is_some(), "bytes_per_second should return Some after elapsed time");
+        assert!(
+            bps.is_some(),
+            "bytes_per_second should return Some after elapsed time"
+        );
         let bps_value = bps.unwrap();
         // Must be positive and non-zero (mutation would return 0.0)
-        assert!(bps_value > 0.0, "bytes_per_second must be positive, got {}", bps_value);
+        assert!(
+            bps_value > 0.0,
+            "bytes_per_second must be positive, got {}",
+            bps_value
+        );
         // Sanity check: ~1500 bytes in ~0.15s = ~10000 bytes/sec
-        assert!(bps_value > 1000.0, "bytes_per_second should be > 1000, got {}", bps_value);
+        assert!(
+            bps_value > 1000.0,
+            "bytes_per_second should be > 1000, got {}",
+            bps_value
+        );
     }
 
     /// Test that eta returns None when not enough time has elapsed (< 0.1 seconds)
@@ -449,7 +461,10 @@ mod tests {
         tracker.update(100);
 
         // ETA should be None because elapsed_secs < 0.1
-        assert!(tracker.eta().is_none(), "eta should be None when elapsed < 0.1s");
+        assert!(
+            tracker.eta().is_none(),
+            "eta should be None when elapsed < 0.1s"
+        );
     }
 
     /// Test format_bytes with extremely large values (PB range)
@@ -462,7 +477,11 @@ mod tests {
         // Test value that would exceed PB if bounds weren't enforced
         let huge = 1024_u64.pow(5) * 1024; // 1024 PB
         let result = format_bytes(huge);
-        assert!(result.ends_with(" PB"), "Should still use PB unit for huge values: {}", result);
+        assert!(
+            result.ends_with(" PB"),
+            "Should still use PB unit for huge values: {}",
+            result
+        );
     }
 
     /// Test format_bytes arithmetic is correct (not using division instead of subtraction)
@@ -486,14 +505,23 @@ mod tests {
         // Create a minimal implementor that uses default bytes_per_second
         struct MinimalReporter;
         impl ProgressReporter for MinimalReporter {
-            fn progress(&self) -> f64 { 0.5 }
-            fn bytes_processed(&self) -> u64 { 500 }
-            fn total_bytes(&self) -> u64 { 1000 }
+            fn progress(&self) -> f64 {
+                0.5
+            }
+            fn bytes_processed(&self) -> u64 {
+                500
+            }
+            fn total_bytes(&self) -> u64 {
+                1000
+            }
         }
 
         let reporter = MinimalReporter;
         // Default implementation should return None, not Some(0.0)
-        assert!(reporter.bytes_per_second().is_none(), "default bytes_per_second should return None");
+        assert!(
+            reporter.bytes_per_second().is_none(),
+            "default bytes_per_second should return None"
+        );
         assert!(reporter.eta().is_none(), "default eta should return None");
     }
 }

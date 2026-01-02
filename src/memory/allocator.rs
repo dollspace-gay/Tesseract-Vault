@@ -49,9 +49,9 @@
 //!
 //! Use this allocator selectively for sensitive data only, not as a global allocator.
 
+use crate::memory::scrub::scrub_bytes;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicU64, Ordering};
-use crate::memory::scrub::scrub_bytes;
 
 #[cfg(unix)]
 use libc::{mlock, munlock};
@@ -193,7 +193,8 @@ pub struct AllocatorStats {
 impl AllocatorStats {
     /// Returns the number of currently active allocations
     pub fn active_allocations(&self) -> u64 {
-        self.allocation_count.saturating_sub(self.deallocation_count)
+        self.allocation_count
+            .saturating_sub(self.deallocation_count)
     }
 }
 
@@ -208,7 +209,8 @@ unsafe impl GlobalAlloc for SecureAllocator {
 
         // Update statistics
         self.allocation_count.fetch_add(1, Ordering::Relaxed);
-        self.bytes_allocated.fetch_add(layout.size() as u64, Ordering::Relaxed);
+        self.bytes_allocated
+            .fetch_add(layout.size() as u64, Ordering::Relaxed);
 
         // Lock the memory
         self.lock_memory(ptr, layout.size());
@@ -241,7 +243,8 @@ unsafe impl GlobalAlloc for SecureAllocator {
 
         // Update statistics
         self.allocation_count.fetch_add(1, Ordering::Relaxed);
-        self.bytes_allocated.fetch_add(layout.size() as u64, Ordering::Relaxed);
+        self.bytes_allocated
+            .fetch_add(layout.size() as u64, Ordering::Relaxed);
 
         // Lock the memory
         self.lock_memory(ptr, layout.size());
@@ -276,7 +279,8 @@ unsafe impl GlobalAlloc for SecureAllocator {
 
         // Update statistics
         if new_size > old_size {
-            self.bytes_allocated.fetch_add((new_size - old_size) as u64, Ordering::Relaxed);
+            self.bytes_allocated
+                .fetch_add((new_size - old_size) as u64, Ordering::Relaxed);
         }
 
         // Lock new memory
@@ -361,7 +365,8 @@ mod tests {
             assert!(slice.iter().all(|&b| b == 0x42));
 
             // Reallocate to smaller size
-            let final_ptr = allocator.realloc(new_ptr, Layout::from_size_align(1024, 8).unwrap(), 256);
+            let final_ptr =
+                allocator.realloc(new_ptr, Layout::from_size_align(1024, 8).unwrap(), 256);
             assert!(!final_ptr.is_null());
 
             allocator.dealloc(final_ptr, Layout::from_size_align(256, 8).unwrap());

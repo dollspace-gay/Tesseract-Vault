@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use tesseract_lib::SecureAllocator;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::alloc::{GlobalAlloc, Layout, System};
+use tesseract_lib::SecureAllocator;
 
 fn bench_system_allocator(c: &mut Criterion) {
     let mut group = c.benchmark_group("system_allocator");
@@ -86,34 +86,30 @@ fn bench_allocation_overhead(c: &mut Criterion) {
 
     // Benchmark with mixed allocation sizes to simulate real-world usage
     group.bench_function("system_mixed", |b| {
-        b.iter(|| {
-            unsafe {
-                let small = System.alloc(Layout::from_size_align(64, 8).unwrap());
-                let medium = System.alloc(Layout::from_size_align(1024, 8).unwrap());
-                let large = System.alloc(Layout::from_size_align(4096, 8).unwrap());
+        b.iter(|| unsafe {
+            let small = System.alloc(Layout::from_size_align(64, 8).unwrap());
+            let medium = System.alloc(Layout::from_size_align(1024, 8).unwrap());
+            let large = System.alloc(Layout::from_size_align(4096, 8).unwrap());
 
-                black_box((small, medium, large));
+            black_box((small, medium, large));
 
-                System.dealloc(small, Layout::from_size_align(64, 8).unwrap());
-                System.dealloc(medium, Layout::from_size_align(1024, 8).unwrap());
-                System.dealloc(large, Layout::from_size_align(4096, 8).unwrap());
-            }
+            System.dealloc(small, Layout::from_size_align(64, 8).unwrap());
+            System.dealloc(medium, Layout::from_size_align(1024, 8).unwrap());
+            System.dealloc(large, Layout::from_size_align(4096, 8).unwrap());
         });
     });
 
     group.bench_function("secure_mixed", |b| {
-        b.iter(|| {
-            unsafe {
-                let small = secure_allocator.alloc(Layout::from_size_align(64, 8).unwrap());
-                let medium = secure_allocator.alloc(Layout::from_size_align(1024, 8).unwrap());
-                let large = secure_allocator.alloc(Layout::from_size_align(4096, 8).unwrap());
+        b.iter(|| unsafe {
+            let small = secure_allocator.alloc(Layout::from_size_align(64, 8).unwrap());
+            let medium = secure_allocator.alloc(Layout::from_size_align(1024, 8).unwrap());
+            let large = secure_allocator.alloc(Layout::from_size_align(4096, 8).unwrap());
 
-                black_box((small, medium, large));
+            black_box((small, medium, large));
 
-                secure_allocator.dealloc(small, Layout::from_size_align(64, 8).unwrap());
-                secure_allocator.dealloc(medium, Layout::from_size_align(1024, 8).unwrap());
-                secure_allocator.dealloc(large, Layout::from_size_align(4096, 8).unwrap());
-            }
+            secure_allocator.dealloc(small, Layout::from_size_align(64, 8).unwrap());
+            secure_allocator.dealloc(medium, Layout::from_size_align(1024, 8).unwrap());
+            secure_allocator.dealloc(large, Layout::from_size_align(4096, 8).unwrap());
         });
     });
 

@@ -7,7 +7,7 @@
 
 #[cfg(test)]
 mod ml_kem_tests {
-    use crate::crypto::pqc::{MlKemKeyPair, encapsulate, decapsulate};
+    use crate::crypto::pqc::{decapsulate, encapsulate, MlKemKeyPair};
 
     #[test]
     fn test_ml_kem_1024_keypair_generation() {
@@ -156,8 +156,8 @@ mod ml_kem_tests {
 
 #[cfg(test)]
 mod hybrid_mode_tests {
-    use crate::crypto::streaming::derive_hybrid_key;
     use crate::crypto::pqc::MlKemKeyPair;
+    use crate::crypto::streaming::derive_hybrid_key;
     use zeroize::Zeroizing;
 
     #[test]
@@ -239,8 +239,8 @@ mod hybrid_mode_tests {
 
     #[test]
     fn test_hybrid_mode_full_flow() {
-        use crate::crypto::pqc::{encapsulate, decapsulate};
         use crate::crypto::kdf::Argon2Kdf;
+        use crate::crypto::pqc::{decapsulate, encapsulate};
         use crate::crypto::KeyDerivation;
 
         // Simulate full hybrid encryption flow
@@ -273,8 +273,8 @@ mod hybrid_mode_tests {
 
 #[cfg(test)]
 mod volume_pqc_tests {
-    use crate::volume::header::{VolumeHeader, PqVolumeMetadata, PqAlgorithm, PQC_PADDING_SIZE};
     use crate::crypto::pqc::MlKemKeyPair;
+    use crate::volume::header::{PqAlgorithm, PqVolumeMetadata, VolumeHeader, PQC_PADDING_SIZE};
 
     #[test]
     fn test_pqc_volume_header_creation() {
@@ -302,13 +302,7 @@ mod volume_pqc_tests {
         let pq_size = pq_metadata.to_bytes().unwrap().len() as u32;
         assert_eq!(pq_size, PQ_METADATA_SIZE as u32);
 
-        let header = VolumeHeader::new_with_pqc(
-            1024 * 1024,
-            4096,
-            [0u8; 32],
-            [0u8; 12],
-            pq_size,
-        );
+        let header = VolumeHeader::new_with_pqc(1024 * 1024, 4096, [0u8; 32], [0u8; 12], pq_size);
 
         assert_eq!(header.pq_algorithm(), PqAlgorithm::MlKem1024);
         assert!(header.has_pqc());
@@ -341,13 +335,8 @@ mod volume_pqc_tests {
         let pq_size = pq_metadata.to_bytes().unwrap().len() as u32;
         assert_eq!(pq_size, PQ_METADATA_SIZE as u32);
 
-        let header = VolumeHeader::new_with_pqc(
-            2048 * 1024,
-            4096,
-            [0x42u8; 32],
-            [0x43u8; 12],
-            pq_size,
-        );
+        let header =
+            VolumeHeader::new_with_pqc(2048 * 1024, 4096, [0x42u8; 32], [0x43u8; 12], pq_size);
 
         let bytes = header.to_bytes().unwrap();
         let deserialized = VolumeHeader::from_bytes(&bytes).unwrap();
@@ -389,13 +378,16 @@ mod volume_pqc_tests {
         assert_eq!(deserialized.algorithm, metadata.algorithm);
         assert_eq!(deserialized.encapsulation_key, metadata.encapsulation_key);
         assert_eq!(deserialized.ciphertext, metadata.ciphertext);
-        assert_eq!(deserialized.encrypted_decapsulation_key, metadata.encrypted_decapsulation_key);
+        assert_eq!(
+            deserialized.encrypted_decapsulation_key,
+            metadata.encrypted_decapsulation_key
+        );
     }
 }
 
 #[cfg(test)]
 mod interoperability_tests {
-    use crate::crypto::pqc::{MlKemKeyPair, encapsulate, decapsulate};
+    use crate::crypto::pqc::{decapsulate, encapsulate, MlKemKeyPair};
 
     #[test]
     fn test_ml_kem_standard_compliance() {
@@ -433,27 +425,16 @@ mod interoperability_tests {
     #[test]
     fn test_cross_version_compatibility() {
         // Test that PQC can work with both V1 and V2 volume formats
-        use crate::volume::header::{VolumeHeader, PqAlgorithm};
+        use crate::volume::header::{PqAlgorithm, VolumeHeader};
 
         // V1 header (no PQC)
-        let v1_header = VolumeHeader::new(
-            1024 * 1024,
-            4096,
-            [0u8; 32],
-            [0u8; 12],
-        );
+        let v1_header = VolumeHeader::new(1024 * 1024, 4096, [0u8; 32], [0u8; 12]);
 
         assert!(!v1_header.has_pqc());
         assert_eq!(v1_header.pq_algorithm(), PqAlgorithm::None);
 
         // V2 header (with PQC)
-        let v2_header = VolumeHeader::new_with_pqc(
-            1024 * 1024,
-            4096,
-            [0u8; 32],
-            [0u8; 12],
-            1000,
-        );
+        let v2_header = VolumeHeader::new_with_pqc(1024 * 1024, 4096, [0u8; 32], [0u8; 12], 1000);
 
         assert!(v2_header.has_pqc());
         assert_eq!(v2_header.pq_algorithm(), PqAlgorithm::MlKem1024);
@@ -463,7 +444,7 @@ mod interoperability_tests {
 
 #[cfg(test)]
 mod stress_tests {
-    use crate::crypto::pqc::{MlKemKeyPair, encapsulate, decapsulate};
+    use crate::crypto::pqc::{decapsulate, encapsulate, MlKemKeyPair};
 
     #[test]
     fn test_many_keypairs() {

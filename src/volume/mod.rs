@@ -31,43 +31,44 @@ pub mod remote_wipe;
 pub mod sector;
 pub mod volumeio_fs;
 
-pub use automount::{AutoMountConfig, AutoMountService, AutoMountAuth, VolumeConfig, VolumeConfigBuilder};
-pub use chunk::{ChunkMapper, ChunkLocation, ChunkRange, ChunkError, DEFAULT_CHUNK_SIZE};
+pub use automount::{
+    AutoMountAuth, AutoMountConfig, AutoMountService, VolumeConfig, VolumeConfigBuilder,
+};
+pub use chunk::{ChunkError, ChunkLocation, ChunkMapper, ChunkRange, DEFAULT_CHUNK_SIZE};
 #[cfg(feature = "post-quantum")]
-pub use container::{Container, METADATA_SIZE, KEYSLOTS_SIZE};
-pub use filesystem::{EncryptedFilesystem, FileAttr, FileType, FilesystemError, DirEntry};
+pub use container::{Container, KEYSLOTS_SIZE, METADATA_SIZE};
+pub use filesystem::{DirEntry, EncryptedFilesystem, FileAttr, FileType, FilesystemError};
 pub use header::{
-    VolumeHeader, PqVolumeMetadata, PqAlgorithm, CipherAlgorithm, HeaderError,
-    HEADER_SIZE, PQ_METADATA_SIZE,
+    CipherAlgorithm, HeaderError, PqAlgorithm, PqVolumeMetadata, VolumeHeader, HEADER_SIZE,
+    PQ_METADATA_SIZE,
+};
+pub use io::{
+    AsyncMemoryBackend, AsyncResult, AsyncStorageBackend, BlockingAdapter, CacheStats, FileBackend,
+    MemoryBackend, StorageBackend, VolumeIO, VolumeIOError, DEFAULT_CACHE_CAPACITY,
 };
 pub use keyslot::{KeySlots, MasterKey, MAX_KEY_SLOTS};
-pub use manager::{VolumeManager, VolumeManagerError, MountedVolumeInfo};
+pub use manager::{MountedVolumeInfo, VolumeManager, VolumeManagerError};
 #[cfg(feature = "post-quantum")]
-pub use migration::{VolumeMigration, MigrationBackup, MigrationError};
-pub use mount::{MountOptions, MountError};
+pub use migration::{MigrationBackup, MigrationError, VolumeMigration};
+pub use mount::{MountError, MountOptions};
 pub use operations::InMemoryFilesystem;
-pub use sector::{SectorCipher, SECTOR_SIZE_512, SECTOR_SIZE_4K};
-pub use io::{
-    VolumeIO, VolumeIOError, StorageBackend, FileBackend, MemoryBackend, CacheStats, DEFAULT_CACHE_CAPACITY,
-    AsyncStorageBackend, AsyncResult, BlockingAdapter, AsyncMemoryBackend,
-};
+pub use sector::{SectorCipher, SECTOR_SIZE_4K, SECTOR_SIZE_512};
 
 #[cfg(feature = "cloud-storage")]
 pub use s3_client::{S3Client, S3Config, S3Credentials, S3Region, S3StorageBackend};
 
+pub use cloud_sync::{
+    ChunkHash, ChunkState, ChunkTracker, CloudSyncManager, EncryptionParams, SyncConfig, SyncError,
+    SyncManifest, SyncResult, SyncStats,
+};
 #[cfg(feature = "cloud-storage")]
 pub use dropbox_client::{DropboxClient, DropboxConfig, DropboxCredentials, DropboxStorageBackend};
 pub use format::{
-    Superblock, Inode, InodeType, DirEntry as FsDirEntry, Bitmap,
-    JournalEntry, JournalHeader, JournalOpType, FsState, FormatError,
-    FS_BLOCK_SIZE, FS_MAGIC, FS_VERSION, ROOT_INODE, MAX_FILENAME_LEN,
-    DIRECT_BLOCKS, DATA_BLOCKS_START, INODE_SIZE, INODES_PER_BLOCK,
+    Bitmap, DirEntry as FsDirEntry, FormatError, FsState, Inode, InodeType, JournalEntry,
+    JournalHeader, JournalOpType, Superblock, DATA_BLOCKS_START, DIRECT_BLOCKS, FS_BLOCK_SIZE,
+    FS_MAGIC, FS_VERSION, INODES_PER_BLOCK, INODE_SIZE, MAX_FILENAME_LEN, ROOT_INODE,
 };
 pub use volumeio_fs::{VolumeIOFilesystem, VolumeIOFsError};
-pub use cloud_sync::{
-    ChunkHash, ChunkState, SyncManifest, ChunkTracker, SyncStats, SyncConfig, SyncError, SyncResult,
-    CloudSyncManager, EncryptionParams,
-};
 
 #[cfg(feature = "encrypted-volumes")]
 pub use mount::{mount, MountHandle};

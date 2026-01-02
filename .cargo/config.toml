@@ -1,6 +1,36 @@
+# Cargo configuration for Tesseract Vault
+# Includes reproducible build settings (OpenSSF Silver requirement)
+
 [build]
-# Enable WASM support for getrandom
+# Remap path prefixes in debug info for reproducibility
+# This normalizes absolute paths so builds on different machines produce identical binaries
+# See: https://reproducible-builds.org/
+rustflags = [
+    "--remap-path-prefix=/home/=~",
+    "--remap-path-prefix=/Users/=~",
+    "--remap-path-prefix=C:\\Users\\=~",
+    "--remap-path-prefix=D:\\Users\\=~",
+]
+
+[env]
+# SOURCE_DATE_EPOCH for reproducible timestamps (if any code uses build time)
+# Set to project epoch: 2026-01-01 00:00:00 UTC
+SOURCE_DATE_EPOCH = "1767225600"
+
+# WASM target configuration
 [target.wasm32-unknown-unknown]
 rustflags = [
     "--cfg", "getrandom_backend=\"wasm_js\""
 ]
+
+[profile.release]
+# Ensure consistent debug info (required by OpenSSF Silver)
+debug = true
+# Use single codegen unit for reproducibility (deterministic code ordering)
+codegen-units = 1
+# Thin LTO for consistent symbol ordering
+lto = "thin"
+
+[profile.dev]
+# Development builds also need debug info
+debug = true

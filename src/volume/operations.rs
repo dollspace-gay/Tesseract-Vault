@@ -156,7 +156,9 @@ impl InMemoryFilesystem {
 
     /// Encrypts data using the master key
     fn encrypt_data(&self, data: &[u8]) -> Result<Vec<u8>> {
-        let key = self.master_key.as_ref()
+        let key = self
+            .master_key
+            .as_ref()
             .ok_or_else(|| FilesystemError::Other("Filesystem not initialized".to_string()))?;
 
         // Generate random nonce
@@ -167,7 +169,8 @@ impl InMemoryFilesystem {
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
         let nonce = Nonce::from(nonce_bytes);
-        let ciphertext = cipher.encrypt(&nonce, data)
+        let ciphertext = cipher
+            .encrypt(&nonce, data)
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
         // Prepend nonce to ciphertext
@@ -179,10 +182,14 @@ impl InMemoryFilesystem {
     /// Decrypts data using the master key
     fn decrypt_data(&self, encrypted: &[u8]) -> Result<Vec<u8>> {
         if encrypted.len() < 12 {
-            return Err(FilesystemError::CryptoError("Invalid encrypted data".to_string()));
+            return Err(FilesystemError::CryptoError(
+                "Invalid encrypted data".to_string(),
+            ));
         }
 
-        let key = self.master_key.as_ref()
+        let key = self
+            .master_key
+            .as_ref()
             .ok_or_else(|| FilesystemError::Other("Filesystem not initialized".to_string()))?;
 
         // Extract nonce and ciphertext
@@ -193,7 +200,8 @@ impl InMemoryFilesystem {
             .map_err(|e| FilesystemError::CryptoError(e.to_string()))?;
 
         let nonce = Nonce::from(nonce_bytes);
-        let plaintext = cipher.decrypt(&nonce, ciphertext)
+        let plaintext = cipher
+            .decrypt(&nonce, ciphertext)
             .map_err(|_| FilesystemError::CryptoError("Decryption failed".to_string()))?;
 
         Ok(plaintext)
@@ -213,20 +221,25 @@ impl InMemoryFilesystem {
 
         // Walk the path
         let mut current = ROOT_INODE;
-        let components: Vec<_> = path.components()
+        let components: Vec<_> = path
+            .components()
             .filter_map(|c| c.as_os_str().to_str())
             .filter(|s| *s != "/")
             .collect();
 
         for component in components {
-            let inode = self.inodes.get(&current)
+            let inode = self
+                .inodes
+                .get(&current)
                 .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
 
             if inode.file_type != FileType::Directory {
                 return Err(FilesystemError::NotADirectory(path.to_path_buf()));
             }
 
-            current = *inode.children.get(component)
+            current = *inode
+                .children
+                .get(component)
                 .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
         }
 
@@ -255,14 +268,18 @@ impl EncryptedFilesystem for InMemoryFilesystem {
 
     fn getattr(&self, path: &Path) -> Result<FileAttr> {
         let inode_id = self.resolve_path(path)?;
-        let inode = self.inodes.get(&inode_id)
+        let inode = self
+            .inodes
+            .get(&inode_id)
             .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
         Ok(inode.to_attr())
     }
 
     fn readdir(&self, path: &Path) -> Result<Vec<DirEntry>> {
         let inode_id = self.resolve_path(path)?;
-        let inode = self.inodes.get(&inode_id)
+        let inode = self
+            .inodes
+            .get(&inode_id)
             .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
 
         if inode.file_type != FileType::Directory {
@@ -294,7 +311,9 @@ impl EncryptedFilesystem for InMemoryFilesystem {
 
     fn read(&self, path: &Path, offset: u64, size: u32) -> Result<Vec<u8>> {
         let inode_id = self.resolve_path(path)?;
-        let inode = self.inodes.get(&inode_id)
+        let inode = self
+            .inodes
+            .get(&inode_id)
             .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
 
         if inode.file_type != FileType::RegularFile {
@@ -320,7 +339,9 @@ impl EncryptedFilesystem for InMemoryFilesystem {
 
         // Get existing encrypted data and file type
         let (encrypted_data, file_type) = {
-            let inode = self.inodes.get(&inode_id)
+            let inode = self
+                .inodes
+                .get(&inode_id)
                 .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
             (inode.data.clone(), inode.file_type)
         };
@@ -359,9 +380,11 @@ impl EncryptedFilesystem for InMemoryFilesystem {
     }
 
     fn create(&mut self, path: &Path, mode: u16) -> Result<FileAttr> {
-        let parent = path.parent()
+        let parent = path
+            .parent()
             .ok_or_else(|| FilesystemError::InvalidFileName("No parent directory".to_string()))?;
-        let filename = path.file_name()
+        let filename = path
+            .file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(|| FilesystemError::InvalidFileName("Invalid filename".to_string()))?;
 
@@ -369,7 +392,9 @@ impl EncryptedFilesystem for InMemoryFilesystem {
 
         // Check if parent is a directory and child doesn't exist
         {
-            let parent_inode = self.inodes.get(&parent_id)
+            let parent_inode = self
+                .inodes
+                .get(&parent_id)
                 .ok_or_else(|| FilesystemError::NotFound(parent.to_path_buf()))?;
 
             if parent_inode.children.contains_key(filename) {
@@ -395,17 +420,20 @@ impl EncryptedFilesystem for InMemoryFilesystem {
     }
 
     fn mkdir(&mut self, path: &Path, mode: u16) -> Result<()> {
-        let parent = path.parent()
+        let parent = path
+            .parent()
             .ok_or_else(|| FilesystemError::InvalidFileName("No parent directory".to_string()))?;
-        let dirname = path.file_name()
-            .and_then(|n| n.to_str())
-            .ok_or_else(|| FilesystemError::InvalidFileName("Invalid directory name".to_string()))?;
+        let dirname = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
+            FilesystemError::InvalidFileName("Invalid directory name".to_string())
+        })?;
 
         let parent_id = self.resolve_path(parent)?;
 
         // Check if parent exists and child doesn't exist
         {
-            let parent_inode = self.inodes.get(&parent_id)
+            let parent_inode = self
+                .inodes
+                .get(&parent_id)
                 .ok_or_else(|| FilesystemError::NotFound(parent.to_path_buf()))?;
 
             if parent_inode.children.contains_key(dirname) {
@@ -431,16 +459,20 @@ impl EncryptedFilesystem for InMemoryFilesystem {
     }
 
     fn unlink(&mut self, path: &Path) -> Result<()> {
-        let parent = path.parent()
+        let parent = path
+            .parent()
             .ok_or_else(|| FilesystemError::InvalidFileName("No parent directory".to_string()))?;
-        let filename = path.file_name()
+        let filename = path
+            .file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(|| FilesystemError::InvalidFileName("Invalid filename".to_string()))?;
 
         let parent_id = self.resolve_path(parent)?;
         let inode_id = self.resolve_path(path)?;
 
-        let inode = self.inodes.get(&inode_id)
+        let inode = self
+            .inodes
+            .get(&inode_id)
             .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
 
         if inode.file_type != FileType::RegularFile {
@@ -461,7 +493,9 @@ impl EncryptedFilesystem for InMemoryFilesystem {
 
     fn rmdir(&mut self, path: &Path) -> Result<()> {
         let inode_id = self.resolve_path(path)?;
-        let inode = self.inodes.get(&inode_id)
+        let inode = self
+            .inodes
+            .get(&inode_id)
             .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
 
         if inode.file_type != FileType::Directory {
@@ -472,11 +506,12 @@ impl EncryptedFilesystem for InMemoryFilesystem {
             return Err(FilesystemError::DirectoryNotEmpty(path.to_path_buf()));
         }
 
-        let parent = path.parent()
+        let parent = path
+            .parent()
             .ok_or_else(|| FilesystemError::InvalidFileName("Cannot remove root".to_string()))?;
-        let dirname = path.file_name()
-            .and_then(|n| n.to_str())
-            .ok_or_else(|| FilesystemError::InvalidFileName("Invalid directory name".to_string()))?;
+        let dirname = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
+            FilesystemError::InvalidFileName("Invalid directory name".to_string())
+        })?;
 
         let parent_id = self.resolve_path(parent)?;
 
@@ -495,15 +530,19 @@ impl EncryptedFilesystem for InMemoryFilesystem {
 
     fn rename(&mut self, from: &Path, to: &Path) -> Result<()> {
         // Simplified implementation - doesn't handle all edge cases
-        let from_parent = from.parent()
+        let from_parent = from
+            .parent()
             .ok_or_else(|| FilesystemError::InvalidFileName("No parent directory".to_string()))?;
-        let from_name = from.file_name()
+        let from_name = from
+            .file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(|| FilesystemError::InvalidFileName("Invalid filename".to_string()))?;
 
-        let to_parent = to.parent()
+        let to_parent = to
+            .parent()
             .ok_or_else(|| FilesystemError::InvalidFileName("No parent directory".to_string()))?;
-        let to_name = to.file_name()
+        let to_name = to
+            .file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(|| FilesystemError::InvalidFileName("Invalid filename".to_string()))?;
 
@@ -517,7 +556,9 @@ impl EncryptedFilesystem for InMemoryFilesystem {
 
         // Add to new parent
         let to_parent_inode = self.inodes.get_mut(&to_parent_id).unwrap();
-        to_parent_inode.children.insert(to_name.to_string(), inode_id);
+        to_parent_inode
+            .children
+            .insert(to_name.to_string(), inode_id);
 
         // Update cache
         self.path_cache.remove(from);
@@ -528,7 +569,9 @@ impl EncryptedFilesystem for InMemoryFilesystem {
 
     fn chmod(&mut self, path: &Path, mode: u16) -> Result<()> {
         let inode_id = self.resolve_path(path)?;
-        let inode = self.inodes.get_mut(&inode_id)
+        let inode = self
+            .inodes
+            .get_mut(&inode_id)
             .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
         inode.perm = mode;
         inode.ctime = SystemTime::now();
@@ -537,7 +580,9 @@ impl EncryptedFilesystem for InMemoryFilesystem {
 
     fn chown(&mut self, path: &Path, uid: u32, gid: u32) -> Result<()> {
         let inode_id = self.resolve_path(path)?;
-        let inode = self.inodes.get_mut(&inode_id)
+        let inode = self
+            .inodes
+            .get_mut(&inode_id)
             .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
         inode.uid = uid;
         inode.gid = gid;
@@ -550,7 +595,9 @@ impl EncryptedFilesystem for InMemoryFilesystem {
 
         // Get existing encrypted data and file type (clone to avoid borrow issues)
         let (encrypted_data, file_type) = {
-            let inode = self.inodes.get(&inode_id)
+            let inode = self
+                .inodes
+                .get(&inode_id)
                 .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
             (inode.data.clone(), inode.file_type)
         };
@@ -578,9 +625,16 @@ impl EncryptedFilesystem for InMemoryFilesystem {
         Ok(())
     }
 
-    fn utimens(&mut self, path: &Path, atime: Option<SystemTime>, mtime: Option<SystemTime>) -> Result<()> {
+    fn utimens(
+        &mut self,
+        path: &Path,
+        atime: Option<SystemTime>,
+        mtime: Option<SystemTime>,
+    ) -> Result<()> {
         let inode_id = self.resolve_path(path)?;
-        let inode = self.inodes.get_mut(&inode_id)
+        let inode = self
+            .inodes
+            .get_mut(&inode_id)
             .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
 
         if let Some(atime) = atime {

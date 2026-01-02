@@ -610,22 +610,22 @@ impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
 
         for chunk_index in dirty_chunks {
             match get_chunk_data(chunk_index) {
-                Some(data) => {
-                    match self.sync_chunk(chunk_index, &data).await {
-                        Ok(true) => {
-                            stats.chunks_uploaded += 1;
-                            stats.bytes_uploaded += data.len() as u64;
-                        }
-                        Ok(false) => {
-                            stats.chunks_skipped += 1;
-                        }
-                        Err(e) => {
-                            stats.errors.push((chunk_index, e.to_string()));
-                        }
+                Some(data) => match self.sync_chunk(chunk_index, &data).await {
+                    Ok(true) => {
+                        stats.chunks_uploaded += 1;
+                        stats.bytes_uploaded += data.len() as u64;
                     }
-                }
+                    Ok(false) => {
+                        stats.chunks_skipped += 1;
+                    }
+                    Err(e) => {
+                        stats.errors.push((chunk_index, e.to_string()));
+                    }
+                },
                 None => {
-                    stats.errors.push((chunk_index, "Failed to get chunk data".to_string()));
+                    stats
+                        .errors
+                        .push((chunk_index, "Failed to get chunk data".to_string()));
                 }
             }
         }
@@ -633,7 +633,9 @@ impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
         // Save manifest if we synced any chunks
         if stats.chunks_uploaded > 0 || total_dirty > 0 {
             if let Err(e) = self.save_manifest().await {
-                stats.errors.push((u64::MAX, format!("Failed to save manifest: {}", e)));
+                stats
+                    .errors
+                    .push((u64::MAX, format!("Failed to save manifest: {}", e)));
             }
         }
 
@@ -684,7 +686,9 @@ impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
 
     /// Validates that the loaded manifest matches the expected parameters
     pub fn validate_params(&self, sector_size: u32, kdf_salt: &[u8]) -> bool {
-        self.tracker.manifest().validate_params(sector_size, kdf_salt)
+        self.tracker
+            .manifest()
+            .validate_params(sector_size, kdf_salt)
     }
 }
 
@@ -702,7 +706,7 @@ impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
 // - Clients poll for commands during sync operations
 // - Commands are deleted after successful processing
 
-use crate::volume::remote_wipe::{WipeCommand, StoredWipeConfig};
+use crate::volume::remote_wipe::{StoredWipeConfig, WipeCommand};
 
 /// Reserved chunk index for wipe command storage
 /// (u64::MAX is used for manifest, so we use MAX-1 for commands)
@@ -834,7 +838,8 @@ impl<B: super::io::AsyncStorageBackend> CloudWipeManager<B> {
         match commands {
             Some(cmds) => {
                 // Filter commands for this volume
-                let matching: Vec<WipeCommand> = cmds.commands
+                let matching: Vec<WipeCommand> = cmds
+                    .commands
                     .into_iter()
                     .filter(|cmd| cmd.data.volume_id == self.volume_id)
                     .collect();
@@ -851,7 +856,9 @@ impl<B: super::io::AsyncStorageBackend> CloudWipeManager<B> {
         let mut commands = self.load_commands().await?.unwrap_or_default();
 
         // Remove the specific command (match by nonce for uniqueness)
-        commands.commands.retain(|c| c.data.nonce != command.data.nonce);
+        commands
+            .commands
+            .retain(|c| c.data.nonce != command.data.nonce);
 
         // Save updated list (or delete if empty)
         if commands.commands.is_empty() {
@@ -875,7 +882,8 @@ impl<B: super::io::AsyncStorageBackend> CloudWipeManager<B> {
     ///
     /// This allows other devices to know remote wipe is configured.
     pub async fn store_config(&self, config: &StoredWipeConfig) -> SyncResult<()> {
-        let data = config.to_bytes()
+        let data = config
+            .to_bytes()
             .map_err(|e| SyncError::Backend(e.to_string()))?;
 
         self.backend
@@ -930,7 +938,8 @@ impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
             Ok(Some(data)) => {
                 let commands = CloudWipeCommands::from_bytes(&data)?;
                 // Filter commands for this volume
-                let matching: Vec<WipeCommand> = commands.commands
+                let matching: Vec<WipeCommand> = commands
+                    .commands
                     .into_iter()
                     .filter(|cmd| cmd.data.volume_id == volume_id)
                     .collect();
@@ -943,7 +952,8 @@ impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
 
     /// Stores the wipe configuration alongside volume data
     pub async fn store_wipe_config(&self, config: &StoredWipeConfig) -> SyncResult<()> {
-        let data = config.to_bytes()
+        let data = config
+            .to_bytes()
             .map_err(|e| SyncError::Backend(e.to_string()))?;
 
         self.backend
@@ -998,7 +1008,9 @@ impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
         };
 
         // Remove the specific command (match by nonce for uniqueness)
-        commands.commands.retain(|c| c.data.nonce != command.data.nonce);
+        commands
+            .commands
+            .retain(|c| c.data.nonce != command.data.nonce);
 
         // Save updated list (or delete if empty)
         if commands.commands.is_empty() {
@@ -1081,13 +1093,8 @@ mod tests {
 
     #[test]
     fn test_sync_manifest_chunk_tracking() {
-        let mut manifest = SyncManifest::new(
-            "test".to_string(),
-            256 * 1024,
-            64 * 1024,
-            4096,
-            b"salt",
-        );
+        let mut manifest =
+            SyncManifest::new("test".to_string(), 256 * 1024, 64 * 1024, 4096, b"salt");
 
         let hash1 = ChunkHash::compute(b"chunk 0 data");
         let hash2 = ChunkHash::compute(b"chunk 1 data");
@@ -1144,13 +1151,8 @@ mod tests {
 
     #[test]
     fn test_chunk_tracker() {
-        let mut tracker = ChunkTracker::new(
-            "vol1".to_string(),
-            256 * 1024,
-            64 * 1024,
-            4096,
-            b"salt",
-        );
+        let mut tracker =
+            ChunkTracker::new("vol1".to_string(), 256 * 1024, 64 * 1024, 4096, b"salt");
 
         assert!(tracker.is_manifest_dirty());
         assert_eq!(tracker.dirty_count(), 0);
@@ -1188,7 +1190,7 @@ mod tests {
 
     #[test]
     fn test_cloud_wipe_commands_serialization() {
-        use crate::volume::remote_wipe::{WipeToken, WipeCommandType};
+        use crate::volume::remote_wipe::{WipeCommandType, WipeToken};
 
         let mut commands = CloudWipeCommands::new();
         let token = WipeToken::generate();
@@ -1207,7 +1209,7 @@ mod tests {
 
     #[test]
     fn test_cloud_wipe_commands_pop() {
-        use crate::volume::remote_wipe::{WipeToken, WipeCommandType};
+        use crate::volume::remote_wipe::{WipeCommandType, WipeToken};
 
         let mut commands = CloudWipeCommands::new();
         let token = WipeToken::generate();

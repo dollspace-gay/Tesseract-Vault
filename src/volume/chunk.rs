@@ -51,7 +51,11 @@ pub enum ChunkError {
     OffsetOutOfBounds { offset: u64, volume_size: u64 },
 
     /// Invalid chunk size configuration
-    #[error("Invalid chunk size: {0} (must be between {} and {} bytes)", MIN_CHUNK_SIZE, MAX_CHUNK_SIZE)]
+    #[error(
+        "Invalid chunk size: {0} (must be between {} and {} bytes)",
+        MIN_CHUNK_SIZE,
+        MAX_CHUNK_SIZE
+    )]
     InvalidChunkSize(u64),
 
     /// Chunk size must be aligned to sector size
@@ -172,7 +176,10 @@ impl ChunkMapper {
 
         // Chunk size must be aligned to sector size
         if !chunk_size.is_multiple_of(sector_size) {
-            return Err(ChunkError::ChunkSectorMisalignment { chunk_size, sector_size });
+            return Err(ChunkError::ChunkSectorMisalignment {
+                chunk_size,
+                sector_size,
+            });
         }
 
         let total_chunks = volume_size.div_ceil(chunk_size);
@@ -462,7 +469,10 @@ mod tests {
         assert_eq!(loc.chunk_id, 1);
         assert_eq!(loc.sector_index(TEST_SECTOR_SIZE), 2);
         // Global sector = 1024 sectors in chunk 0 + 2 = 1026
-        assert_eq!(loc.global_sector_index(TEST_SECTOR_SIZE, TEST_CHUNK_SIZE), 1026);
+        assert_eq!(
+            loc.global_sector_index(TEST_SECTOR_SIZE, TEST_CHUNK_SIZE),
+            1026
+        );
     }
 
     #[test]
@@ -534,7 +544,10 @@ mod tests {
         assert_eq!(mapper.to_logical_offset(1, 0), Some(TEST_CHUNK_SIZE));
 
         // Chunk 1, offset 1000 -> logical 4MB + 1000
-        assert_eq!(mapper.to_logical_offset(1, 1000), Some(TEST_CHUNK_SIZE + 1000));
+        assert_eq!(
+            mapper.to_logical_offset(1, 1000),
+            Some(TEST_CHUNK_SIZE + 1000)
+        );
 
         // Beyond volume - should return None
         assert_eq!(mapper.to_logical_offset(100, 0), None);
@@ -555,7 +568,12 @@ mod tests {
         assert_eq!(mapper.global_sector_index(TEST_CHUNK_SIZE).unwrap(), 1024);
 
         // Second sector in second chunk
-        assert_eq!(mapper.global_sector_index(TEST_CHUNK_SIZE + TEST_SECTOR_SIZE).unwrap(), 1025);
+        assert_eq!(
+            mapper
+                .global_sector_index(TEST_CHUNK_SIZE + TEST_SECTOR_SIZE)
+                .unwrap(),
+            1025
+        );
     }
 
     #[test]
@@ -594,11 +612,22 @@ mod tests {
         let mapper = ChunkMapper::new(volume_size, TEST_CHUNK_SIZE, TEST_SECTOR_SIZE).unwrap();
 
         // Test various offsets for roundtrip
-        for offset in [0, 1000, TEST_CHUNK_SIZE - 1, TEST_CHUNK_SIZE,
-                       TEST_CHUNK_SIZE + 1000, volume_size - 1] {
+        for offset in [
+            0,
+            1000,
+            TEST_CHUNK_SIZE - 1,
+            TEST_CHUNK_SIZE,
+            TEST_CHUNK_SIZE + 1000,
+            volume_size - 1,
+        ] {
             let loc = mapper.map_offset(offset).unwrap();
             let recovered = mapper.to_logical_offset(loc.chunk_id, loc.chunk_offset);
-            assert_eq!(recovered, Some(offset), "Roundtrip failed for offset {}", offset);
+            assert_eq!(
+                recovered,
+                Some(offset),
+                "Roundtrip failed for offset {}",
+                offset
+            );
         }
     }
 }

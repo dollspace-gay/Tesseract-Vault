@@ -52,10 +52,10 @@ use flate2::read::{DeflateDecoder, DeflateEncoder};
 #[cfg(feature = "compression")]
 use flate2::Compression;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, Zeroizing};
 
 /// Default chunk size: 1 MB
@@ -211,12 +211,12 @@ pub fn derive_chunk_nonce(base_nonce: &[u8; NONCE_LEN], chunk_index: u64) -> [u8
 /// This allows password-based access while maintaining quantum resistance.
 #[cfg(feature = "post-quantum")]
 pub fn generate_pq_metadata(password_key: &[u8; 32]) -> Result<(PqMetadata, Zeroizing<[u8; 32]>)> {
-    use crate::crypto::pqc::{MlKemKeyPair, encapsulate};
     use crate::crypto::aes_gcm::AesGcmEncryptor;
+    use crate::crypto::pqc::{encapsulate, MlKemKeyPair};
     use crate::crypto::Encryptor;
-    use rand_core::TryRngCore;
-    use rand::rngs::OsRng;
     use base64::Engine;
+    use rand::rngs::OsRng;
+    use rand_core::TryRngCore;
 
     // Generate ML-KEM-1024 keypair
     let keypair = MlKemKeyPair::generate();
@@ -227,7 +227,8 @@ pub fn generate_pq_metadata(password_key: &[u8; 32]) -> Result<(PqMetadata, Zero
     // Serialize and encrypt the decapsulation key with password-derived key
     let dk_bytes = keypair.decapsulation_key();
     let mut nonce = [0u8; NONCE_LEN];
-    OsRng.try_fill_bytes(&mut nonce)
+    OsRng
+        .try_fill_bytes(&mut nonce)
         .map_err(|e| CryptorError::Cryptography(format!("Failed to generate nonce: {}", e)))?;
 
     let encryptor = AesGcmEncryptor::new();
@@ -240,9 +241,11 @@ pub fn generate_pq_metadata(password_key: &[u8; 32]) -> Result<(PqMetadata, Zero
 
     // Create metadata
     let metadata = PqMetadata {
-        encapsulation_key: base64::engine::general_purpose::STANDARD.encode(keypair.encapsulation_key()),
+        encapsulation_key: base64::engine::general_purpose::STANDARD
+            .encode(keypair.encapsulation_key()),
         ciphertext: base64::engine::general_purpose::STANDARD.encode(&ciphertext),
-        encrypted_decapsulation_key: base64::engine::general_purpose::STANDARD.encode(&encrypted_dk_with_nonce),
+        encrypted_decapsulation_key: base64::engine::general_purpose::STANDARD
+            .encode(&encrypted_dk_with_nonce),
     };
 
     Ok((metadata, shared_secret))
@@ -259,31 +262,39 @@ pub fn generate_pq_metadata(password_key: &[u8; 32]) -> Result<(PqMetadata, Zero
 ///
 /// The 32-byte shared secret from ML-KEM decapsulation
 #[cfg(feature = "post-quantum")]
-pub fn decrypt_pq_metadata(metadata: &PqMetadata, password_key: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
-    use crate::crypto::pqc::decapsulate;
+pub fn decrypt_pq_metadata(
+    metadata: &PqMetadata,
+    password_key: &[u8; 32],
+) -> Result<Zeroizing<[u8; 32]>> {
     use crate::crypto::aes_gcm::AesGcmEncryptor;
+    use crate::crypto::pqc::decapsulate;
     use crate::crypto::Encryptor;
     use base64::Engine;
 
     // Decode encrypted decapsulation key
-    let encrypted_dk_with_nonce = base64::engine::general_purpose::STANDARD.decode(&metadata.encrypted_decapsulation_key)
+    let encrypted_dk_with_nonce = base64::engine::general_purpose::STANDARD
+        .decode(&metadata.encrypted_decapsulation_key)
         .map_err(|e| CryptorError::Cryptography(format!("Invalid base64 in PQ metadata: {}", e)))?;
 
     if encrypted_dk_with_nonce.len() < NONCE_LEN {
-        return Err(CryptorError::Cryptography("Invalid encrypted decapsulation key: too short".to_string()));
+        return Err(CryptorError::Cryptography(
+            "Invalid encrypted decapsulation key: too short".to_string(),
+        ));
     }
 
     // Extract nonce and ciphertext
-    let nonce: [u8; NONCE_LEN] = encrypted_dk_with_nonce[0..NONCE_LEN].try_into()
+    let nonce: [u8; NONCE_LEN] = encrypted_dk_with_nonce[0..NONCE_LEN]
+        .try_into()
         .map_err(|_| CryptorError::Cryptography("Invalid nonce in PQ metadata".to_string()))?;
     let encrypted_dk = &encrypted_dk_with_nonce[NONCE_LEN..];
 
     // Decrypt decapsulation key
-    let encryptor = AesGcmEncryptor::new();  // Encryptor trait provides both encrypt and decrypt
+    let encryptor = AesGcmEncryptor::new(); // Encryptor trait provides both encrypt and decrypt
     let mut decapsulation_key = encryptor.decrypt(password_key, &nonce, encrypted_dk)?;
 
     // Decode ciphertext
-    let ciphertext = base64::engine::general_purpose::STANDARD.decode(&metadata.ciphertext)
+    let ciphertext = base64::engine::general_purpose::STANDARD
+        .decode(&metadata.ciphertext)
         .map_err(|e| CryptorError::Cryptography(format!("Invalid base64 in ciphertext: {}", e)))?;
 
     // Decapsulate to recover shared secret
@@ -313,8 +324,8 @@ pub fn derive_hybrid_key(
     password_key: &[u8; 32],
     pq_shared_secret: &[u8; 32],
 ) -> Zeroizing<[u8; 32]> {
-    use sha2::Sha256;
     use hkdf::Hkdf;
+    use sha2::Sha256;
 
     // Combine both keys as input key material
     let mut ikm = [0u8; 64];
@@ -471,8 +482,8 @@ impl Checkpoint {
         let input_len = u32::from_le_bytes(path_len_bytes) as usize;
         let mut input_bytes = vec![0u8; input_len];
         file.read_exact(&mut input_bytes)?;
-        let input_path = PathBuf::from(String::from_utf8(input_bytes)
-            .map_err(|_| CryptorError::InvalidFormat)?);
+        let input_path =
+            PathBuf::from(String::from_utf8(input_bytes).map_err(|_| CryptorError::InvalidFormat)?);
 
         // Read output path
         let mut output_len_bytes = [0u8; 4];
@@ -480,8 +491,9 @@ impl Checkpoint {
         let output_len = u32::from_le_bytes(output_len_bytes) as usize;
         let mut output_bytes = vec![0u8; output_len];
         file.read_exact(&mut output_bytes)?;
-        let output_path = PathBuf::from(String::from_utf8(output_bytes)
-            .map_err(|_| CryptorError::InvalidFormat)?);
+        let output_path = PathBuf::from(
+            String::from_utf8(output_bytes).map_err(|_| CryptorError::InvalidFormat)?,
+        );
 
         // Read progress data
         let mut current_chunk_bytes = [0u8; 8];
@@ -627,8 +639,7 @@ impl StreamHeader {
 
         let mut salt_bytes = vec![0u8; salt_len];
         reader.read_exact(&mut salt_bytes)?;
-        let salt = String::from_utf8(salt_bytes)
-            .map_err(|_| CryptorError::InvalidFormat)?;
+        let salt = String::from_utf8(salt_bytes).map_err(|_| CryptorError::InvalidFormat)?;
 
         // Base nonce
         let mut base_nonce = [0u8; NONCE_LEN];
@@ -657,8 +668,7 @@ impl StreamHeader {
         let metadata = if metadata_len > 0 {
             let mut metadata_bytes = vec![0u8; metadata_len];
             reader.read_exact(&mut metadata_bytes)?;
-            Some(String::from_utf8(metadata_bytes)
-                .map_err(|_| CryptorError::InvalidFormat)?)
+            Some(String::from_utf8(metadata_bytes).map_err(|_| CryptorError::InvalidFormat)?)
         } else {
             None
         };
@@ -1007,8 +1017,9 @@ impl ChunkedEncryptor {
         self.key = hybrid_key;
 
         // Add PQ metadata to header as JSON
-        let metadata_json = serde_json::to_string(&pq_metadata)
-            .map_err(|e| CryptorError::Cryptography(format!("Failed to serialize PQ metadata: {}", e)))?;
+        let metadata_json = serde_json::to_string(&pq_metadata).map_err(|e| {
+            CryptorError::Cryptography(format!("Failed to serialize PQ metadata: {}", e))
+        })?;
 
         self.header.metadata = Some(metadata_json);
 
@@ -1377,7 +1388,9 @@ impl<R: Read> ChunkedDecryptor<R> {
             let chunk_nonce = derive_chunk_nonce(&self.header.base_nonce, chunk_index);
 
             // Decrypt chunk
-            let decrypted = self.encryptor.decrypt(&self.key, &chunk_nonce, &ciphertext)?;
+            let decrypted = self
+                .encryptor
+                .decrypt(&self.key, &chunk_nonce, &ciphertext)?;
 
             // Optionally decompress chunk data
             #[cfg(feature = "compression")]
@@ -1474,7 +1487,9 @@ impl<R: Read> ChunkedDecryptor<R> {
                     let chunk_nonce = derive_chunk_nonce(&self.header.base_nonce, *chunk_index);
 
                     // Decrypt chunk
-                    let decrypted = self.encryptor.decrypt(&self.key, &chunk_nonce, ciphertext)?;
+                    let decrypted = self
+                        .encryptor
+                        .decrypt(&self.key, &chunk_nonce, ciphertext)?;
 
                     // Optionally decompress chunk data
                     #[cfg(feature = "compression")]
@@ -2007,11 +2022,8 @@ mod tests {
 
         // Decrypt
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), key).unwrap();
 
         let mut decrypted = Vec::new();
         decryptor.decrypt_to(&mut decrypted).unwrap();
@@ -2057,11 +2069,8 @@ mod tests {
 
         // Decrypt
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), key).unwrap();
 
         assert_eq!(decryptor.header().total_chunks, 6);
         assert_eq!(decryptor.header().original_size, test_data.len() as u64);
@@ -2101,18 +2110,16 @@ mod tests {
             key.clone(),
             base_nonce,
             "salt_meta".to_string(),
-        ).with_metadata(metadata.clone());
+        )
+        .with_metadata(metadata.clone());
 
         let mut encrypted = Vec::new();
         encryptor.encrypt_to(&mut encrypted).unwrap();
 
         // Decrypt and verify metadata
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), key).unwrap();
 
         assert_eq!(decryptor.header().metadata, Some(metadata));
 
@@ -2156,11 +2163,8 @@ mod tests {
         // Try to decrypt with wrong key
         let wrong_key = Zeroizing::new([33u8; 32]);
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            wrong_key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), wrong_key).unwrap();
 
         let mut decrypted = Vec::new();
         let result = decryptor.decrypt_to(&mut decrypted);
@@ -2199,11 +2203,8 @@ mod tests {
 
         // Decrypt
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), key).unwrap();
 
         assert_eq!(decryptor.header().total_chunks, 0);
         assert_eq!(decryptor.header().original_size, 0);
@@ -2249,11 +2250,8 @@ mod tests {
 
         // Decrypt
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), key).unwrap();
 
         assert_eq!(decryptor.progress(), 0.0);
         assert_eq!(decryptor.current_chunk(), 0);
@@ -2340,14 +2338,13 @@ mod tests {
 
         // Decrypt in parallel
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), key).unwrap();
 
         let mut decrypted = Vec::new();
-        decryptor.decrypt_to_parallel(&mut decrypted, Some(4)).unwrap();
+        decryptor
+            .decrypt_to_parallel(&mut decrypted, Some(4))
+            .unwrap();
 
         // Verify
         assert_eq!(decrypted, test_data);
@@ -2390,11 +2387,8 @@ mod tests {
 
         // Parallel decryption
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), key).unwrap();
 
         let mut decrypted = Vec::new();
         decryptor.decrypt_to_parallel(&mut decrypted, None).unwrap();
@@ -2406,8 +2400,7 @@ mod tests {
     #[test]
     fn test_parallel_vs_sequential_same_output() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
-        
-        
+
         use std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
@@ -2447,7 +2440,9 @@ mod tests {
         );
 
         let mut encrypted_parallel = Vec::new();
-        encryptor2.encrypt_to_parallel(&mut encrypted_parallel, Some(3)).unwrap();
+        encryptor2
+            .encrypt_to_parallel(&mut encrypted_parallel, Some(3))
+            .unwrap();
 
         // Both should produce identical output
         assert_eq!(encrypted_sequential, encrypted_parallel);
@@ -2469,7 +2464,9 @@ mod tests {
         input_file.flush().unwrap();
 
         // Encrypt with compression
-        let config = StreamConfig::new(MIN_CHUNK_SIZE).unwrap().with_compression(true);
+        let config = StreamConfig::new(MIN_CHUNK_SIZE)
+            .unwrap()
+            .with_compression(true);
         let reader = ChunkedReader::open(input_file.path(), config).unwrap();
 
         let key = Zeroizing::new([123u8; 32]);
@@ -2489,11 +2486,8 @@ mod tests {
 
         // Decrypt
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), key).unwrap();
 
         assert!(decryptor.header().compressed);
 
@@ -2535,10 +2529,14 @@ mod tests {
         );
 
         let mut encrypted_without_compression = Vec::new();
-        encryptor1.encrypt_to(&mut encrypted_without_compression).unwrap();
+        encryptor1
+            .encrypt_to(&mut encrypted_without_compression)
+            .unwrap();
 
         // Encrypt WITH compression
-        let config2 = StreamConfig::new(MIN_CHUNK_SIZE).unwrap().with_compression(true);
+        let config2 = StreamConfig::new(MIN_CHUNK_SIZE)
+            .unwrap()
+            .with_compression(true);
         let reader2 = ChunkedReader::open(input_file.path(), config2).unwrap();
         let encryptor2 = ChunkedEncryptor::new(
             reader2,
@@ -2549,7 +2547,9 @@ mod tests {
         );
 
         let mut encrypted_with_compression = Vec::new();
-        encryptor2.encrypt_to(&mut encrypted_with_compression).unwrap();
+        encryptor2
+            .encrypt_to(&mut encrypted_with_compression)
+            .unwrap();
 
         // Compressed version should be significantly smaller for zeros
         println!(
@@ -2577,7 +2577,9 @@ mod tests {
         input_file.flush().unwrap();
 
         // Encrypt with compression (should still work, even if not beneficial)
-        let config = StreamConfig::new(MIN_CHUNK_SIZE).unwrap().with_compression(true);
+        let config = StreamConfig::new(MIN_CHUNK_SIZE)
+            .unwrap()
+            .with_compression(true);
         let reader = ChunkedReader::open(input_file.path(), config).unwrap();
 
         let key = Zeroizing::new([55u8; 32]);
@@ -2597,11 +2599,8 @@ mod tests {
 
         // Decrypt
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), key).unwrap();
 
         let mut decrypted = Vec::new();
         decryptor.decrypt_to(&mut decrypted).unwrap();
@@ -2626,7 +2625,9 @@ mod tests {
         input_file.flush().unwrap();
 
         // Encrypt with compression (parallel)
-        let config = StreamConfig::new(MIN_CHUNK_SIZE).unwrap().with_compression(true);
+        let config = StreamConfig::new(MIN_CHUNK_SIZE)
+            .unwrap()
+            .with_compression(true);
         let reader = ChunkedReader::open(input_file.path(), config).unwrap();
 
         let key = Zeroizing::new([200u8; 32]);
@@ -2646,11 +2647,8 @@ mod tests {
 
         // Decrypt (parallel)
         let cursor = std::io::Cursor::new(encrypted);
-        let mut decryptor = ChunkedDecryptor::new(
-            cursor,
-            Box::new(AesGcmEncryptor::new()),
-            key,
-        ).unwrap();
+        let mut decryptor =
+            ChunkedDecryptor::new(cursor, Box::new(AesGcmEncryptor::new()), key).unwrap();
 
         assert!(decryptor.header().compressed);
 
@@ -2663,8 +2661,8 @@ mod tests {
 
     #[test]
     fn test_checkpoint_save_load() {
-        use tempfile::NamedTempFile;
         use std::path::PathBuf;
+        use tempfile::NamedTempFile;
 
         // Create a checkpoint
         let checkpoint = Checkpoint::new(
@@ -2698,8 +2696,8 @@ mod tests {
 
     #[test]
     fn test_checkpoint_delete() {
-        use tempfile::NamedTempFile;
         use std::path::PathBuf;
+        use tempfile::NamedTempFile;
 
         let checkpoint = Checkpoint::new(
             PathBuf::from("/input/file.txt"),
@@ -2727,8 +2725,8 @@ mod tests {
 
     #[test]
     fn test_checkpoint_operation_types() {
-        use tempfile::NamedTempFile;
         use std::path::PathBuf;
+        use tempfile::NamedTempFile;
 
         // Test encrypt operation
         let checkpoint_encrypt = Checkpoint::new(

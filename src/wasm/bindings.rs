@@ -2,14 +2,14 @@
 // SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! WASM bindings implementation
 
-use wasm_bindgen::prelude::*;
-use serde::{Serialize, Deserialize};
 use base64::Engine;
+use serde::{Deserialize, Serialize};
+use wasm_bindgen::prelude::*;
 
-use crate::crypto::{Encryptor, KeyDerivation};
+use crate::config::CryptoConfig;
 use crate::crypto::aes_gcm::AesGcmEncryptor;
 use crate::crypto::kdf::Argon2Kdf;
-use crate::config::CryptoConfig;
+use crate::crypto::{Encryptor, KeyDerivation};
 
 /// Initialize the WASM module
 ///
@@ -47,7 +47,7 @@ impl EncryptConfig {
     pub fn fast() -> Self {
         Self {
             use_argon2: true,
-            memory_cost: 8192,  // 8MB
+            memory_cost: 8192, // 8MB
             time_cost: 1,
         }
     }
@@ -63,7 +63,7 @@ impl EncryptConfig {
     pub fn secure() -> Self {
         Self {
             use_argon2: true,
-            memory_cost: 131072,  // 128MB
+            memory_cost: 131072, // 128MB
             time_cost: 5,
         }
     }
@@ -73,7 +73,7 @@ impl Default for EncryptConfig {
     fn default() -> Self {
         Self {
             use_argon2: true,
-            memory_cost: 65536,  // 64MB
+            memory_cost: 65536, // 64MB
             time_cost: 3,
         }
     }
@@ -410,10 +410,12 @@ pub fn create_wipe_command(
         "lock" => WipeCommandType::Lock,
         "checkin" | "check-in" => WipeCommandType::CheckIn,
         "revoke" | "revoketoken" => WipeCommandType::RevokeToken,
-        _ => return Err(JsValue::from_str(&format!(
-            "Invalid command type: {}. Use 'destroy', 'lock', 'checkin', or 'revoke'",
-            command_type
-        ))),
+        _ => {
+            return Err(JsValue::from_str(&format!(
+                "Invalid command type: {}. Use 'destroy', 'lock', 'checkin', or 'revoke'",
+                command_type
+            )))
+        }
     };
 
     // Create the command

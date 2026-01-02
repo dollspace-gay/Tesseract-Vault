@@ -109,7 +109,9 @@
       "Bash(chainlink close:*)",
       "Bash(ls:*)",
       "Bash(python:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(if not exist .cargo mkdir .cargo)",
+      "Bash(cargo fmt:*)"
     ],
     "deny": [],
     "ask": []

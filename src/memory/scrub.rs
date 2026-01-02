@@ -266,13 +266,11 @@ fn overwrite_with_random(data: &mut [u8]) {
 /// ```
 #[macro_export]
 macro_rules! scrub_stack_variable {
-    ($var:expr) => {
-        {
-            use zeroize::Zeroize;
-            $var.zeroize();
-            std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
-        }
-    };
+    ($var:expr) => {{
+        use zeroize::Zeroize;
+        $var.zeroize();
+        std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+    }};
 }
 
 /// RAII guard for automatic stack scrubbing.

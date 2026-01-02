@@ -340,7 +340,11 @@ impl Tpm2Device {
 
         Ok(Self {
             available,
-            capabilities: if available { Self::query_capabilities_impl() } else { None },
+            capabilities: if available {
+                Self::query_capabilities_impl()
+            } else {
+                None
+            },
             _handle: None,
         })
     }
@@ -370,7 +374,11 @@ impl Tpm2Device {
     }
 
     /// Read multiple PCR values
-    pub fn read_pcrs(&self, indices: &[PcrIndex], algorithm: TpmHashAlgorithm) -> Result<Vec<(PcrIndex, Vec<u8>)>> {
+    pub fn read_pcrs(
+        &self,
+        indices: &[PcrIndex],
+        algorithm: TpmHashAlgorithm,
+    ) -> Result<Vec<(PcrIndex, Vec<u8>)>> {
         let mut results = Vec::with_capacity(indices.len());
         for &index in indices {
             let value = self.read_pcr(index, algorithm)?;
@@ -388,7 +396,9 @@ impl Tpm2Device {
         }
 
         if key.len() > 128 {
-            return Err(CryptorError::HardwareError("Key too large for TPM sealing (max 128 bytes)".into()));
+            return Err(CryptorError::HardwareError(
+                "Key too large for TPM sealing (max 128 bytes)".into(),
+            ));
         }
 
         Self::seal_impl(key, policy)
@@ -474,12 +484,14 @@ impl Tpm2Device {
             version: TBS_CONTEXT_VERSION_TWO,
         };
 
-        let result = unsafe {
-            Tbsi_Context_Create(&context_params, &mut context)
-        };
+        let result = unsafe { Tbsi_Context_Create(&context_params, &mut context) };
 
         if result != TBS_SUCCESS {
-            return Err(TpmError::PlatformError(format!("Failed to create TBS context: 0x{:08X}", result)).into());
+            return Err(TpmError::PlatformError(format!(
+                "Failed to create TBS context: 0x{:08X}",
+                result
+            ))
+            .into());
         }
 
         // Build TPM2_PCR_Read command
@@ -543,7 +555,9 @@ impl Tpm2Device {
         let _ = unsafe { Tbsip_Context_Close(context) };
 
         if result != TBS_SUCCESS {
-            return Err(TpmError::CommandFailed(format!("TPM2_PCR_Read failed: 0x{:08X}", result)).into());
+            return Err(
+                TpmError::CommandFailed(format!("TPM2_PCR_Read failed: 0x{:08X}", result)).into(),
+            );
         }
 
         // Parse response
@@ -556,9 +570,14 @@ impl Tpm2Device {
             return Err(TpmError::CommandFailed("Response too short".to_string()).into());
         }
 
-        let response_code = u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+        let response_code =
+            u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
         if response_code != 0 {
-            return Err(TpmError::CommandFailed(format!("TPM returned error: 0x{:08X}", response_code)).into());
+            return Err(TpmError::CommandFailed(format!(
+                "TPM returned error: 0x{:08X}",
+                response_code
+            ))
+            .into());
         }
 
         // Skip to pcrValues (after header + updateCounter + pcrSelectionOut)
@@ -573,9 +592,17 @@ impl Tpm2Device {
 
         // Skip pcrSelectionOut
         if pos + 4 > response_len as usize {
-            return Err(TpmError::CommandFailed("Response too short for pcrSelectionOut".to_string()).into());
+            return Err(TpmError::CommandFailed(
+                "Response too short for pcrSelectionOut".to_string(),
+            )
+            .into());
         }
-        let sel_count = u32::from_be_bytes([response[pos], response[pos+1], response[pos+2], response[pos+3]]);
+        let sel_count = u32::from_be_bytes([
+            response[pos],
+            response[pos + 1],
+            response[pos + 2],
+            response[pos + 3],
+        ]);
         pos += 4;
 
         // Skip each selection entry (hash(2) + sizeOfSelect(1) + pcrSelect[sizeOfSelect])
@@ -587,9 +614,16 @@ impl Tpm2Device {
 
         // Read pcrValues
         if pos + 4 > response_len as usize {
-            return Err(TpmError::CommandFailed("Response too short for digest count".to_string()).into());
+            return Err(
+                TpmError::CommandFailed("Response too short for digest count".to_string()).into(),
+            );
         }
-        let digest_count = u32::from_be_bytes([response[pos], response[pos+1], response[pos+2], response[pos+3]]);
+        let digest_count = u32::from_be_bytes([
+            response[pos],
+            response[pos + 1],
+            response[pos + 2],
+            response[pos + 3],
+        ]);
         pos += 4;
 
         if digest_count == 0 {
@@ -598,16 +632,18 @@ impl Tpm2Device {
 
         // Read first digest (TPM2B_DIGEST: size(2) + buffer)
         if pos + 2 > response_len as usize {
-            return Err(TpmError::CommandFailed("Response too short for digest size".to_string()).into());
+            return Err(
+                TpmError::CommandFailed("Response too short for digest size".to_string()).into(),
+            );
         }
-        let actual_size = u16::from_be_bytes([response[pos], response[pos+1]]) as usize;
+        let actual_size = u16::from_be_bytes([response[pos], response[pos + 1]]) as usize;
         pos += 2;
 
         if pos + actual_size > response_len as usize || actual_size != digest_size {
             return Err(TpmError::CommandFailed("Invalid digest size".to_string()).into());
         }
 
-        Ok(response[pos..pos+actual_size].to_vec())
+        Ok(response[pos..pos + actual_size].to_vec())
     }
 
     #[cfg(target_os = "linux")]
@@ -620,10 +656,7 @@ impl Tpm2Device {
             .read(true)
             .write(true)
             .open("/dev/tpmrm0")
-            .or_else(|_| OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open("/dev/tpm0"))
+            .or_else(|_| OpenOptions::new().read(true).write(true).open("/dev/tpm0"))
             .map_err(|e| TpmError::PlatformError(format!("Failed to open TPM device: {}", e)))?;
 
         // Build TPM2_PCR_Read command (same as Windows)
@@ -668,16 +701,22 @@ impl Tpm2Device {
 
         // Read response
         let mut response = vec![0u8; 256];
-        let bytes_read = tpm.read(&mut response)
+        let bytes_read = tpm
+            .read(&mut response)
             .map_err(|e| TpmError::CommandFailed(format!("Failed to read response: {}", e)))?;
 
         if bytes_read < 10 {
             return Err(TpmError::CommandFailed("Response too short".to_string()).into());
         }
 
-        let response_code = u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+        let response_code =
+            u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
         if response_code != 0 {
-            return Err(TpmError::CommandFailed(format!("TPM returned error: 0x{:08X}", response_code)).into());
+            return Err(TpmError::CommandFailed(format!(
+                "TPM returned error: 0x{:08X}",
+                response_code
+            ))
+            .into());
         }
 
         // Parse response (same structure as Windows)
@@ -687,9 +726,17 @@ impl Tpm2Device {
 
         // Skip pcrSelectionOut
         if pos + 4 > bytes_read {
-            return Err(TpmError::CommandFailed("Response too short for pcrSelectionOut".to_string()).into());
+            return Err(TpmError::CommandFailed(
+                "Response too short for pcrSelectionOut".to_string(),
+            )
+            .into());
         }
-        let sel_count = u32::from_be_bytes([response[pos], response[pos+1], response[pos+2], response[pos+3]]);
+        let sel_count = u32::from_be_bytes([
+            response[pos],
+            response[pos + 1],
+            response[pos + 2],
+            response[pos + 3],
+        ]);
         pos += 4;
 
         for _ in 0..sel_count {
@@ -700,9 +747,16 @@ impl Tpm2Device {
 
         // Read pcrValues
         if pos + 4 > bytes_read {
-            return Err(TpmError::CommandFailed("Response too short for digest count".to_string()).into());
+            return Err(
+                TpmError::CommandFailed("Response too short for digest count".to_string()).into(),
+            );
         }
-        let digest_count = u32::from_be_bytes([response[pos], response[pos+1], response[pos+2], response[pos+3]]);
+        let digest_count = u32::from_be_bytes([
+            response[pos],
+            response[pos + 1],
+            response[pos + 2],
+            response[pos + 3],
+        ]);
         pos += 4;
 
         if digest_count == 0 {
@@ -711,16 +765,18 @@ impl Tpm2Device {
 
         // Read first digest (TPM2B_DIGEST)
         if pos + 2 > bytes_read {
-            return Err(TpmError::CommandFailed("Response too short for digest size".to_string()).into());
+            return Err(
+                TpmError::CommandFailed("Response too short for digest size".to_string()).into(),
+            );
         }
-        let actual_size = u16::from_be_bytes([response[pos], response[pos+1]]) as usize;
+        let actual_size = u16::from_be_bytes([response[pos], response[pos + 1]]) as usize;
         pos += 2;
 
         if pos + actual_size > bytes_read || actual_size != digest_size {
             return Err(TpmError::CommandFailed("Invalid digest size".to_string()).into());
         }
 
-        Ok(response[pos..pos+actual_size].to_vec())
+        Ok(response[pos..pos + actual_size].to_vec())
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
@@ -998,12 +1054,14 @@ impl Tpm2Device {
             version: TBS_CONTEXT_VERSION_TWO,
         };
 
-        let tbs_result = unsafe {
-            Tbsi_Context_Create(&context_params, &mut context)
-        };
+        let tbs_result = unsafe { Tbsi_Context_Create(&context_params, &mut context) };
 
         if tbs_result != TBS_SUCCESS {
-            return Err(TpmError::PlatformError(format!("Failed to create TBS context: 0x{:08X}", tbs_result)).into());
+            return Err(TpmError::PlatformError(format!(
+                "Failed to create TBS context: 0x{:08X}",
+                tbs_result
+            ))
+            .into());
         }
 
         while result_bytes.len() < length {
@@ -1039,7 +1097,11 @@ impl Tpm2Device {
 
             if submit_result != TBS_SUCCESS {
                 let _ = unsafe { Tbsip_Context_Close(context) };
-                return Err(TpmError::CommandFailed(format!("TPM2_GetRandom failed: 0x{:08X}", submit_result)).into());
+                return Err(TpmError::CommandFailed(format!(
+                    "TPM2_GetRandom failed: 0x{:08X}",
+                    submit_result
+                ))
+                .into());
             }
 
             if response_len < 12 {
@@ -1048,20 +1110,27 @@ impl Tpm2Device {
             }
 
             // Check response code
-            let response_code = u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+            let response_code =
+                u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
             if response_code != 0 {
                 let _ = unsafe { Tbsip_Context_Close(context) };
-                return Err(TpmError::CommandFailed(format!("TPM returned error: 0x{:08X}", response_code)).into());
+                return Err(TpmError::CommandFailed(format!(
+                    "TPM returned error: 0x{:08X}",
+                    response_code
+                ))
+                .into());
             }
 
             // Parse randomBytes (TPM2B_DIGEST: size(2) + buffer)
             let random_size = u16::from_be_bytes([response[10], response[11]]) as usize;
             if random_size == 0 || 12 + random_size > response_len as usize {
                 let _ = unsafe { Tbsip_Context_Close(context) };
-                return Err(TpmError::CommandFailed("Invalid random bytes size".to_string()).into());
+                return Err(
+                    TpmError::CommandFailed("Invalid random bytes size".to_string()).into(),
+                );
             }
 
-            result_bytes.extend_from_slice(&response[12..12+random_size]);
+            result_bytes.extend_from_slice(&response[12..12 + random_size]);
         }
 
         let _ = unsafe { Tbsip_Context_Close(context) };
@@ -1088,10 +1157,7 @@ impl Tpm2Device {
             .read(true)
             .write(true)
             .open("/dev/tpmrm0")
-            .or_else(|_| OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open("/dev/tpm0"))
+            .or_else(|_| OpenOptions::new().read(true).write(true).open("/dev/tpm0"))
             .map_err(|e| TpmError::PlatformError(format!("Failed to open TPM device: {}", e)))?;
 
         while result_bytes.len() < length {
@@ -1114,7 +1180,8 @@ impl Tpm2Device {
 
             // Read response
             let mut response = vec![0u8; 64];
-            let bytes_read = tpm.read(&mut response)
+            let bytes_read = tpm
+                .read(&mut response)
                 .map_err(|e| TpmError::CommandFailed(format!("Failed to read response: {}", e)))?;
 
             if bytes_read < 12 {
@@ -1122,18 +1189,25 @@ impl Tpm2Device {
             }
 
             // Check response code
-            let response_code = u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+            let response_code =
+                u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
             if response_code != 0 {
-                return Err(TpmError::CommandFailed(format!("TPM returned error: 0x{:08X}", response_code)).into());
+                return Err(TpmError::CommandFailed(format!(
+                    "TPM returned error: 0x{:08X}",
+                    response_code
+                ))
+                .into());
             }
 
             // Parse randomBytes (TPM2B_DIGEST: size(2) + buffer)
             let random_size = u16::from_be_bytes([response[10], response[11]]) as usize;
             if random_size == 0 || 12 + random_size > bytes_read {
-                return Err(TpmError::CommandFailed("Invalid random bytes size".to_string()).into());
+                return Err(
+                    TpmError::CommandFailed("Invalid random bytes size".to_string()).into(),
+                );
             }
 
-            result_bytes.extend_from_slice(&response[12..12+random_size]);
+            result_bytes.extend_from_slice(&response[12..12 + random_size]);
         }
 
         result_bytes.truncate(length);
@@ -1254,7 +1328,10 @@ impl SealedKeyBlob {
         // Version
         let version = bytes[pos];
         if version != 1 {
-            return Err(CryptorError::InvalidInput(format!("Unsupported blob version: {}", version)));
+            return Err(CryptorError::InvalidInput(format!(
+                "Unsupported blob version: {}",
+                version
+            )));
         }
         pos += 1;
 
@@ -1269,15 +1346,19 @@ impl SealedKeyBlob {
         pos += 1;
 
         // Data
-        let data_len = u32::from_le_bytes([bytes[pos], bytes[pos+1], bytes[pos+2], bytes[pos+3]]) as usize;
+        let data_len =
+            u32::from_le_bytes([bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]])
+                as usize;
         pos += 4;
-        let data = bytes[pos..pos+data_len].to_vec();
+        let data = bytes[pos..pos + data_len].to_vec();
         pos += data_len;
 
         // Policy digest
-        let digest_len = u32::from_le_bytes([bytes[pos], bytes[pos+1], bytes[pos+2], bytes[pos+3]]) as usize;
+        let digest_len =
+            u32::from_le_bytes([bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]])
+                as usize;
         pos += 4;
-        let policy_digest = bytes[pos..pos+digest_len].to_vec();
+        let policy_digest = bytes[pos..pos + digest_len].to_vec();
         pos += digest_len;
 
         // PCR values
@@ -1315,9 +1396,11 @@ impl SealedKeyBlob {
             };
             pos += 1;
 
-            let value_len = u32::from_le_bytes([bytes[pos], bytes[pos+1], bytes[pos+2], bytes[pos+3]]) as usize;
+            let value_len =
+                u32::from_le_bytes([bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]])
+                    as usize;
             pos += 4;
-            let value = bytes[pos..pos+value_len].to_vec();
+            let value = bytes[pos..pos + value_len].to_vec();
             pos += value_len;
 
             pcr_values.push((index, value));
@@ -1366,10 +1449,7 @@ mod tests {
         let blob = SealedKeyBlob {
             data: vec![1, 2, 3, 4, 5],
             policy_digest: vec![6, 7, 8, 9, 10],
-            pcr_values: vec![
-                (PcrIndex::Pcr0, vec![0; 32]),
-                (PcrIndex::Pcr7, vec![1; 32]),
-            ],
+            pcr_values: vec![(PcrIndex::Pcr0, vec![0; 32]), (PcrIndex::Pcr7, vec![1; 32])],
             hash_algorithm: TpmHashAlgorithm::Sha256,
         };
 
@@ -1406,7 +1486,11 @@ mod tests {
         // Test PCR reading
         match device.read_pcr(PcrIndex::Pcr0, TpmHashAlgorithm::Sha256) {
             Ok(pcr_value) => {
-                println!("PCR0 value ({} bytes): {:02x?}", pcr_value.len(), &pcr_value[..8]);
+                println!(
+                    "PCR0 value ({} bytes): {:02x?}",
+                    pcr_value.len(),
+                    &pcr_value[..8]
+                );
                 assert_eq!(pcr_value.len(), 32, "SHA-256 PCR should be 32 bytes");
             }
             Err(e) => {
@@ -1420,7 +1504,10 @@ mod tests {
                 println!("TPM random ({} bytes): {:02x?}", random.len(), &random[..8]);
                 assert_eq!(random.len(), 32);
                 // Check it's not all zeros (extremely unlikely for real random)
-                assert!(random.iter().any(|&b| b != 0), "Random data should not be all zeros");
+                assert!(
+                    random.iter().any(|&b| b != 0),
+                    "Random data should not be all zeros"
+                );
             }
             Err(e) => {
                 println!("Random generation failed (may be permission issue): {}", e);

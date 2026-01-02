@@ -32,12 +32,14 @@ use std::time::SystemTime;
 
 use thiserror::Error;
 
-use super::filesystem::{DirEntry as FsDirEntry, EncryptedFilesystem, FileAttr, FileType, FilesystemError, Result as FsResult};
+use super::filesystem::{
+    DirEntry as FsDirEntry, EncryptedFilesystem, FileAttr, FileType, FilesystemError,
+    Result as FsResult,
+};
 use super::format::{
-    Bitmap, DirEntry, FsState, Inode, InodeType, JournalHeader, Superblock,
-    BLOCK_BITMAP_BLOCKS, BLOCK_BITMAP_START, DATA_BLOCKS_START, DIRECT_BLOCKS,
-    FS_BLOCK_SIZE, INODE_BITMAP_BLOCKS, INODE_BITMAP_START, INODE_SIZE,
-    INODE_TABLE_START, INODES_PER_BLOCK, JOURNAL_BLOCKS,
+    Bitmap, DirEntry, FsState, Inode, InodeType, JournalHeader, Superblock, BLOCK_BITMAP_BLOCKS,
+    BLOCK_BITMAP_START, DATA_BLOCKS_START, DIRECT_BLOCKS, FS_BLOCK_SIZE, INODES_PER_BLOCK,
+    INODE_BITMAP_BLOCKS, INODE_BITMAP_START, INODE_SIZE, INODE_TABLE_START, JOURNAL_BLOCKS,
     JOURNAL_START, MAX_FILENAME_LEN, ROOT_INODE,
 };
 use super::io::{StorageBackend, VolumeIO, VolumeIOError};
@@ -237,7 +239,10 @@ impl VolumeIOFilesystem {
 
         // Cache the root inode
         {
-            let mut cache = fs.inode_cache.write().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+            let mut cache = fs
+                .inode_cache
+                .write()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
             cache.insert(ROOT_INODE, root_inode);
         }
 
@@ -280,20 +285,30 @@ impl VolumeIOFilesystem {
             // Try backup superblock
             let backup = fs.read_backup_superblock()?;
             if backup.verify_checksum() {
-                *fs.superblock.write().map_err(|_| VolumeIOFsError::LockPoisoned)? = Some(backup);
+                *fs.superblock
+                    .write()
+                    .map_err(|_| VolumeIOFsError::LockPoisoned)? = Some(backup);
             } else {
-                return Err(VolumeIOFsError::Format(super::format::FormatError::ChecksumMismatch));
+                return Err(VolumeIOFsError::Format(
+                    super::format::FormatError::ChecksumMismatch,
+                ));
             }
         } else {
-            *fs.superblock.write().map_err(|_| VolumeIOFsError::LockPoisoned)? = Some(superblock);
+            *fs.superblock
+                .write()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)? = Some(superblock);
         }
 
         // Load bitmaps
         let block_bitmap = fs.read_block_bitmap()?;
         let inode_bitmap = fs.read_inode_bitmap()?;
 
-        *fs.block_bitmap.write().map_err(|_| VolumeIOFsError::LockPoisoned)? = Some(block_bitmap);
-        *fs.inode_bitmap.write().map_err(|_| VolumeIOFsError::LockPoisoned)? = Some(inode_bitmap);
+        *fs.block_bitmap
+            .write()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)? = Some(block_bitmap);
+        *fs.inode_bitmap
+            .write()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)? = Some(inode_bitmap);
 
         // Mark as dirty (mounted)
         fs.mark_dirty()?;
@@ -329,7 +344,10 @@ impl VolumeIOFilesystem {
         block_data[..copy_len].copy_from_slice(&data[..copy_len]);
 
         io.write(offset, &block_data)?;
-        *self.dirty.write().map_err(|_| VolumeIOFsError::LockPoisoned)? = true;
+        *self
+            .dirty
+            .write()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)? = true;
         Ok(())
     }
 
@@ -352,7 +370,10 @@ impl VolumeIOFilesystem {
 
         let offset = start_block * FS_BLOCK_SIZE as u64;
         io.write(offset, data)?;
-        *self.dirty.write().map_err(|_| VolumeIOFsError::LockPoisoned)? = true;
+        *self
+            .dirty
+            .write()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)? = true;
         Ok(())
     }
 
@@ -390,7 +411,10 @@ impl VolumeIOFilesystem {
 
     /// Gets a reference to the cached superblock
     fn get_superblock(&self) -> Result<Superblock> {
-        let guard = self.superblock.read().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+        let guard = self
+            .superblock
+            .read()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?;
         guard.clone().ok_or(VolumeIOFsError::NotInitialized)
     }
 
@@ -399,7 +423,10 @@ impl VolumeIOFilesystem {
     where
         F: FnOnce(&mut Superblock),
     {
-        let mut guard = self.superblock.write().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+        let mut guard = self
+            .superblock
+            .write()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?;
         let sb = guard.as_mut().ok_or(VolumeIOFsError::NotInitialized)?;
         f(sb);
         sb.update_checksum();
@@ -436,7 +463,10 @@ impl VolumeIOFilesystem {
 
     /// Allocates a free block
     fn alloc_block(&self) -> Result<u32> {
-        let mut guard = self.block_bitmap.write().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+        let mut guard = self
+            .block_bitmap
+            .write()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?;
         let bitmap = guard.as_mut().ok_or(VolumeIOFsError::NotInitialized)?;
 
         // Find first free block starting after metadata
@@ -467,7 +497,10 @@ impl VolumeIOFilesystem {
             ));
         }
 
-        let mut guard = self.block_bitmap.write().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+        let mut guard = self
+            .block_bitmap
+            .write()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?;
         let bitmap = guard.as_mut().ok_or(VolumeIOFsError::NotInitialized)?;
 
         bitmap.clear(block as usize);
@@ -485,7 +518,10 @@ impl VolumeIOFilesystem {
 
     /// Allocates a free inode
     fn alloc_inode(&self) -> Result<u32> {
-        let mut guard = self.inode_bitmap.write().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+        let mut guard = self
+            .inode_bitmap
+            .write()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?;
         let bitmap = guard.as_mut().ok_or(VolumeIOFsError::NotInitialized)?;
 
         // Find first free inode (skip 0 which is reserved)
@@ -515,7 +551,10 @@ impl VolumeIOFilesystem {
             ));
         }
 
-        let mut guard = self.inode_bitmap.write().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+        let mut guard = self
+            .inode_bitmap
+            .write()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?;
         let bitmap = guard.as_mut().ok_or(VolumeIOFsError::NotInitialized)?;
 
         bitmap.clear(inode_num as usize);
@@ -529,7 +568,10 @@ impl VolumeIOFilesystem {
 
         // Remove from cache
         {
-            let mut cache = self.inode_cache.write().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+            let mut cache = self
+                .inode_cache
+                .write()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
             cache.remove(&inode_num);
         }
 
@@ -553,7 +595,10 @@ impl VolumeIOFilesystem {
     fn read_inode(&self, inode_num: u32) -> Result<Inode> {
         // Check cache first
         {
-            let cache = self.inode_cache.read().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+            let cache = self
+                .inode_cache
+                .read()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
             if let Some(inode) = cache.get(&inode_num) {
                 return Ok(inode.clone());
             }
@@ -568,7 +613,10 @@ impl VolumeIOFilesystem {
 
         // Cache the inode
         {
-            let mut cache = self.inode_cache.write().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+            let mut cache = self
+                .inode_cache
+                .write()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
             cache.insert(inode_num, inode.clone());
         }
 
@@ -582,8 +630,8 @@ impl VolumeIOFilesystem {
         // Read the block, modify the inode, write back
         let mut block_data = self.read_block(block)?;
 
-        let inode_bytes = bincode::serialize(inode)
-            .map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
+        let inode_bytes =
+            bincode::serialize(inode).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
 
         block_data[offset..offset + inode_bytes.len()].copy_from_slice(&inode_bytes);
         self.write_block(block, &block_data)?;
@@ -597,7 +645,10 @@ impl VolumeIOFilesystem {
 
         // Update cache
         {
-            let mut cache = self.inode_cache.write().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+            let mut cache = self
+                .inode_cache
+                .write()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
             cache.insert(inode_num, inode.clone());
         }
 
@@ -684,7 +735,12 @@ impl VolumeIOFilesystem {
                 break;
             }
 
-            let inode = u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+            let inode = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]);
             let rec_len = u16::from_le_bytes([data[offset + 4], data[offset + 5]]);
             let name_len = data[offset + 6];
             let file_type = data[offset + 7];
@@ -771,9 +827,17 @@ impl VolumeIOFilesystem {
     }
 
     /// Adds an entry to a directory
-    fn dir_add_entry(&self, dir_inode: u32, name: &str, inode: u32, file_type: InodeType) -> Result<()> {
+    fn dir_add_entry(
+        &self,
+        dir_inode: u32,
+        name: &str,
+        inode: u32,
+        file_type: InodeType,
+    ) -> Result<()> {
         if name.len() > MAX_FILENAME_LEN {
-            return Err(VolumeIOFsError::Format(super::format::FormatError::NameTooLong(name.len())));
+            return Err(VolumeIOFsError::Format(
+                super::format::FormatError::NameTooLong(name.len()),
+            ));
         }
 
         let mut entries = self.read_dir_entries(dir_inode)?;
@@ -812,22 +876,18 @@ impl VolumeIOFilesystem {
                         ))
                     })?;
 
-                    current_inode = self
-                        .dir_lookup(current_inode, name_str)?
-                        .ok_or_else(|| {
-                            VolumeIOFsError::Filesystem(FilesystemError::NotFound(path.to_path_buf()))
-                        })?;
+                    current_inode = self.dir_lookup(current_inode, name_str)?.ok_or_else(|| {
+                        VolumeIOFsError::Filesystem(FilesystemError::NotFound(path.to_path_buf()))
+                    })?;
                 }
                 Component::CurDir => {
                     // Stay in current directory
                 }
                 Component::ParentDir => {
                     // Look up ".."
-                    current_inode = self
-                        .dir_lookup(current_inode, "..")?
-                        .ok_or_else(|| {
-                            VolumeIOFsError::Filesystem(FilesystemError::NotFound(path.to_path_buf()))
-                        })?;
+                    current_inode = self.dir_lookup(current_inode, "..")?.ok_or_else(|| {
+                        VolumeIOFsError::Filesystem(FilesystemError::NotFound(path.to_path_buf()))
+                    })?;
                 }
                 Component::Prefix(_) => {
                     // Windows-specific, ignore
@@ -891,7 +951,9 @@ impl VolumeIOFilesystem {
 
             let block_data = self.read_block(block_num as u64)?;
             let bytes_from_block = remaining.min((FS_BLOCK_SIZE as usize - block_offset) as u32);
-            result.extend_from_slice(&block_data[block_offset..block_offset + bytes_from_block as usize]);
+            result.extend_from_slice(
+                &block_data[block_offset..block_offset + bytes_from_block as usize],
+            );
 
             current_offset += bytes_from_block as u64;
             remaining -= bytes_from_block;
@@ -918,7 +980,8 @@ impl VolumeIOFilesystem {
             let mut block_data = self.read_block(block_num as u64)?;
 
             // Calculate how much to write to this block
-            let bytes_to_block = (data.len() as u32 - written).min((FS_BLOCK_SIZE as usize - block_offset) as u32);
+            let bytes_to_block =
+                (data.len() as u32 - written).min((FS_BLOCK_SIZE as usize - block_offset) as u32);
 
             // Copy data into block
             let src_start = written as usize;
@@ -1010,7 +1073,9 @@ impl VolumeIOFilesystem {
             return Ok(block_num);
         }
 
-        Err(VolumeIOFsError::InvalidOperation("File too large".to_string()))
+        Err(VolumeIOFsError::InvalidOperation(
+            "File too large".to_string(),
+        ))
     }
 
     /// Gets or allocates a data block (handling indirect blocks)
@@ -1058,7 +1123,10 @@ impl VolumeIOFilesystem {
             // Allocate double indirect block if needed
             if inode.double_indirect == 0 {
                 inode.double_indirect = self.alloc_block()?;
-                self.write_block(inode.double_indirect as u64, &vec![0u8; FS_BLOCK_SIZE as usize])?;
+                self.write_block(
+                    inode.double_indirect as u64,
+                    &vec![0u8; FS_BLOCK_SIZE as usize],
+                )?;
             }
 
             let first_level = double_index / ptrs_per_block;
@@ -1367,7 +1435,10 @@ impl VolumeIOFilesystem {
     pub fn sync(&self) -> Result<()> {
         // Flush inode cache - collect entries first to avoid holding lock during writes
         let entries: Vec<(u32, Inode)> = {
-            let cache = self.inode_cache.read().map_err(|_| VolumeIOFsError::LockPoisoned)?;
+            let cache = self
+                .inode_cache
+                .read()
+                .map_err(|_| VolumeIOFsError::LockPoisoned)?;
             cache.iter().map(|(&k, v)| (k, v.clone())).collect()
         };
 
@@ -1376,17 +1447,32 @@ impl VolumeIOFilesystem {
         }
 
         // Flush block bitmap
-        if let Some(bitmap) = self.block_bitmap.read().map_err(|_| VolumeIOFsError::LockPoisoned)?.as_ref() {
+        if let Some(bitmap) = self
+            .block_bitmap
+            .read()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?
+            .as_ref()
+        {
             self.write_block_bitmap(bitmap)?;
         }
 
         // Flush inode bitmap
-        if let Some(bitmap) = self.inode_bitmap.read().map_err(|_| VolumeIOFsError::LockPoisoned)?.as_ref() {
+        if let Some(bitmap) = self
+            .inode_bitmap
+            .read()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?
+            .as_ref()
+        {
             self.write_inode_bitmap(bitmap)?;
         }
 
         // Flush superblock
-        if let Some(sb) = self.superblock.read().map_err(|_| VolumeIOFsError::LockPoisoned)?.as_ref() {
+        if let Some(sb) = self
+            .superblock
+            .read()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?
+            .as_ref()
+        {
             self.write_superblock(sb)?;
         }
 
@@ -1396,7 +1482,10 @@ impl VolumeIOFilesystem {
             io.flush()?;
         }
 
-        *self.dirty.write().map_err(|_| VolumeIOFsError::LockPoisoned)? = false;
+        *self
+            .dirty
+            .write()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)? = false;
         Ok(())
     }
 
@@ -1529,10 +1618,9 @@ impl VolumeIOFilesystem {
     /// Removes a file from a directory
     pub fn remove_file(&self, parent_inode: u32, name: &str) -> Result<()> {
         // Look up the inode
-        let inode_num = self.dir_lookup(parent_inode, name)?
-            .ok_or_else(|| VolumeIOFsError::Filesystem(FilesystemError::NotFound(
-                PathBuf::from(name),
-            )))?;
+        let inode_num = self.dir_lookup(parent_inode, name)?.ok_or_else(|| {
+            VolumeIOFsError::Filesystem(FilesystemError::NotFound(PathBuf::from(name)))
+        })?;
 
         let inode = self.read_inode(inode_num)?;
 
@@ -1563,10 +1651,9 @@ impl VolumeIOFilesystem {
     /// Removes a directory
     pub fn remove_directory(&self, parent_inode: u32, name: &str) -> Result<()> {
         // Look up the inode
-        let inode_num = self.dir_lookup(parent_inode, name)?
-            .ok_or_else(|| VolumeIOFsError::Filesystem(FilesystemError::NotFound(
-                PathBuf::from(name),
-            )))?;
+        let inode_num = self.dir_lookup(parent_inode, name)?.ok_or_else(|| {
+            VolumeIOFsError::Filesystem(FilesystemError::NotFound(PathBuf::from(name)))
+        })?;
 
         let inode = self.read_inode(inode_num)?;
 
@@ -1580,17 +1667,13 @@ impl VolumeIOFilesystem {
         let entries = self.read_dir_entries(inode_num)?;
         let non_dot_entries: Vec<_> = entries
             .iter()
-            .filter(|e| {
-                e.name_str()
-                    .map(|n| n != "." && n != "..")
-                    .unwrap_or(false)
-            })
+            .filter(|e| e.name_str().map(|n| n != "." && n != "..").unwrap_or(false))
             .collect();
 
         if !non_dot_entries.is_empty() {
-            return Err(VolumeIOFsError::Filesystem(FilesystemError::DirectoryNotEmpty(
-                PathBuf::from(name),
-            )));
+            return Err(VolumeIOFsError::Filesystem(
+                FilesystemError::DirectoryNotEmpty(PathBuf::from(name)),
+            ));
         }
 
         // Remove from parent directory
@@ -1623,10 +1706,9 @@ impl VolumeIOFilesystem {
         new_name: &str,
     ) -> Result<()> {
         // Look up the source inode
-        let inode_num = self.dir_lookup(old_parent, old_name)?
-            .ok_or_else(|| VolumeIOFsError::Filesystem(FilesystemError::NotFound(
-                PathBuf::from(old_name),
-            )))?;
+        let inode_num = self.dir_lookup(old_parent, old_name)?.ok_or_else(|| {
+            VolumeIOFsError::Filesystem(FilesystemError::NotFound(PathBuf::from(old_name)))
+        })?;
 
         let inode = self.read_inode(inode_num)?;
         let file_type = if inode.is_dir() {
@@ -1646,17 +1728,13 @@ impl VolumeIOFilesystem {
                 let entries = self.read_dir_entries(existing)?;
                 let non_dot_entries: Vec<_> = entries
                     .iter()
-                    .filter(|e| {
-                        e.name_str()
-                            .map(|n| n != "." && n != "..")
-                            .unwrap_or(false)
-                    })
+                    .filter(|e| e.name_str().map(|n| n != "." && n != "..").unwrap_or(false))
                     .collect();
 
                 if !non_dot_entries.is_empty() {
-                    return Err(VolumeIOFsError::Filesystem(FilesystemError::DirectoryNotEmpty(
-                        PathBuf::from(new_name),
-                    )));
+                    return Err(VolumeIOFsError::Filesystem(
+                        FilesystemError::DirectoryNotEmpty(PathBuf::from(new_name)),
+                    ));
                 }
             }
 
@@ -1765,41 +1843,60 @@ impl VolumeIOFilesystem {
         let sb = self.get_superblock()?;
 
         // Phase 1: Check all inodes for corruption
-        result.messages.push("Phase 1: Checking inodes...".to_string());
+        result
+            .messages
+            .push("Phase 1: Checking inodes...".to_string());
         let valid_inodes = self.fsck_check_inodes(&sb, &mut result)?;
 
         // Phase 2: Build block usage map from valid inodes
-        result.messages.push("Phase 2: Building block usage map...".to_string());
+        result
+            .messages
+            .push("Phase 2: Building block usage map...".to_string());
         let (used_blocks, used_inodes) = self.fsck_build_usage_maps(&valid_inodes, &mut result)?;
 
         // Phase 3: Check block bitmap consistency
-        result.messages.push("Phase 3: Checking block bitmap...".to_string());
+        result
+            .messages
+            .push("Phase 3: Checking block bitmap...".to_string());
         let _block_errors = self.fsck_check_block_bitmap(&sb, &used_blocks, &mut result)?;
 
         // Phase 4: Check inode bitmap consistency
-        result.messages.push("Phase 4: Checking inode bitmap...".to_string());
+        result
+            .messages
+            .push("Phase 4: Checking inode bitmap...".to_string());
         let _inode_errors = self.fsck_check_inode_bitmap(&sb, &used_inodes, &mut result)?;
 
         // Phase 5: Check directory tree connectivity
-        result.messages.push("Phase 5: Checking directory tree...".to_string());
+        result
+            .messages
+            .push("Phase 5: Checking directory tree...".to_string());
         self.fsck_check_directory_tree(&valid_inodes, &mut result)?;
 
         // Phase 6: Repair if requested
         if repair && !result.is_clean() {
-            result.messages.push("Phase 6: Repairing filesystem...".to_string());
+            result
+                .messages
+                .push("Phase 6: Repairing filesystem...".to_string());
             self.fsck_repair_filesystem(&used_blocks, &used_inodes, &mut result)?;
         }
 
         result.messages.push(format!(
             "Filesystem check complete: {} inodes scanned, {} errors found",
             result.inodes_scanned,
-            result.corrupted_inodes + result.orphaned_blocks + result.lost_inodes + result.bitmap_errors
+            result.corrupted_inodes
+                + result.orphaned_blocks
+                + result.lost_inodes
+                + result.bitmap_errors
         ));
 
         Ok(result)
     }
 
-    fn fsck_check_inodes(&self, sb: &Superblock, result: &mut FsckResult) -> Result<HashMap<u32, Inode>> {
+    fn fsck_check_inodes(
+        &self,
+        sb: &Superblock,
+        result: &mut FsckResult,
+    ) -> Result<HashMap<u32, Inode>> {
         let mut valid_inodes = HashMap::new();
 
         for inode_num in 1..=sb.total_inodes {
@@ -1812,18 +1909,16 @@ impl VolumeIOFilesystem {
                         valid_inodes.insert(inode_num, inode);
                     } else {
                         result.corrupted_inodes += 1;
-                        result.messages.push(format!(
-                            "Corrupted inode {}: invalid structure",
-                            inode_num
-                        ));
+                        result
+                            .messages
+                            .push(format!("Corrupted inode {}: invalid structure", inode_num));
                     }
                 }
                 Err(e) => {
                     result.corrupted_inodes += 1;
-                    result.messages.push(format!(
-                        "Cannot read inode {}: {}",
-                        inode_num, e
-                    ));
+                    result
+                        .messages
+                        .push(format!("Cannot read inode {}: {}", inode_num, e));
                 }
             }
         }
@@ -1840,7 +1935,8 @@ impl VolumeIOFilesystem {
 
         // Check mode - should be a valid type
         let mode_type = inode.mode & 0o170000;
-        if mode_type != 0o100000 && mode_type != 0o040000 && mode_type != 0o120000 && mode_type != 0 {
+        if mode_type != 0o100000 && mode_type != 0o040000 && mode_type != 0o120000 && mode_type != 0
+        {
             return false;
         }
 
@@ -1852,10 +1948,9 @@ impl VolumeIOFilesystem {
         }
 
         // Root inode should always be a directory
-        if inode_num == ROOT_INODE && inode.nlink > 0
-            && !inode.is_dir() {
-                return false;
-            }
+        if inode_num == ROOT_INODE && inode.nlink > 0 && !inode.is_dir() {
+            return false;
+        }
 
         true
     }
@@ -1918,7 +2013,9 @@ impl VolumeIOFilesystem {
     ) -> Result<u32> {
         let mut errors = 0;
 
-        let stored_bitmap = self.block_bitmap.read()
+        let stored_bitmap = self
+            .block_bitmap
+            .read()
             .map_err(|_| VolumeIOFsError::LockPoisoned)?;
 
         if let Some(stored) = stored_bitmap.as_ref() {
@@ -1928,10 +2025,9 @@ impl VolumeIOFilesystem {
 
                 if actual_used && !bitmap_says_used {
                     // Block is used but not marked in bitmap
-                    result.messages.push(format!(
-                        "Block {} is used but not marked in bitmap",
-                        i
-                    ));
+                    result
+                        .messages
+                        .push(format!("Block {} is used but not marked in bitmap", i));
                     errors += 1;
                     result.bitmap_errors += 1;
                 } else if !actual_used && bitmap_says_used && i >= DATA_BLOCKS_START as usize {
@@ -1956,7 +2052,9 @@ impl VolumeIOFilesystem {
     ) -> Result<u32> {
         let mut errors = 0;
 
-        let stored_bitmap = self.inode_bitmap.read()
+        let stored_bitmap = self
+            .inode_bitmap
+            .read()
             .map_err(|_| VolumeIOFsError::LockPoisoned)?;
 
         if let Some(stored) = stored_bitmap.as_ref() {
@@ -1965,10 +2063,9 @@ impl VolumeIOFilesystem {
                 let bitmap_says_used = stored.is_set(i);
 
                 if actual_used && !bitmap_says_used {
-                    result.messages.push(format!(
-                        "Inode {} is used but not marked in bitmap",
-                        i
-                    ));
+                    result
+                        .messages
+                        .push(format!("Inode {} is used but not marked in bitmap", i));
                     errors += 1;
                     result.bitmap_errors += 1;
                 } else if !actual_used && bitmap_says_used {
@@ -1992,22 +2089,32 @@ impl VolumeIOFilesystem {
         // Check that root directory exists and is valid
         if let Some(root) = valid_inodes.get(&ROOT_INODE) {
             if !root.is_dir() {
-                result.messages.push("Root inode is not a directory".to_string());
+                result
+                    .messages
+                    .push("Root inode is not a directory".to_string());
                 result.corrupted_inodes += 1;
             } else {
                 // Check directory entries
                 match self.read_dir_entries(ROOT_INODE) {
                     Ok(entries) => {
                         // Root should have . and .. entries
-                        let has_dot = entries.iter().any(|e| e.name_str().map(|n| n == ".").unwrap_or(false));
-                        let has_dotdot = entries.iter().any(|e| e.name_str().map(|n| n == "..").unwrap_or(false));
+                        let has_dot = entries
+                            .iter()
+                            .any(|e| e.name_str().map(|n| n == ".").unwrap_or(false));
+                        let has_dotdot = entries
+                            .iter()
+                            .any(|e| e.name_str().map(|n| n == "..").unwrap_or(false));
 
                         if !has_dot {
-                            result.messages.push("Root directory missing '.' entry".to_string());
+                            result
+                                .messages
+                                .push("Root directory missing '.' entry".to_string());
                             result.corrupted_inodes += 1;
                         }
                         if !has_dotdot {
-                            result.messages.push("Root directory missing '..' entry".to_string());
+                            result
+                                .messages
+                                .push("Root directory missing '..' entry".to_string());
                             result.corrupted_inodes += 1;
                         }
 
@@ -2025,10 +2132,9 @@ impl VolumeIOFilesystem {
                         }
                     }
                     Err(e) => {
-                        result.messages.push(format!(
-                            "Cannot read root directory: {}",
-                            e
-                        ));
+                        result
+                            .messages
+                            .push(format!("Cannot read root directory: {}", e));
                         result.corrupted_inodes += 1;
                     }
                 }
@@ -2049,7 +2155,9 @@ impl VolumeIOFilesystem {
     ) -> Result<()> {
         // Repair block bitmap
         {
-            let mut bitmap = self.block_bitmap.write()
+            let mut bitmap = self
+                .block_bitmap
+                .write()
                 .map_err(|_| VolumeIOFsError::LockPoisoned)?;
 
             if let Some(bm) = bitmap.as_mut() {
@@ -2072,20 +2180,26 @@ impl VolumeIOFilesystem {
 
                 if repaired > 0 {
                     drop(bitmap);
-                    let bitmap = self.block_bitmap.read()
+                    let bitmap = self
+                        .block_bitmap
+                        .read()
                         .map_err(|_| VolumeIOFsError::LockPoisoned)?;
                     if let Some(bm) = bitmap.as_ref() {
                         self.write_block_bitmap(bm)?;
                     }
                     result.errors_repaired += repaired;
-                    result.messages.push(format!("Repaired {} block bitmap entries", repaired));
+                    result
+                        .messages
+                        .push(format!("Repaired {} block bitmap entries", repaired));
                 }
             }
         }
 
         // Repair inode bitmap
         {
-            let mut bitmap = self.inode_bitmap.write()
+            let mut bitmap = self
+                .inode_bitmap
+                .write()
                 .map_err(|_| VolumeIOFsError::LockPoisoned)?;
 
             if let Some(bm) = bitmap.as_mut() {
@@ -2108,24 +2222,32 @@ impl VolumeIOFilesystem {
 
                 if repaired > 0 {
                     drop(bitmap);
-                    let bitmap = self.inode_bitmap.read()
+                    let bitmap = self
+                        .inode_bitmap
+                        .read()
                         .map_err(|_| VolumeIOFsError::LockPoisoned)?;
                     if let Some(bm) = bitmap.as_ref() {
                         self.write_inode_bitmap(bm)?;
                     }
                     result.errors_repaired += repaired;
-                    result.messages.push(format!("Repaired {} inode bitmap entries", repaired));
+                    result
+                        .messages
+                        .push(format!("Repaired {} inode bitmap entries", repaired));
                 }
             }
         }
 
         // Update superblock free counts
         {
-            let mut sb_lock = self.superblock.write()
+            let mut sb_lock = self
+                .superblock
+                .write()
                 .map_err(|_| VolumeIOFsError::LockPoisoned)?;
 
             if let Some(sb) = sb_lock.as_mut() {
-                let block_bitmap = self.block_bitmap.read()
+                let block_bitmap = self
+                    .block_bitmap
+                    .read()
                     .map_err(|_| VolumeIOFsError::LockPoisoned)?;
 
                 if let Some(bm) = block_bitmap.as_ref() {
@@ -2189,18 +2311,24 @@ impl VolumeIOFilesystem {
 
         // Update in-memory copy
         {
-            let mut bitmap = self.block_bitmap.write()
+            let mut bitmap = self
+                .block_bitmap
+                .write()
                 .map_err(|_| VolumeIOFsError::LockPoisoned)?;
             *bitmap = Some(new_bitmap);
         }
 
         // Update superblock free count
         {
-            let mut sb_lock = self.superblock.write()
+            let mut sb_lock = self
+                .superblock
+                .write()
                 .map_err(|_| VolumeIOFsError::LockPoisoned)?;
 
             if let Some(sb) = sb_lock.as_mut() {
-                let block_bitmap = self.block_bitmap.read()
+                let block_bitmap = self
+                    .block_bitmap
+                    .read()
                     .map_err(|_| VolumeIOFsError::LockPoisoned)?;
 
                 if let Some(bm) = block_bitmap.as_ref() {
@@ -2241,17 +2369,44 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
         match result {
             Ok(fs) => {
                 // Copy state from opened filesystem
-                *self.io.write().map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))? =
-                    fs.io.write().map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))?.take();
-                *self.superblock.write().map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))? =
-                    fs.superblock.write().map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))?.take();
-                *self.block_bitmap.write().map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))? =
-                    fs.block_bitmap.write().map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))?.take();
-                *self.inode_bitmap.write().map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))? =
-                    fs.inode_bitmap.write().map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))?.take();
+                *self
+                    .io
+                    .write()
+                    .map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))? = fs
+                    .io
+                    .write()
+                    .map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))?
+                    .take();
+                *self
+                    .superblock
+                    .write()
+                    .map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))? = fs
+                    .superblock
+                    .write()
+                    .map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))?
+                    .take();
+                *self
+                    .block_bitmap
+                    .write()
+                    .map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))? = fs
+                    .block_bitmap
+                    .write()
+                    .map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))?
+                    .take();
+                *self
+                    .inode_bitmap
+                    .write()
+                    .map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))? = fs
+                    .inode_bitmap
+                    .write()
+                    .map_err(|_| FilesystemError::Other("Lock poisoned".to_string()))?
+                    .take();
                 Ok(())
             }
-            Err(e) => Err(FilesystemError::Other(format!("Failed to open filesystem: {}", e))),
+            Err(e) => Err(FilesystemError::Other(format!(
+                "Failed to open filesystem: {}",
+                e
+            ))),
         }
     }
 
@@ -2261,7 +2416,9 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
             other => FilesystemError::Other(other.to_string()),
         })?;
 
-        let inode = self.read_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let inode = self
+            .read_inode(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         Ok(self.inode_to_file_attr(&inode))
     }
 
@@ -2321,16 +2478,23 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
         })?;
 
         // Check if already exists
-        if self.dir_lookup(parent_inode, &name).map_err(|e| FilesystemError::Other(e.to_string()))?.is_some() {
+        if self
+            .dir_lookup(parent_inode, &name)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?
+            .is_some()
+        {
             return Err(FilesystemError::AlreadyExists(path.to_path_buf()));
         }
 
         // Allocate inode
-        let inode_num = self.alloc_inode().map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let inode_num = self
+            .alloc_inode()
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Create inode
         let inode = Inode::new_file(mode);
-        self.write_inode(inode_num, &inode).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.write_inode(inode_num, &inode)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Add to parent directory
         self.dir_add_entry(parent_inode, &name, inode_num, InodeType::File)
@@ -2346,39 +2510,52 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
         })?;
 
         // Check if already exists
-        if self.dir_lookup(parent_inode, &name).map_err(|e| FilesystemError::Other(e.to_string()))?.is_some() {
+        if self
+            .dir_lookup(parent_inode, &name)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?
+            .is_some()
+        {
             return Err(FilesystemError::AlreadyExists(path.to_path_buf()));
         }
 
         // Allocate inode
-        let inode_num = self.alloc_inode().map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let inode_num = self
+            .alloc_inode()
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Create directory inode
         let mut inode = Inode::new_directory(mode);
 
         // Allocate a data block for the directory
-        let data_block = self.alloc_block().map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let data_block = self
+            .alloc_block()
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         inode.direct[0] = data_block;
         inode.size = FS_BLOCK_SIZE as u64;
         inode.blocks = (FS_BLOCK_SIZE / 512) as u64;
 
-        self.write_inode(inode_num, &inode).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.write_inode(inode_num, &inode)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Initialize directory with . and .. entries
         let entries = vec![
             DirEntry::new(inode_num, ".", InodeType::Directory),
             DirEntry::new(parent_inode, "..", InodeType::Directory),
         ];
-        self.write_dir_entries(inode_num, &entries).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.write_dir_entries(inode_num, &entries)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Add to parent directory
         self.dir_add_entry(parent_inode, &name, inode_num, InodeType::Directory)
             .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Update parent nlink (for ..)
-        let mut parent = self.read_inode(parent_inode).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let mut parent = self
+            .read_inode(parent_inode)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         parent.nlink += 1;
-        self.write_inode(parent_inode, &parent).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.write_inode(parent_inode, &parent)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         Ok(())
     }
@@ -2390,30 +2567,37 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
         })?;
 
         // Look up the inode
-        let inode_num = self.dir_lookup(parent_inode, &name)
+        let inode_num = self
+            .dir_lookup(parent_inode, &name)
             .map_err(|e| FilesystemError::Other(e.to_string()))?
             .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
 
-        let inode = self.read_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let inode = self
+            .read_inode(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         if inode.is_dir() {
             return Err(FilesystemError::IsADirectory(path.to_path_buf()));
         }
 
         // Remove from parent directory
-        self.dir_remove_entry(parent_inode, &name).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.dir_remove_entry(parent_inode, &name)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Free data blocks (direct blocks)
         for &block in &inode.direct {
             if block != 0 {
-                self.free_block(block).map_err(|e| FilesystemError::Other(e.to_string()))?;
+                self.free_block(block)
+                    .map_err(|e| FilesystemError::Other(e.to_string()))?;
             }
         }
         // Free indirect blocks
-        self.free_indirect_blocks(&inode).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.free_indirect_blocks(&inode)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Free inode
-        self.free_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.free_inode(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         Ok(())
     }
@@ -2425,25 +2609,26 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
         })?;
 
         // Look up the inode
-        let inode_num = self.dir_lookup(parent_inode, &name)
+        let inode_num = self
+            .dir_lookup(parent_inode, &name)
             .map_err(|e| FilesystemError::Other(e.to_string()))?
             .ok_or_else(|| FilesystemError::NotFound(path.to_path_buf()))?;
 
-        let inode = self.read_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let inode = self
+            .read_inode(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         if !inode.is_dir() {
             return Err(FilesystemError::NotADirectory(path.to_path_buf()));
         }
 
         // Check if directory is empty (only . and ..)
-        let entries = self.read_dir_entries(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let entries = self
+            .read_dir_entries(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         let non_dot_entries: Vec<_> = entries
             .iter()
-            .filter(|e| {
-                e.name_str()
-                    .map(|n| n != "." && n != "..")
-                    .unwrap_or(false)
-            })
+            .filter(|e| e.name_str().map(|n| n != "." && n != "..").unwrap_or(false))
             .collect();
 
         if !non_dot_entries.is_empty() {
@@ -2451,22 +2636,28 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
         }
 
         // Remove from parent directory
-        self.dir_remove_entry(parent_inode, &name).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.dir_remove_entry(parent_inode, &name)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Update parent nlink
-        let mut parent = self.read_inode(parent_inode).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let mut parent = self
+            .read_inode(parent_inode)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         parent.nlink = parent.nlink.saturating_sub(1);
-        self.write_inode(parent_inode, &parent).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.write_inode(parent_inode, &parent)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Free data blocks
         for &block in &inode.direct {
             if block != 0 {
-                self.free_block(block).map_err(|e| FilesystemError::Other(e.to_string()))?;
+                self.free_block(block)
+                    .map_err(|e| FilesystemError::Other(e.to_string()))?;
             }
         }
 
         // Free inode
-        self.free_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.free_inode(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         Ok(())
     }
@@ -2483,33 +2674,47 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
         })?;
 
         // Look up source
-        let inode_num = self.dir_lookup(from_parent, &from_name)
+        let inode_num = self
+            .dir_lookup(from_parent, &from_name)
             .map_err(|e| FilesystemError::Other(e.to_string()))?
             .ok_or_else(|| FilesystemError::NotFound(from.to_path_buf()))?;
 
-        let inode = self.read_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let inode = self
+            .read_inode(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         let file_type = inode.file_type();
 
         // Check if destination exists
-        if let Some(existing) = self.dir_lookup(to_parent, &to_name).map_err(|e| FilesystemError::Other(e.to_string()))? {
+        if let Some(existing) = self
+            .dir_lookup(to_parent, &to_name)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?
+        {
             // Remove existing
-            let existing_inode = self.read_inode(existing).map_err(|e| FilesystemError::Other(e.to_string()))?;
+            let existing_inode = self
+                .read_inode(existing)
+                .map_err(|e| FilesystemError::Other(e.to_string()))?;
             if existing_inode.is_dir() {
                 // Check if empty
-                let entries = self.read_dir_entries(existing).map_err(|e| FilesystemError::Other(e.to_string()))?;
-                let non_dot = entries.iter().filter(|e| {
-                    e.name_str().map(|n| n != "." && n != "..").unwrap_or(false)
-                }).count();
+                let entries = self
+                    .read_dir_entries(existing)
+                    .map_err(|e| FilesystemError::Other(e.to_string()))?;
+                let non_dot = entries
+                    .iter()
+                    .filter(|e| e.name_str().map(|n| n != "." && n != "..").unwrap_or(false))
+                    .count();
                 if non_dot > 0 {
                     return Err(FilesystemError::DirectoryNotEmpty(to.to_path_buf()));
                 }
             }
-            self.dir_remove_entry(to_parent, &to_name).map_err(|e| FilesystemError::Other(e.to_string()))?;
-            self.free_inode(existing).map_err(|e| FilesystemError::Other(e.to_string()))?;
+            self.dir_remove_entry(to_parent, &to_name)
+                .map_err(|e| FilesystemError::Other(e.to_string()))?;
+            self.free_inode(existing)
+                .map_err(|e| FilesystemError::Other(e.to_string()))?;
         }
 
         // Remove from source directory
-        self.dir_remove_entry(from_parent, &from_name).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.dir_remove_entry(from_parent, &from_name)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Add to destination directory
         self.dir_add_entry(to_parent, &to_name, inode_num, file_type)
@@ -2517,22 +2722,31 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
 
         // Update .. entry if it's a directory and parent changed
         if inode.is_dir() && from_parent != to_parent {
-            let mut entries = self.read_dir_entries(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+            let mut entries = self
+                .read_dir_entries(inode_num)
+                .map_err(|e| FilesystemError::Other(e.to_string()))?;
             for entry in &mut entries {
                 if entry.name_str().map(|n| n == "..").unwrap_or(false) {
                     entry.inode = to_parent;
                 }
             }
-            self.write_dir_entries(inode_num, &entries).map_err(|e| FilesystemError::Other(e.to_string()))?;
+            self.write_dir_entries(inode_num, &entries)
+                .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
             // Update nlink counts
-            let mut old_parent = self.read_inode(from_parent).map_err(|e| FilesystemError::Other(e.to_string()))?;
+            let mut old_parent = self
+                .read_inode(from_parent)
+                .map_err(|e| FilesystemError::Other(e.to_string()))?;
             old_parent.nlink = old_parent.nlink.saturating_sub(1);
-            self.write_inode(from_parent, &old_parent).map_err(|e| FilesystemError::Other(e.to_string()))?;
+            self.write_inode(from_parent, &old_parent)
+                .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
-            let mut new_parent = self.read_inode(to_parent).map_err(|e| FilesystemError::Other(e.to_string()))?;
+            let mut new_parent = self
+                .read_inode(to_parent)
+                .map_err(|e| FilesystemError::Other(e.to_string()))?;
             new_parent.nlink += 1;
-            self.write_inode(to_parent, &new_parent).map_err(|e| FilesystemError::Other(e.to_string()))?;
+            self.write_inode(to_parent, &new_parent)
+                .map_err(|e| FilesystemError::Other(e.to_string()))?;
         }
 
         Ok(())
@@ -2544,7 +2758,9 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
             other => FilesystemError::Other(other.to_string()),
         })?;
 
-        let mut inode = self.read_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let mut inode = self
+            .read_inode(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         // Preserve file type, update permissions
         let file_type = (inode.mode >> 12) & 0xF;
@@ -2554,7 +2770,8 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        self.write_inode(inode_num, &inode).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.write_inode(inode_num, &inode)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         Ok(())
     }
 
@@ -2564,7 +2781,9 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
             other => FilesystemError::Other(other.to_string()),
         })?;
 
-        let mut inode = self.read_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let mut inode = self
+            .read_inode(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         inode.uid = uid;
         inode.gid = gid;
         inode.ctime = SystemTime::now()
@@ -2572,7 +2791,8 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        self.write_inode(inode_num, &inode).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.write_inode(inode_num, &inode)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         Ok(())
     }
 
@@ -2582,7 +2802,9 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
             other => FilesystemError::Other(other.to_string()),
         })?;
 
-        let mut inode = self.read_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let mut inode = self
+            .read_inode(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         if inode.is_dir() {
             return Err(FilesystemError::IsADirectory(path.to_path_buf()));
@@ -2592,7 +2814,8 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
 
         if size < inode.size {
             // Shrinking - free excess blocks (including indirect blocks)
-            self.free_blocks_from(&mut inode, new_blocks).map_err(|e| FilesystemError::Other(e.to_string()))?;
+            self.free_blocks_from(&mut inode, new_blocks)
+                .map_err(|e| FilesystemError::Other(e.to_string()))?;
         }
 
         inode.size = size;
@@ -2603,17 +2826,25 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
             .unwrap_or(0);
         inode.ctime = inode.mtime;
 
-        self.write_inode(inode_num, &inode).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.write_inode(inode_num, &inode)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         Ok(())
     }
 
-    fn utimens(&mut self, path: &Path, atime: Option<SystemTime>, mtime: Option<SystemTime>) -> FsResult<()> {
+    fn utimens(
+        &mut self,
+        path: &Path,
+        atime: Option<SystemTime>,
+        mtime: Option<SystemTime>,
+    ) -> FsResult<()> {
         let inode_num = self.resolve_path(path).map_err(|e| match e {
             VolumeIOFsError::Filesystem(fe) => fe,
             other => FilesystemError::Other(other.to_string()),
         })?;
 
-        let mut inode = self.read_inode(inode_num).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        let mut inode = self
+            .read_inode(inode_num)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
 
         if let Some(atime) = atime {
             inode.atime = atime
@@ -2634,16 +2865,19 @@ impl EncryptedFilesystem for VolumeIOFilesystem {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        self.write_inode(inode_num, &inode).map_err(|e| FilesystemError::Other(e.to_string()))?;
+        self.write_inode(inode_num, &inode)
+            .map_err(|e| FilesystemError::Other(e.to_string()))?;
         Ok(())
     }
 
     fn flush(&mut self) -> FsResult<()> {
-        self.sync().map_err(|e| FilesystemError::Other(e.to_string()))
+        self.sync()
+            .map_err(|e| FilesystemError::Other(e.to_string()))
     }
 
     fn statfs(&self) -> FsResult<(u64, u64, u64)> {
-        self.get_statfs().map_err(|e| FilesystemError::Other(e.to_string()))
+        self.get_statfs()
+            .map_err(|e| FilesystemError::Other(e.to_string()))
     }
 }
 
@@ -2657,9 +2891,9 @@ impl Drop for VolumeIOFilesystem {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::io::MemoryBackend;
     use super::super::format::FS_MAGIC;
+    use super::super::io::MemoryBackend;
+    use super::*;
 
     fn create_test_fs(size_mb: u64) -> VolumeIOFilesystem {
         let volume_size = size_mb * 1024 * 1024;
@@ -2708,7 +2942,9 @@ mod tests {
         let written = fs.write(Path::new("/test.txt"), 0, data).unwrap();
         assert_eq!(written, data.len() as u32);
 
-        let read_data = fs.read(Path::new("/test.txt"), 0, data.len() as u32).unwrap();
+        let read_data = fs
+            .read(Path::new("/test.txt"), 0, data.len() as u32)
+            .unwrap();
         assert_eq!(&read_data, data);
     }
 
@@ -2794,13 +3030,16 @@ mod tests {
         let data = b"test data";
         fs.write(Path::new("/old.txt"), 0, data).unwrap();
 
-        fs.rename(Path::new("/old.txt"), Path::new("/new.txt")).unwrap();
+        fs.rename(Path::new("/old.txt"), Path::new("/new.txt"))
+            .unwrap();
 
         // Old path should not exist
         assert!(fs.getattr(Path::new("/old.txt")).is_err());
 
         // New path should exist with same data
-        let read_data = fs.read(Path::new("/new.txt"), 0, data.len() as u32).unwrap();
+        let read_data = fs
+            .read(Path::new("/new.txt"), 0, data.len() as u32)
+            .unwrap();
         assert_eq!(&read_data, data);
     }
 
@@ -2867,7 +3106,9 @@ mod tests {
         assert_eq!(written, data.len() as u32);
 
         // Read it back
-        let read_data = fs.read(Path::new("/large.bin"), 0, data.len() as u32).unwrap();
+        let read_data = fs
+            .read(Path::new("/large.bin"), 0, data.len() as u32)
+            .unwrap();
         assert_eq!(read_data.len(), data.len());
         assert_eq!(read_data, data);
     }
@@ -2882,7 +3123,8 @@ mod tests {
         fs.write(Path::new("/append.txt"), 0, data1).unwrap();
 
         let data2 = b"Second part.";
-        fs.write(Path::new("/append.txt"), data1.len() as u64, data2).unwrap();
+        fs.write(Path::new("/append.txt"), data1.len() as u64, data2)
+            .unwrap();
 
         let full_data = fs.read(Path::new("/append.txt"), 0, 100).unwrap();
         assert_eq!(&full_data, b"First part. Second part.");

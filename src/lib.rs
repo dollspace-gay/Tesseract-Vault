@@ -53,21 +53,25 @@ pub mod luks;
 // Re-export commonly used types
 pub use config::{CryptoConfig, MAGIC_BYTES, NONCE_LEN};
 pub use crypto::aes_gcm::AesGcmEncryptor;
-pub use crypto::kdf::{Argon2Kdf, generate_salt_string};
+pub use crypto::kdf::{generate_salt_string, Argon2Kdf};
 pub use crypto::streaming::{
     ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig, StreamHeader, MAGIC_BYTES_V3,
 };
 pub use crypto::{Encryptor, KeyDerivation};
 pub use error::{CryptorError, Result};
-pub use memory::allocator::{SecureAllocator, AllocatorStats};
+pub use memory::allocator::{AllocatorStats, SecureAllocator};
 #[cfg(feature = "post-quantum")]
 pub use memory::pool::{EncryptedAllocation, EncryptedMemoryPool, SecurityLevel};
-pub use memory::scrub::{scrub_bytes, scrub_bytes_pattern, scrub_and_verify, ScrubPattern, ScrubStats, ScrubGuard};
+pub use memory::scrub::{
+    scrub_and_verify, scrub_bytes, scrub_bytes_pattern, ScrubGuard, ScrubPattern, ScrubStats,
+};
 pub use memory::LockedMemory;
-pub use progress::{format_bytes, format_duration, ProgressCallback, ProgressReporter, ProgressTracker};
+pub use progress::{
+    format_bytes, format_duration, ProgressCallback, ProgressReporter, ProgressTracker,
+};
+pub use validation::validate_password;
 #[cfg(not(target_arch = "wasm32"))]
 pub use validation::{get_and_validate_password, get_password};
-pub use validation::validate_password;
 
 use rand::rngs::OsRng;
 use rand_core::TryRngCore;
@@ -120,7 +124,8 @@ pub fn encrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
 
     // Generate base nonce for chunk nonce derivation
     let mut base_nonce = [0u8; NONCE_LEN];
-    OsRng.try_fill_bytes(&mut base_nonce)
+    OsRng
+        .try_fill_bytes(&mut base_nonce)
         .map_err(|e| CryptorError::Cryptography(format!("RNG error: {}", e)))?;
 
     // Open input file for chunked reading
@@ -213,7 +218,8 @@ pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
 
     // Generate base nonce for chunk nonce derivation
     let mut base_nonce = [0u8; NONCE_LEN];
-    OsRng.try_fill_bytes(&mut base_nonce)
+    OsRng
+        .try_fill_bytes(&mut base_nonce)
         .map_err(|e| CryptorError::Cryptography(format!("RNG error: {}", e)))?;
 
     // Open input file for chunked reading
@@ -232,7 +238,8 @@ pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
     };
 
     #[cfg(not(feature = "post-quantum"))]
-    let chunked_encryptor = ChunkedEncryptor::new(reader, encryptor, key_array, base_nonce, salt_string);
+    let chunked_encryptor =
+        ChunkedEncryptor::new(reader, encryptor, key_array, base_nonce, salt_string);
 
     // Encrypt to output file atomically
     storage::write_atomically(output_path, |file| {
@@ -419,7 +426,8 @@ pub fn encrypt_bytes(plaintext: &[u8], password: &str) -> Result<(Vec<u8>, Vec<u
 
     let encryptor = AesGcmEncryptor::new();
     let mut nonce = vec![0u8; encryptor.nonce_len()];
-    OsRng.try_fill_bytes(&mut nonce)
+    OsRng
+        .try_fill_bytes(&mut nonce)
         .map_err(|e| CryptorError::Cryptography(format!("RNG error: {}", e)))?;
 
     let ciphertext = encryptor.encrypt(&key, &nonce, plaintext)?;

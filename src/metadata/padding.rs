@@ -92,9 +92,9 @@ impl Default for PaddingGenerator {
     fn default() -> Self {
         Self {
             strategy: PaddingStrategy::Random,
-            min_random: 1024,      // 1KB minimum
-            max_random: 16384,     // 16KB maximum
-            max_total: 1048576,    // 1MB safety limit
+            min_random: 1024,   // 1KB minimum
+            max_random: 16384,  // 16KB maximum
+            max_total: 1048576, // 1MB safety limit
         }
     }
 }
@@ -408,8 +408,7 @@ mod tests {
 
     #[test]
     fn test_builder_pattern() {
-        let gen = PaddingGenerator::random(500, 1000)
-            .with_max_total(5000);
+        let gen = PaddingGenerator::random(500, 1000).with_max_total(5000);
 
         assert_eq!(gen.min_random, 500);
         assert_eq!(gen.max_random, 1000);

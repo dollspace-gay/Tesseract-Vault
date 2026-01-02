@@ -7,10 +7,13 @@
 //! lock and detect when the system is about to suspend/hibernate/shutdown.
 
 use super::{PowerCallback, PowerEvent, Result};
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
-use std::thread;
-use std::process::{Command, Stdio, Child};
 use std::io::{BufRead, BufReader};
+use std::process::{Child, Command, Stdio};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
+use std::thread;
 use std::time::Duration;
 
 /// Linux power monitor using systemd-logind
@@ -164,8 +167,10 @@ fn run_inhibitor_monitor(
         cmd.args([
             "monitor",
             "--system",
-            "--dest", "org.freedesktop.login1",
-            "--object-path", "/org/freedesktop/login1",
+            "--dest",
+            "org.freedesktop.login1",
+            "--object-path",
+            "/org/freedesktop/login1",
         ]);
         cmd
     } else {
@@ -258,10 +263,7 @@ fn run_inhibitor_monitor(
 /// Fallback polling-based monitor for systems without D-Bus tools
 ///
 /// Monitors /sys/power/state and other power-related files
-fn run_polling_monitor(
-    callbacks: Arc<Mutex<Vec<PowerCallback>>>,
-    running: Arc<AtomicBool>,
-) {
+fn run_polling_monitor(callbacks: Arc<Mutex<Vec<PowerCallback>>>, running: Arc<AtomicBool>) {
     let mut last_state = read_power_state();
 
     while running.load(Ordering::SeqCst) {

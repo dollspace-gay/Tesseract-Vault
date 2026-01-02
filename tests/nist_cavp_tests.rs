@@ -18,11 +18,11 @@ use std::path::Path;
 /// NIST CAVP test section parameters
 #[derive(Debug, Default, Clone)]
 struct CavpSection {
-    keylen: usize,   // in bits
-    ivlen: usize,    // in bits
-    ptlen: usize,    // in bits
-    aadlen: usize,   // in bits
-    taglen: usize,   // in bits
+    keylen: usize, // in bits
+    ivlen: usize,  // in bits
+    ptlen: usize,  // in bits
+    aadlen: usize, // in bits
+    taglen: usize, // in bits
 }
 
 /// NIST CAVP encrypt test case
@@ -46,7 +46,7 @@ struct CavpDecryptTest {
     ct: Vec<u8>,
     aad: Vec<u8>,
     tag: Vec<u8>,
-    pt: Option<Vec<u8>>,  // None means FAIL (invalid tag)
+    pt: Option<Vec<u8>>, // None means FAIL (invalid tag)
 }
 
 /// Parse a NIST CAVP .rsp file for encrypt tests
@@ -77,7 +77,7 @@ fn parse_cavp_encrypt_file(content: &str) -> Vec<(CavpSection, Vec<CavpEncryptTe
                 current_tests = Vec::new();
             }
 
-            let inner = &line[1..line.len()-1];
+            let inner = &line[1..line.len() - 1];
             let parts: Vec<&str> = inner.split('=').map(|s| s.trim()).collect();
             if parts.len() == 2 {
                 let value: usize = parts[1].parse().unwrap_or(0);
@@ -203,7 +203,7 @@ fn parse_cavp_decrypt_file(content: &str) -> Vec<(CavpSection, Vec<CavpDecryptTe
                 current_tests = Vec::new();
             }
 
-            let inner = &line[1..line.len()-1];
+            let inner = &line[1..line.len() - 1];
             let parts: Vec<&str> = inner.split('=').map(|s| s.trim()).collect();
             if parts.len() == 2 {
                 let value: usize = parts[1].parse().unwrap_or(0);
@@ -301,8 +301,8 @@ fn test_nist_cavp_aes_gcm_encrypt_256() {
         return;
     }
 
-    let content = fs::read_to_string(test_file_path)
-        .expect("Failed to read NIST CAVP encrypt test file");
+    let content =
+        fs::read_to_string(test_file_path).expect("Failed to read NIST CAVP encrypt test file");
 
     let sections = parse_cavp_encrypt_file(&content);
 
@@ -324,8 +324,7 @@ fn test_nist_cavp_aes_gcm_encrypt_256() {
             total_tests += 1;
 
             // Create cipher
-            let cipher = Aes256Gcm::new_from_slice(&test.key)
-                .expect("Failed to create cipher");
+            let cipher = Aes256Gcm::new_from_slice(&test.key).expect("Failed to create cipher");
 
             // Create nonce
             let nonce = Nonce::from_slice(&test.iv);
@@ -334,10 +333,13 @@ fn test_nist_cavp_aes_gcm_encrypt_256() {
             let result = if test.aad.is_empty() {
                 cipher.encrypt(nonce, test.pt.as_slice())
             } else {
-                cipher.encrypt(nonce, Payload {
-                    msg: &test.pt,
-                    aad: &test.aad,
-                })
+                cipher.encrypt(
+                    nonce,
+                    Payload {
+                        msg: &test.pt,
+                        aad: &test.aad,
+                    },
+                )
             };
 
             match result {
@@ -345,23 +347,32 @@ fn test_nist_cavp_aes_gcm_encrypt_256() {
                     // NIST CAVP separates CT and Tag
                     let expected_len = test.ct.len() + test.tag.len();
                     assert_eq!(
-                        ciphertext_with_tag.len(), expected_len,
+                        ciphertext_with_tag.len(),
+                        expected_len,
                         "Test {} (PTlen={}, AADlen={}): Output length mismatch",
-                        test.count, section.ptlen, section.aadlen
+                        test.count,
+                        section.ptlen,
+                        section.aadlen
                     );
 
                     let (ct, tag) = ciphertext_with_tag.split_at(test.ct.len());
 
                     assert_eq!(
-                        ct, test.ct.as_slice(),
+                        ct,
+                        test.ct.as_slice(),
                         "Test {} (PTlen={}, AADlen={}): Ciphertext mismatch",
-                        test.count, section.ptlen, section.aadlen
+                        test.count,
+                        section.ptlen,
+                        section.aadlen
                     );
 
                     assert_eq!(
-                        tag, test.tag.as_slice(),
+                        tag,
+                        test.tag.as_slice(),
                         "Test {} (PTlen={}, AADlen={}): Tag mismatch",
-                        test.count, section.ptlen, section.aadlen
+                        test.count,
+                        section.ptlen,
+                        section.aadlen
                     );
 
                     passed_tests += 1;
@@ -394,8 +405,8 @@ fn test_nist_cavp_aes_gcm_decrypt_256() {
         return;
     }
 
-    let content = fs::read_to_string(test_file_path)
-        .expect("Failed to read NIST CAVP decrypt test file");
+    let content =
+        fs::read_to_string(test_file_path).expect("Failed to read NIST CAVP decrypt test file");
 
     let sections = parse_cavp_decrypt_file(&content);
 
@@ -419,8 +430,7 @@ fn test_nist_cavp_aes_gcm_decrypt_256() {
             total_tests += 1;
 
             // Create cipher
-            let cipher = Aes256Gcm::new_from_slice(&test.key)
-                .expect("Failed to create cipher");
+            let cipher = Aes256Gcm::new_from_slice(&test.key).expect("Failed to create cipher");
 
             // Create nonce
             let nonce = Nonce::from_slice(&test.iv);
@@ -433,10 +443,13 @@ fn test_nist_cavp_aes_gcm_decrypt_256() {
             let result = if test.aad.is_empty() {
                 cipher.decrypt(nonce, ciphertext_with_tag.as_slice())
             } else {
-                cipher.decrypt(nonce, Payload {
-                    msg: &ciphertext_with_tag,
-                    aad: &test.aad,
-                })
+                cipher.decrypt(
+                    nonce,
+                    Payload {
+                        msg: &ciphertext_with_tag,
+                        aad: &test.aad,
+                    },
+                )
             };
 
             match (&test.pt, result) {
@@ -474,7 +487,10 @@ fn test_nist_cavp_aes_gcm_decrypt_256() {
     }
 
     println!("\nNIST CAVP AES-256-GCM Decrypt Results:");
-    println!("  Passed: {} (valid: {}, rejected invalid: {})", passed_tests, valid_tests, invalid_tests);
+    println!(
+        "  Passed: {} (valid: {}, rejected invalid: {})",
+        passed_tests, valid_tests, invalid_tests
+    );
     println!("  Skipped (non-256/96/128): {}", skipped_tests);
     println!("  Total processed: {}", total_tests);
 
@@ -514,9 +530,17 @@ fn test_nist_cavp_distribution() {
         }
         println!(
             "  Keylen={}, IVlen={}, PTlen={}, AADlen={}, Taglen={}: {} tests {}",
-            section.keylen, section.ivlen, section.ptlen, section.aadlen, section.taglen,
+            section.keylen,
+            section.ivlen,
+            section.ptlen,
+            section.aadlen,
+            section.taglen,
             count,
-            if supported { "(SUPPORTED)" } else { "(skipped)" }
+            if supported {
+                "(SUPPORTED)"
+            } else {
+                "(skipped)"
+            }
         );
     }
 
@@ -535,14 +559,28 @@ fn test_nist_cavp_distribution() {
         }
         println!(
             "  Keylen={}, IVlen={}, PTlen={}, AADlen={}, Taglen={}: {} tests ({} FAIL) {}",
-            section.keylen, section.ivlen, section.ptlen, section.aadlen, section.taglen,
-            count, fail_count,
-            if supported { "(SUPPORTED)" } else { "(skipped)" }
+            section.keylen,
+            section.ivlen,
+            section.ptlen,
+            section.aadlen,
+            section.taglen,
+            count,
+            fail_count,
+            if supported {
+                "(SUPPORTED)"
+            } else {
+                "(skipped)"
+            }
         );
     }
 
     println!("\nSummary:");
-    println!("  Encrypt: {} supported out of {} total", encrypt_supported, encrypt_total);
-    println!("  Decrypt: {} supported out of {} total ({} invalid tag tests)",
-             decrypt_supported, decrypt_total, decrypt_fail_count);
+    println!(
+        "  Encrypt: {} supported out of {} total",
+        encrypt_supported, encrypt_total
+    );
+    println!(
+        "  Decrypt: {} supported out of {} total ({} invalid tag tests)",
+        decrypt_supported, decrypt_total, decrypt_fail_count
+    );
 }

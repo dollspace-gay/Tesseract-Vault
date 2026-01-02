@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::io::Write;
+use tempfile::NamedTempFile;
 use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
 use tesseract_lib::crypto::streaming::{
     ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig, MIN_CHUNK_SIZE,
 };
 use tesseract_lib::encrypt_file;
-use std::io::Write;
-use tempfile::NamedTempFile;
 use zeroize::Zeroizing;
 
 use rand::rngs::OsRng;
@@ -32,29 +32,33 @@ fn bench_streaming_encryption(c: &mut Criterion) {
         let size_mb = size / (1024 * 1024);
 
         group.throughput(Throughput::Bytes(*size as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(format!("{}MB", size_mb)), size, |b, &size| {
-            b.iter(|| {
-                let input_file = create_test_file(size);
-                let config = StreamConfig::default();
-                let reader = ChunkedReader::open(input_file.path(), config).unwrap();
+        group.bench_with_input(
+            BenchmarkId::from_parameter(format!("{}MB", size_mb)),
+            size,
+            |b, &size| {
+                b.iter(|| {
+                    let input_file = create_test_file(size);
+                    let config = StreamConfig::default();
+                    let reader = ChunkedReader::open(input_file.path(), config).unwrap();
 
-                let key = Zeroizing::new([1u8; 32]);
-                let mut base_nonce = [0u8; NONCE_LEN];
-                OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+                    let key = Zeroizing::new([1u8; 32]);
+                    let mut base_nonce = [0u8; NONCE_LEN];
+                    OsRng.try_fill_bytes(&mut base_nonce).unwrap();
 
-                let encryptor = ChunkedEncryptor::new(
-                    reader,
-                    Box::new(AesGcmEncryptor::new()),
-                    key,
-                    base_nonce,
-                    "benchmark_salt".to_string(),
-                );
+                    let encryptor = ChunkedEncryptor::new(
+                        reader,
+                        Box::new(AesGcmEncryptor::new()),
+                        key,
+                        base_nonce,
+                        "benchmark_salt".to_string(),
+                    );
 
-                let mut output = Vec::new();
-                encryptor.encrypt_to(&mut output).unwrap();
-                black_box(output);
-            });
-        });
+                    let mut output = Vec::new();
+                    encryptor.encrypt_to(&mut output).unwrap();
+                    black_box(output);
+                });
+            },
+        );
     }
 
     group.finish();

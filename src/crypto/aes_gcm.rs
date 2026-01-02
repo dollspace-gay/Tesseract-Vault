@@ -156,6 +156,9 @@ mod tests {
         }
 
         let result = encryptor.decrypt(&key, &nonce, &ciphertext);
-        assert!(result.is_err(), "Tampered ciphertext should fail authentication");
+        assert!(
+            result.is_err(),
+            "Tampered ciphertext should fail authentication"
+        );
     }
 }

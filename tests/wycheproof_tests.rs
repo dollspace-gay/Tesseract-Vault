@@ -7,13 +7,13 @@
 //!
 //! Test vectors repository: https://github.com/C2SP/wycheproof
 
-use serde::Deserialize;
-use std::fs;
-use std::path::Path;
 use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce,
 };
+use serde::Deserialize;
+use std::fs;
+use std::path::Path;
 
 // ML-KEM imports (only when post-quantum feature is enabled)
 #[cfg(feature = "post-quantum")]
@@ -94,13 +94,16 @@ fn test_aes_gcm_wycheproof() {
         return;
     }
 
-    let test_data = fs::read_to_string(test_file_path)
-        .expect("Failed to read Wycheproof AES-GCM test file");
+    let test_data =
+        fs::read_to_string(test_file_path).expect("Failed to read Wycheproof AES-GCM test file");
 
-    let test_file: WycheproofTestFile = serde_json::from_str(&test_data)
-        .expect("Failed to parse Wycheproof test JSON");
+    let test_file: WycheproofTestFile =
+        serde_json::from_str(&test_data).expect("Failed to parse Wycheproof test JSON");
 
-    println!("Running {} AES-GCM tests from Wycheproof", test_file.number_of_tests);
+    println!(
+        "Running {} AES-GCM tests from Wycheproof",
+        test_file.number_of_tests
+    );
 
     let mut passed = 0;
     let mut failed = 0;
@@ -240,7 +243,10 @@ fn test_aes_gcm_wycheproof() {
                             if plaintext == msg {
                                 // Already counted in encryption pass
                             } else {
-                                println!("Test {} FAILED: Decryption plaintext mismatch", test.tc_id);
+                                println!(
+                                    "Test {} FAILED: Decryption plaintext mismatch",
+                                    test.tc_id
+                                );
                                 println!("  Comment: {}", test.comment);
                                 failed += 1;
                             }
@@ -264,7 +270,10 @@ fn test_aes_gcm_wycheproof() {
 
                     match cipher.decrypt(&gcm_nonce, decrypt_payload) {
                         Ok(_) => {
-                            println!("Test {} FAILED: Invalid ciphertext was accepted", test.tc_id);
+                            println!(
+                                "Test {} FAILED: Invalid ciphertext was accepted",
+                                test.tc_id
+                            );
                             println!("  Comment: {}", test.comment);
                             println!("  Flags: {:?}", test.flags);
                             failed += 1;
@@ -305,11 +314,10 @@ fn test_aes_gcm_wycheproof_known_issues() {
         return;
     }
 
-    let test_data = fs::read_to_string(test_file_path)
-        .expect("Failed to read test file");
+    let test_data = fs::read_to_string(test_file_path).expect("Failed to read test file");
 
-    let test_file: WycheproofTestFile = serde_json::from_str(&test_data)
-        .expect("Failed to parse test JSON");
+    let test_file: WycheproofTestFile =
+        serde_json::from_str(&test_data).expect("Failed to parse test JSON");
 
     // Track tests with specific flags
     let mut edge_cases = std::collections::HashMap::new();
@@ -358,13 +366,13 @@ struct MlKemEncapsTestCase {
     #[allow(dead_code)]
     flags: Vec<String>,
     #[allow(dead_code)]
-    m: String,  // randomness seed
+    m: String, // randomness seed
     ek: String, // encapsulation key (public key)
     #[allow(dead_code)]
-    c: String,  // expected ciphertext (empty for invalid)
+    c: String, // expected ciphertext (empty for invalid)
     #[allow(dead_code)]
     #[serde(rename = "K")]
-    k: String,  // expected shared secret (empty for invalid)
+    k: String, // expected shared secret (empty for invalid)
     result: TestResult,
 }
 
@@ -445,13 +453,16 @@ fn test_mlkem_1024_encaps_wycheproof() {
         return;
     }
 
-    let test_data = fs::read_to_string(test_file_path)
-        .expect("Failed to read ML-KEM encaps test file");
+    let test_data =
+        fs::read_to_string(test_file_path).expect("Failed to read ML-KEM encaps test file");
 
-    let test_file: MlKemEncapsTestFile = serde_json::from_str(&test_data)
-        .expect("Failed to parse ML-KEM encaps test JSON");
+    let test_file: MlKemEncapsTestFile =
+        serde_json::from_str(&test_data).expect("Failed to parse ML-KEM encaps test JSON");
 
-    println!("Running {} ML-KEM-1024 encapsulation tests from Wycheproof", test_file.number_of_tests);
+    println!(
+        "Running {} ML-KEM-1024 encapsulation tests from Wycheproof",
+        test_file.number_of_tests
+    );
 
     let mut passed = 0;
     let mut failed = 0;
@@ -474,8 +485,11 @@ fn test_mlkem_1024_encaps_wycheproof() {
                 if test.result == TestResult::Invalid {
                     passed += 1;
                 } else {
-                    println!("Test {} FAILED: Wrong key size {} should be invalid",
-                             test.tc_id, ek_bytes.len());
+                    println!(
+                        "Test {} FAILED: Wrong key size {} should be invalid",
+                        test.tc_id,
+                        ek_bytes.len()
+                    );
                     failed += 1;
                 }
                 continue;
@@ -515,7 +529,10 @@ fn test_mlkem_1024_encaps_wycheproof() {
                             }
                         }
                         Err(e) => {
-                            println!("Test {} FAILED: Valid key was rejected by validation: {}", test.tc_id, e);
+                            println!(
+                                "Test {} FAILED: Valid key was rejected by validation: {}",
+                                test.tc_id, e
+                            );
                             failed += 1;
                         }
                     }
@@ -525,7 +542,10 @@ fn test_mlkem_1024_encaps_wycheproof() {
                     match validation_result {
                         Ok(()) => {
                             // Our validation didn't catch it - this is unexpected
-                            println!("Test {} FAILED: Invalid key (ModulusOverflow) passed validation", test.tc_id);
+                            println!(
+                                "Test {} FAILED: Invalid key (ModulusOverflow) passed validation",
+                                test.tc_id
+                            );
                             failed += 1;
                         }
                         Err(_) => {
@@ -561,7 +581,8 @@ fn test_mlkem_1024_encaps_wycheproof() {
 #[test]
 #[cfg(feature = "post-quantum")]
 fn test_mlkem_1024_decaps_validation_wycheproof() {
-    let test_file_path = "tests/wycheproof/testvectors_v1/mlkem_1024_semi_expanded_decaps_test.json";
+    let test_file_path =
+        "tests/wycheproof/testvectors_v1/mlkem_1024_semi_expanded_decaps_test.json";
 
     // Skip if test vectors aren't cloned yet
     if !Path::new(test_file_path).exists() {
@@ -570,13 +591,16 @@ fn test_mlkem_1024_decaps_validation_wycheproof() {
         return;
     }
 
-    let test_data = fs::read_to_string(test_file_path)
-        .expect("Failed to read ML-KEM decaps test file");
+    let test_data =
+        fs::read_to_string(test_file_path).expect("Failed to read ML-KEM decaps test file");
 
-    let test_file: MlKemDecapsTestFile = serde_json::from_str(&test_data)
-        .expect("Failed to parse ML-KEM decaps test JSON");
+    let test_file: MlKemDecapsTestFile =
+        serde_json::from_str(&test_data).expect("Failed to parse ML-KEM decaps test JSON");
 
-    println!("Running {} ML-KEM-1024 decapsulation validation tests from Wycheproof", test_file.number_of_tests);
+    println!(
+        "Running {} ML-KEM-1024 decapsulation validation tests from Wycheproof",
+        test_file.number_of_tests
+    );
 
     let mut passed = 0;
     let mut failed = 0;
@@ -602,20 +626,30 @@ fn test_mlkem_1024_decaps_validation_wycheproof() {
             };
 
             // Check for length validation tests
-            let has_incorrect_dk_length = test.flags.contains(&"IncorrectDecapsulationKeyLength".to_string());
-            let has_incorrect_ct_length = test.flags.contains(&"IncorrectCiphertextLength".to_string());
+            let has_incorrect_dk_length = test
+                .flags
+                .contains(&"IncorrectDecapsulationKeyLength".to_string());
+            let has_incorrect_ct_length = test
+                .flags
+                .contains(&"IncorrectCiphertextLength".to_string());
 
             // Test size validation
             if dk_bytes.len() != MLKEM_1024_SECRET_KEY_SIZE {
                 if has_incorrect_dk_length && test.result == TestResult::Invalid {
                     passed += 1;
-                    println!("Test {} PASSED: Correctly identified invalid DK length {}",
-                             test.tc_id, dk_bytes.len());
+                    println!(
+                        "Test {} PASSED: Correctly identified invalid DK length {}",
+                        test.tc_id,
+                        dk_bytes.len()
+                    );
                 } else if test.result == TestResult::Invalid {
                     passed += 1;
                 } else {
-                    println!("Test {} FAILED: Wrong DK size {} should be handled",
-                             test.tc_id, dk_bytes.len());
+                    println!(
+                        "Test {} FAILED: Wrong DK size {} should be handled",
+                        test.tc_id,
+                        dk_bytes.len()
+                    );
                     failed += 1;
                 }
                 continue;
@@ -624,13 +658,19 @@ fn test_mlkem_1024_decaps_validation_wycheproof() {
             if ct_bytes.len() != MLKEM_1024_CIPHERTEXT_SIZE {
                 if has_incorrect_ct_length && test.result == TestResult::Invalid {
                     passed += 1;
-                    println!("Test {} PASSED: Correctly identified invalid CT length {}",
-                             test.tc_id, ct_bytes.len());
+                    println!(
+                        "Test {} PASSED: Correctly identified invalid CT length {}",
+                        test.tc_id,
+                        ct_bytes.len()
+                    );
                 } else if test.result == TestResult::Invalid {
                     passed += 1;
                 } else {
-                    println!("Test {} FAILED: Wrong CT size {} should be handled",
-                             test.tc_id, ct_bytes.len());
+                    println!(
+                        "Test {} FAILED: Wrong CT size {} should be handled",
+                        test.tc_id,
+                        ct_bytes.len()
+                    );
                     failed += 1;
                 }
                 continue;
@@ -727,11 +767,10 @@ fn test_aes_gcm_wycheproof_distribution() {
         return;
     }
 
-    let test_data = fs::read_to_string(test_file_path)
-        .expect("Failed to read test file");
+    let test_data = fs::read_to_string(test_file_path).expect("Failed to read test file");
 
-    let test_file: WycheproofTestFile = serde_json::from_str(&test_data)
-        .expect("Failed to parse test JSON");
+    let test_file: WycheproofTestFile =
+        serde_json::from_str(&test_data).expect("Failed to parse test JSON");
 
     println!("\n=== AES-GCM Wycheproof Test Distribution ===\n");
     println!("Total tests in file: {}\n", test_file.number_of_tests);
@@ -742,7 +781,10 @@ fn test_aes_gcm_wycheproof_distribution() {
     let mut skipped_iv_size = 0;
 
     println!("Test Groups:");
-    println!("{:>8} {:>8} {:>8} {:>6}   Status", "KeySize", "IvSize", "TagSize", "Tests");
+    println!(
+        "{:>8} {:>8} {:>8} {:>6}   Status",
+        "KeySize", "IvSize", "TagSize", "Tests"
+    );
     println!("{}", "-".repeat(50));
 
     for group in &test_file.test_groups {
@@ -760,8 +802,10 @@ fn test_aes_gcm_wycheproof_distribution() {
             "TESTED"
         };
 
-        println!("{:>8} {:>8} {:>8} {:>6}   {}",
-                 group.key_size, group.iv_size, group.tag_size, count, status);
+        println!(
+            "{:>8} {:>8} {:>8} {:>6}   {}",
+            group.key_size, group.iv_size, group.tag_size, count, status
+        );
     }
 
     println!("\n=== Summary ===");
@@ -783,7 +827,8 @@ fn test_mlkem_wycheproof_edge_cases() {
     let encaps_path = "tests/wycheproof/testvectors_v1/mlkem_1024_encaps_test.json";
     if Path::new(encaps_path).exists() {
         let test_data = fs::read_to_string(encaps_path).expect("Failed to read file");
-        let test_file: MlKemEncapsTestFile = serde_json::from_str(&test_data).expect("Failed to parse");
+        let test_file: MlKemEncapsTestFile =
+            serde_json::from_str(&test_data).expect("Failed to parse");
 
         let mut flags: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for group in &test_file.test_groups {
@@ -794,7 +839,10 @@ fn test_mlkem_wycheproof_edge_cases() {
             }
         }
 
-        println!("\n  ML-KEM-1024 Encapsulation Tests: {} total", test_file.number_of_tests);
+        println!(
+            "\n  ML-KEM-1024 Encapsulation Tests: {} total",
+            test_file.number_of_tests
+        );
         for (flag, count) in &flags {
             println!("    {}: {} tests", flag, count);
         }
@@ -804,7 +852,8 @@ fn test_mlkem_wycheproof_edge_cases() {
     let decaps_path = "tests/wycheproof/testvectors_v1/mlkem_1024_semi_expanded_decaps_test.json";
     if Path::new(decaps_path).exists() {
         let test_data = fs::read_to_string(decaps_path).expect("Failed to read file");
-        let test_file: MlKemDecapsTestFile = serde_json::from_str(&test_data).expect("Failed to parse");
+        let test_file: MlKemDecapsTestFile =
+            serde_json::from_str(&test_data).expect("Failed to parse");
 
         let mut flags: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for group in &test_file.test_groups {
@@ -815,7 +864,10 @@ fn test_mlkem_wycheproof_edge_cases() {
             }
         }
 
-        println!("\n  ML-KEM-1024 Decapsulation Validation Tests: {} total", test_file.number_of_tests);
+        println!(
+            "\n  ML-KEM-1024 Decapsulation Validation Tests: {} total",
+            test_file.number_of_tests
+        );
         for (flag, count) in &flags {
             println!("    {}: {} tests", flag, count);
         }

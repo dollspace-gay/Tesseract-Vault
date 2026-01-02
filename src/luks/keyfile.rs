@@ -264,7 +264,7 @@ impl TesseractLuksKeyfile {
     /// key material with ML-KEM shared secrets.
     #[cfg(feature = "post-quantum")]
     fn create_pqc_slot(luks_passphrase: &str, password: &str) -> Result<PqcSlot> {
-        use crate::crypto::pqc::{MlKemKeyPair, encapsulate};
+        use crate::crypto::pqc::{encapsulate, MlKemKeyPair};
 
         // Generate ML-KEM-1024 keypair
         let keypair = MlKemKeyPair::generate();
@@ -386,12 +386,14 @@ impl TesseractLuksKeyfile {
     /// - Appropriate permissions to access TPM
     #[cfg(target_os = "linux")]
     pub fn enroll_tpm(&mut self, luks_passphrase: &str, pcrs: &[u8]) -> Result<()> {
-        use crate::hsm::tpm::{Tpm2Device, TpmHashAlgorithm, TpmKeyPolicy, PcrIndex};
+        use crate::hsm::tpm::{PcrIndex, Tpm2Device, TpmHashAlgorithm, TpmKeyPolicy};
 
         // Open TPM device
         let tpm = Tpm2Device::open()?;
         if !tpm.is_ready() {
-            return Err(CryptorError::HardwareError("TPM device not available".into()));
+            return Err(CryptorError::HardwareError(
+                "TPM device not available".into(),
+            ));
         }
 
         // Convert PCR indices
@@ -441,16 +443,19 @@ impl TesseractLuksKeyfile {
     /// The LUKS passphrase if TPM unsealing succeeds
     #[cfg(target_os = "linux")]
     pub fn unlock_with_tpm(&self) -> Result<Zeroizing<String>> {
-        use crate::hsm::tpm::{Tpm2Device, SealedKeyBlob};
+        use crate::hsm::tpm::{SealedKeyBlob, Tpm2Device};
 
-        let tpm_slot = self.tpm_slot.as_ref().ok_or_else(|| {
-            CryptorError::InvalidInput("No TPM slot configured".into())
-        })?;
+        let tpm_slot = self
+            .tpm_slot
+            .as_ref()
+            .ok_or_else(|| CryptorError::InvalidInput("No TPM slot configured".into()))?;
 
         // Open TPM device
         let tpm = Tpm2Device::open()?;
         if !tpm.is_ready() {
-            return Err(CryptorError::HardwareError("TPM device not available".into()));
+            return Err(CryptorError::HardwareError(
+                "TPM device not available".into(),
+            ));
         }
 
         // Deserialize the sealed blob using built-in deserialization
@@ -486,7 +491,10 @@ impl TesseractLuksKeyfile {
     ///
     /// If the duress password is entered, all key material is destroyed
     /// and `DecryptionFailed` is returned (indistinguishable from wrong password).
-    pub fn unlock(&mut self, password: &str) -> std::result::Result<Zeroizing<String>, LuksKeyfileError> {
+    pub fn unlock(
+        &mut self,
+        password: &str,
+    ) -> std::result::Result<Zeroizing<String>, LuksKeyfileError> {
         // CRITICAL: Check duress password FIRST
         if self.is_duress_password(password) {
             self.destroy_all_keys();
@@ -509,7 +517,9 @@ impl TesseractLuksKeyfile {
 
                 let nonce = Nonce::from(duress.nonce);
                 // If decryption succeeds, it's the duress password
-                cipher.decrypt(&nonce, duress.encrypted_token.as_ref()).is_ok()
+                cipher
+                    .decrypt(&nonce, duress.encrypted_token.as_ref())
+                    .is_ok()
             } else {
                 false
             }
@@ -553,7 +563,10 @@ impl TesseractLuksKeyfile {
     }
 
     /// Decrypts the password slot
-    fn decrypt_password_slot(&self, password: &str) -> std::result::Result<Zeroizing<String>, LuksKeyfileError> {
+    fn decrypt_password_slot(
+        &self,
+        password: &str,
+    ) -> std::result::Result<Zeroizing<String>, LuksKeyfileError> {
         let kdf = Argon2Kdf::new(CryptoConfig::default());
         let derived_key = kdf
             .derive_key(password.as_bytes(), &self.password_slot.salt)
@@ -600,8 +613,8 @@ impl TesseractLuksKeyfile {
         file.write_all(&[self.flags.to_byte()])?;
 
         // Serialize and write body
-        let body = bincode::serialize(self)
-            .map_err(|e| LuksKeyfileError::Serialization(e.to_string()))?;
+        let body =
+            bincode::serialize(self).map_err(|e| LuksKeyfileError::Serialization(e.to_string()))?;
 
         // Write body length and body
         let len = body.len() as u32;
@@ -623,7 +636,9 @@ impl TesseractLuksKeyfile {
         let mut magic = [0u8; 9];
         file.read_exact(&mut magic)?;
         if magic != MAGIC {
-            return Err(LuksKeyfileError::InvalidFormat("Invalid magic bytes".into()));
+            return Err(LuksKeyfileError::InvalidFormat(
+                "Invalid magic bytes".into(),
+            ));
         }
 
         let mut version = [0u8; 1];
@@ -686,7 +701,10 @@ impl TesseractLuksKeyfile {
     ///
     /// This writes the raw passphrase bytes to stdout, suitable for:
     /// `tesseract-luks unlock keyfile | cryptsetup open /dev/sda2 root --key-file -`
-    pub fn output_passphrase_to_stdout(&mut self, password: &str) -> std::result::Result<(), LuksKeyfileError> {
+    pub fn output_passphrase_to_stdout(
+        &mut self,
+        password: &str,
+    ) -> std::result::Result<(), LuksKeyfileError> {
         let passphrase = self.unlock(password)?;
 
         // Write to stdout without newline
@@ -792,8 +810,14 @@ mod tests {
         let duress_result = keyfile2.unlock(duress_pass);
 
         // Both should be DecryptionFailed
-        assert!(matches!(wrong_result, Err(LuksKeyfileError::DecryptionFailed)));
-        assert!(matches!(duress_result, Err(LuksKeyfileError::DecryptionFailed)));
+        assert!(matches!(
+            wrong_result,
+            Err(LuksKeyfileError::DecryptionFailed)
+        ));
+        assert!(matches!(
+            duress_result,
+            Err(LuksKeyfileError::DecryptionFailed)
+        ));
     }
 
     #[test]

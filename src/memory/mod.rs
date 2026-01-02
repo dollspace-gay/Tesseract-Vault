@@ -151,9 +151,7 @@ impl<T: Zeroize> LockedMemory<T> {
                 let errno = std::io::Error::last_os_error();
                 return Err(match errno.raw_os_error() {
                     Some(libc::EPERM) | Some(libc::EACCES) => MemLockError::PermissionDenied,
-                    Some(libc::ENOMEM) | Some(libc::EAGAIN) => {
-                        MemLockError::ResourceLimitExceeded
-                    }
+                    Some(libc::ENOMEM) | Some(libc::EAGAIN) => MemLockError::ResourceLimitExceeded,
                     _ => MemLockError::SystemError(errno.to_string()),
                 });
             }

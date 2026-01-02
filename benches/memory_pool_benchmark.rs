@@ -7,7 +7,11 @@ use tesseract_lib::memory::pool::{EncryptedMemoryPool, SecurityLevel};
 fn bench_pool_creation(c: &mut Criterion) {
     let mut group = c.benchmark_group("pool_creation");
 
-    for security_level in [SecurityLevel::Standard, SecurityLevel::High, SecurityLevel::Maximum] {
+    for security_level in [
+        SecurityLevel::Standard,
+        SecurityLevel::High,
+        SecurityLevel::Maximum,
+    ] {
         let level_name = format!("{:?}", security_level);
         group.bench_function(&level_name, |b| {
             b.iter(|| {
@@ -157,7 +161,11 @@ fn bench_roundtrip(c: &mut Criterion) {
 fn bench_key_rotation(c: &mut Criterion) {
     let mut group = c.benchmark_group("key_rotation");
 
-    for security_level in [SecurityLevel::Standard, SecurityLevel::High, SecurityLevel::Maximum] {
+    for security_level in [
+        SecurityLevel::Standard,
+        SecurityLevel::High,
+        SecurityLevel::Maximum,
+    ] {
         let level_name = format!("{:?}", security_level);
         group.bench_function(&level_name, |b| {
             let pool = EncryptedMemoryPool::new(security_level).unwrap();
@@ -210,7 +218,11 @@ fn bench_security_level_overhead(c: &mut Criterion) {
 
     group.throughput(Throughput::Bytes(size as u64));
 
-    for security_level in [SecurityLevel::Standard, SecurityLevel::High, SecurityLevel::Maximum] {
+    for security_level in [
+        SecurityLevel::Standard,
+        SecurityLevel::High,
+        SecurityLevel::Maximum,
+    ] {
         let level_name = format!("{:?}", security_level);
         group.bench_function(&level_name, |b| {
             b.iter(|| {

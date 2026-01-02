@@ -453,7 +453,11 @@ impl fmt::Display for HardwareCapabilities {
 
         let assessment = self.security_assessment();
         writeln!(f)?;
-        writeln!(f, "Security Assessment: {} ({}/100)", assessment.level, assessment.score)?;
+        writeln!(
+            f,
+            "Security Assessment: {} ({}/100)",
+            assessment.level, assessment.score
+        )?;
 
         Ok(())
     }
@@ -767,7 +771,7 @@ impl fmt::Display for BenchmarkResult {
 /// ```
 pub fn benchmark_aes_gcm(data_size: usize, iterations: u32) -> BenchmarkResult {
     use aes_gcm::{
-        aead::{Aead, KeyInit, consts::U12},
+        aead::{consts::U12, Aead, KeyInit},
         Aes256Gcm, Nonce,
     };
     use std::time::Instant;
@@ -819,7 +823,7 @@ pub fn benchmark_aes_gcm(data_size: usize, iterations: u32) -> BenchmarkResult {
 /// Benchmark result with throughput measurement.
 pub fn benchmark_aes_gcm_decrypt(data_size: usize, iterations: u32) -> BenchmarkResult {
     use aes_gcm::{
-        aead::{Aead, KeyInit, consts::U12},
+        aead::{consts::U12, Aead, KeyInit},
         Aes256Gcm, Nonce,
     };
     use std::time::Instant;
@@ -1036,11 +1040,7 @@ pub fn print_benchmark_report() {
     );
     println!(
         "  HW RNG:     {}",
-        if caps.has_hardware_rng() {
-            "Yes"
-        } else {
-            "No"
-        }
+        if caps.has_hardware_rng() { "Yes" } else { "No" }
     );
     println!();
 
@@ -1095,7 +1095,10 @@ mod tests {
         // Score should be between 0 and 100
         assert!(assessment.score <= 100);
 
-        println!("Security assessment: {} ({}/100)", assessment.level, assessment.score);
+        println!(
+            "Security assessment: {} ({}/100)",
+            assessment.level, assessment.score
+        );
         for rec in &assessment.recommendations {
             println!("  - {}", rec);
         }

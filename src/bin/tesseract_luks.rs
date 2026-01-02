@@ -135,30 +135,18 @@ fn main() -> ExitCode {
 #[cfg(target_os = "linux")]
 fn run_command(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
-        Commands::Create { keyfile, pqc, no_pqc } => {
-            cmd_create(keyfile, pqc && !no_pqc)
-        }
-        Commands::Unlock { keyfile } => {
-            cmd_unlock(keyfile)
-        }
-        Commands::UnlockTpm { keyfile } => {
-            cmd_unlock_tpm(keyfile)
-        }
-        Commands::EnrollTpm { keyfile, pcrs } => {
-            cmd_enroll_tpm(keyfile, &pcrs)
-        }
-        Commands::SetDuress { keyfile } => {
-            cmd_set_duress(keyfile)
-        }
-        Commands::RemoveDuress { keyfile } => {
-            cmd_remove_duress(keyfile)
-        }
-        Commands::Info { keyfile } => {
-            cmd_info(keyfile)
-        }
-        Commands::ChangePassword { keyfile } => {
-            cmd_change_password(keyfile)
-        }
+        Commands::Create {
+            keyfile,
+            pqc,
+            no_pqc,
+        } => cmd_create(keyfile, pqc && !no_pqc),
+        Commands::Unlock { keyfile } => cmd_unlock(keyfile),
+        Commands::UnlockTpm { keyfile } => cmd_unlock_tpm(keyfile),
+        Commands::EnrollTpm { keyfile, pcrs } => cmd_enroll_tpm(keyfile, &pcrs),
+        Commands::SetDuress { keyfile } => cmd_set_duress(keyfile),
+        Commands::RemoveDuress { keyfile } => cmd_remove_duress(keyfile),
+        Commands::Info { keyfile } => cmd_info(keyfile),
+        Commands::ChangePassword { keyfile } => cmd_change_password(keyfile),
     }
 }
 
@@ -219,9 +207,18 @@ fn cmd_create(keyfile: PathBuf, enable_pqc: bool) -> Result<(), Box<dyn std::err
     }
     eprintln!();
     eprintln!("Next steps:");
-    eprintln!("  1. Test unlocking: tesseract-luks unlock {}", keyfile.display());
-    eprintln!("  2. Enroll TPM: tesseract-luks enroll-tpm {} --pcrs 0,7", keyfile.display());
-    eprintln!("  3. Set duress: tesseract-luks set-duress {}", keyfile.display());
+    eprintln!(
+        "  1. Test unlocking: tesseract-luks unlock {}",
+        keyfile.display()
+    );
+    eprintln!(
+        "  2. Enroll TPM: tesseract-luks enroll-tpm {} --pcrs 0,7",
+        keyfile.display()
+    );
+    eprintln!(
+        "  3. Set duress: tesseract-luks set-duress {}",
+        keyfile.display()
+    );
 
     Ok(())
 }
@@ -246,9 +243,7 @@ fn cmd_unlock(keyfile: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             io::stdout().flush()?;
             Ok(())
         }
-        Err(e) => {
-            Err(format!("Failed to unlock: {}", e).into())
-        }
+        Err(e) => Err(format!("Failed to unlock: {}", e).into()),
     }
 }
 
@@ -271,9 +266,7 @@ fn cmd_unlock_tpm(keyfile: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             io::stdout().flush()?;
             Ok(())
         }
-        Err(e) => {
-            Err(format!("TPM unlock failed: {}", e).into())
-        }
+        Err(e) => Err(format!("TPM unlock failed: {}", e).into()),
     }
 }
 
@@ -420,10 +413,38 @@ fn cmd_info(keyfile: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     println!("Tesseract LUKS Keyfile: {}", keyfile.display());
     println!();
     println!("Features:");
-    println!("  Post-quantum (ML-KEM-1024): {}", if flags.pqc_enabled { "Enabled" } else { "Disabled" });
-    println!("  TPM auto-unlock:            {}", if flags.tpm_enabled { "Enrolled" } else { "Not enrolled" });
-    println!("  Duress password:            {}", if flags.duress_enabled { "Configured" } else { "Not set" });
-    println!("  YubiKey 2FA:                {}", if flags.yubikey_enabled { "Enabled" } else { "Disabled" });
+    println!(
+        "  Post-quantum (ML-KEM-1024): {}",
+        if flags.pqc_enabled {
+            "Enabled"
+        } else {
+            "Disabled"
+        }
+    );
+    println!(
+        "  TPM auto-unlock:            {}",
+        if flags.tpm_enabled {
+            "Enrolled"
+        } else {
+            "Not enrolled"
+        }
+    );
+    println!(
+        "  Duress password:            {}",
+        if flags.duress_enabled {
+            "Configured"
+        } else {
+            "Not set"
+        }
+    );
+    println!(
+        "  YubiKey 2FA:                {}",
+        if flags.yubikey_enabled {
+            "Enabled"
+        } else {
+            "Disabled"
+        }
+    );
 
     Ok(())
 }

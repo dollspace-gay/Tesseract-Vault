@@ -11,10 +11,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
-#[cfg(feature = "post-quantum")]
-use super::container::ContainerError;
 #[cfg(all(feature = "encrypted-volumes", feature = "post-quantum"))]
 use super::container::Container;
+#[cfg(feature = "post-quantum")]
+use super::container::ContainerError;
 use super::mount::{MountError, MountOptions};
 
 #[cfg(feature = "encrypted-volumes")]
@@ -205,7 +205,9 @@ impl VolumeManager {
         password: &str,
         options: MountOptions,
     ) -> Result<MountedVolumeInfo> {
-        let container_path = container_path.as_ref().canonicalize()
+        let container_path = container_path
+            .as_ref()
+            .canonicalize()
             .unwrap_or_else(|_| container_path.as_ref().to_path_buf());
 
         // Check if already mounted
@@ -216,33 +218,46 @@ impl VolumeManager {
             }
 
             // Check if mount point is already in use
-            if mounted.values().any(|v| v.mount_point() == options.mount_point) {
-                return Err(VolumeManagerError::MountPointInUse(options.mount_point.clone()));
+            if mounted
+                .values()
+                .any(|v| v.mount_point() == options.mount_point)
+            {
+                return Err(VolumeManagerError::MountPointInUse(
+                    options.mount_point.clone(),
+                ));
             }
         }
 
         // Get container info and determine password for mounting
-        let (container, size, is_hidden, mount_password) = if let Some(hidden_offset) = options.hidden_offset {
-            // For hidden volumes:
-            // - password parameter is the outer volume password
-            // - options.hidden_password contains the hidden volume password
-            let hidden_pwd = options.hidden_password
-                .as_ref()
-                .ok_or_else(|| VolumeManagerError::Other("Hidden password required for hidden volume mount".to_string()))?;
+        let (container, size, is_hidden, mount_password) =
+            if let Some(hidden_offset) = options.hidden_offset {
+                // For hidden volumes:
+                // - password parameter is the outer volume password
+                // - options.hidden_password contains the hidden volume password
+                let hidden_pwd = options.hidden_password.as_ref().ok_or_else(|| {
+                    VolumeManagerError::Other(
+                        "Hidden password required for hidden volume mount".to_string(),
+                    )
+                })?;
 
-            let outer = Container::open(&container_path, password)?;
-            let hidden = outer.open_hidden_volume(hidden_pwd, hidden_offset)?;
-            let hidden_size = hidden.data_size();
-            drop(hidden);
-            drop(outer);
-            (container_path.clone(), hidden_size, true, password.to_string())
-        } else {
-            // Mount normal volume
-            let container = Container::open(&container_path, password)?;
-            let size = container.data_size();
-            drop(container);
-            (container_path.clone(), size, false, password.to_string())
-        };
+                let outer = Container::open(&container_path, password)?;
+                let hidden = outer.open_hidden_volume(hidden_pwd, hidden_offset)?;
+                let hidden_size = hidden.data_size();
+                drop(hidden);
+                drop(outer);
+                (
+                    container_path.clone(),
+                    hidden_size,
+                    true,
+                    password.to_string(),
+                )
+            } else {
+                // Mount normal volume
+                let container = Container::open(&container_path, password)?;
+                let size = container.data_size();
+                drop(container);
+                (container_path.clone(), size, false, password.to_string())
+            };
 
         // Mount the volume
         let mount_handle = super::mount::mount(&container_path, &mount_password, options.clone())?;
@@ -291,7 +306,9 @@ impl VolumeManager {
     ///
     /// Returns an error if the volume is not mounted
     pub fn unmount(&mut self, container_path: impl AsRef<Path>) -> Result<()> {
-        let container_path = container_path.as_ref().canonicalize()
+        let container_path = container_path
+            .as_ref()
+            .canonicalize()
             .unwrap_or_else(|_| container_path.as_ref().to_path_buf());
 
         let mut mounted = self.mounted.lock().unwrap();
@@ -381,7 +398,9 @@ impl VolumeManager {
     ///
     /// true if the volume is currently mounted, false otherwise
     pub fn is_mounted(&self, container_path: impl AsRef<Path>) -> bool {
-        let container_path = container_path.as_ref().canonicalize()
+        let container_path = container_path
+            .as_ref()
+            .canonicalize()
             .unwrap_or_else(|_| container_path.as_ref().to_path_buf());
 
         self.mounted.lock().unwrap().contains_key(&container_path)
@@ -397,7 +416,9 @@ impl VolumeManager {
     ///
     /// Volume information if mounted, None otherwise
     pub fn get_info(&self, container_path: impl AsRef<Path>) -> Option<MountedVolumeInfo> {
-        let container_path = container_path.as_ref().canonicalize()
+        let container_path = container_path
+            .as_ref()
+            .canonicalize()
             .unwrap_or_else(|_| container_path.as_ref().to_path_buf());
 
         self.mounted
@@ -436,7 +457,9 @@ impl VolumeManager {
     ///
     /// The mount point path if the volume is mounted, None otherwise
     pub fn find_mount_point(&self, container_path: impl AsRef<Path>) -> Option<PathBuf> {
-        let container_path = container_path.as_ref().canonicalize()
+        let container_path = container_path
+            .as_ref()
+            .canonicalize()
             .unwrap_or_else(|_| container_path.as_ref().to_path_buf());
 
         self.mounted
@@ -455,10 +478,7 @@ impl VolumeManager {
     /// # Returns
     ///
     /// The container path if a volume is mounted there, None otherwise
-    pub fn find_container_for_mount_point(
-        &self,
-        mount_point: impl AsRef<Path>,
-    ) -> Option<PathBuf> {
+    pub fn find_container_for_mount_point(&self, mount_point: impl AsRef<Path>) -> Option<PathBuf> {
         let mount_point = mount_point.as_ref();
 
         self.mounted

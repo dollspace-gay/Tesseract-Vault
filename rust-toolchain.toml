@@ -1,0 +1,9 @@
+# Rust toolchain configuration for reproducible builds
+# OpenSSF Silver Badge requirement: build_repeatable
+#
+# All contributors and CI should use this exact toolchain version
+# to ensure bit-for-bit reproducible builds.
+
+[toolchain]
+channel = "1.92.0"
+components = ["rustfmt", "clippy"]

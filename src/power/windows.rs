@@ -6,16 +6,18 @@
 //! like suspend, hibernate, and shutdown through WM_POWERBROADCAST messages.
 
 use super::{PowerCallback, PowerEvent, Result};
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
 
 use winapi::shared::minwindef::{LPARAM, LRESULT, UINT, WPARAM};
 use winapi::shared::windef::HWND;
 use winapi::um::winuser::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-    PostMessageW, RegisterClassW, TranslateMessage, CS_HREDRAW, CS_VREDRAW,
-    HWND_MESSAGE, MSG, WM_DESTROY, WM_POWERBROADCAST, WM_QUIT, WM_USER,
-    WNDCLASSW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, PostMessageW,
+    RegisterClassW, TranslateMessage, CS_HREDRAW, CS_VREDRAW, HWND_MESSAGE, MSG, WM_DESTROY,
+    WM_POWERBROADCAST, WM_QUIT, WM_USER, WNDCLASSW,
 };
 
 // Power broadcast constants
@@ -41,7 +43,8 @@ struct WindowState {
 }
 
 /// Global storage for window state (needed for window procedure)
-static WINDOW_STATE: std::sync::OnceLock<Mutex<Option<Arc<WindowState>>>> = std::sync::OnceLock::new();
+static WINDOW_STATE: std::sync::OnceLock<Mutex<Option<Arc<WindowState>>>> =
+    std::sync::OnceLock::new();
 
 fn get_window_state_storage() -> &'static Mutex<Option<Arc<WindowState>>> {
     WINDOW_STATE.get_or_init(|| Mutex::new(None))
@@ -88,9 +91,7 @@ impl WindowsPowerMonitor {
         let handle = thread::spawn(move || {
             unsafe {
                 // Register window class
-                let class_name: Vec<u16> = "TesseractPowerMonitor\0"
-                    .encode_utf16()
-                    .collect();
+                let class_name: Vec<u16> = "TesseractPowerMonitor\0".encode_utf16().collect();
 
                 let wc = WNDCLASSW {
                     style: CS_HREDRAW | CS_VREDRAW,
@@ -118,7 +119,10 @@ impl WindowsPowerMonitor {
                     class_name.as_ptr(),
                     std::ptr::null(),
                     0,
-                    0, 0, 0, 0,
+                    0,
+                    0,
+                    0,
+                    0,
                     HWND_MESSAGE,
                     std::ptr::null_mut(),
                     std::ptr::null_mut(),
@@ -229,7 +233,11 @@ unsafe extern "system" fn power_window_proc(
             };
 
             if let Some(event) = power_event {
-                if let Some(state) = get_window_state_storage().lock().ok().and_then(|g| g.clone()) {
+                if let Some(state) = get_window_state_storage()
+                    .lock()
+                    .ok()
+                    .and_then(|g| g.clone())
+                {
                     if let Ok(callbacks) = state.callbacks.lock() {
                         for callback in callbacks.iter() {
                             callback(event);

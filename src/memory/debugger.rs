@@ -36,13 +36,13 @@
 //! monitor.start_monitoring(std::time::Duration::from_secs(1));
 //! ```
 
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
 #[cfg(windows)]
-use winapi::um::debugapi::{IsDebuggerPresent, CheckRemoteDebuggerPresent};
+use winapi::um::debugapi::{CheckRemoteDebuggerPresent, IsDebuggerPresent};
 #[cfg(windows)]
 use winapi::um::processthreadsapi::GetCurrentProcess;
 
@@ -71,10 +71,8 @@ pub fn is_debugger_present() -> bool {
 
             // Check for remote debugger
             let mut is_remote_debugger_present = 0;
-            let result = CheckRemoteDebuggerPresent(
-                GetCurrentProcess(),
-                &mut is_remote_debugger_present
-            );
+            let result =
+                CheckRemoteDebuggerPresent(GetCurrentProcess(), &mut is_remote_debugger_present);
 
             if result != 0 && is_remote_debugger_present != 0 {
                 return true;
@@ -247,9 +245,9 @@ pub mod anti_debug {
     /// `true` if debugger artifacts detected
     #[cfg(windows)]
     pub fn check_debugger_artifacts() -> bool {
-        use winapi::um::winnt::PAGE_EXECUTE_READWRITE;
         use winapi::um::memoryapi::VirtualQuery;
         use winapi::um::winnt::MEMORY_BASIC_INFORMATION;
+        use winapi::um::winnt::PAGE_EXECUTE_READWRITE;
 
         unsafe {
             // Check if our code section has unexpected permissions
@@ -258,7 +256,7 @@ pub mod anti_debug {
             let result = VirtualQuery(
                 check_debugger_artifacts as usize as *const winapi::ctypes::c_void,
                 &mut mbi,
-                std::mem::size_of::<MEMORY_BASIC_INFORMATION>()
+                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
             );
 
             if result != 0 {
@@ -318,8 +316,8 @@ mod tests {
 
     #[test]
     fn test_monitor_with_callback() {
-        use std::sync::Arc;
         use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
 
         let callback_triggered = Arc::new(AtomicBool::new(false));
         let callback_triggered_clone = Arc::clone(&callback_triggered);

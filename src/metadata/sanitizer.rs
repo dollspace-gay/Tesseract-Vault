@@ -6,7 +6,7 @@
 //! for sanitizing various metadata types.
 
 use crate::memory::scrub::{scrub_bytes_pattern, ScrubPattern};
-use crate::volume::format::{Inode, Superblock, JournalEntry, JournalHeader, Bitmap};
+use crate::volume::format::{Bitmap, Inode, JournalEntry, JournalHeader, Superblock};
 use rand::Rng;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
@@ -101,7 +101,7 @@ impl Default for SanitizationOptions {
             scrub_pattern: ScrubPattern::Zero,
             sanitize_uuids: true,
             sanitize_labels: true,
-            fixed_timestamp: 946684800, // Jan 1, 2000
+            fixed_timestamp: 946684800,                      // Jan 1, 2000
             random_timestamp_range: (946684800, 1577836800), // 2000-2020
         }
     }
@@ -519,7 +519,10 @@ mod tests {
     #[test]
     fn test_balanced_preset() {
         let options = SanitizationOptions::balanced();
-        assert_eq!(options.timestamp_strategy, TimestampStrategy::NormalizeToDay);
+        assert_eq!(
+            options.timestamp_strategy,
+            TimestampStrategy::NormalizeToDay
+        );
         assert!(!options.sanitize_uuids);
         assert!(!options.sanitize_labels);
     }

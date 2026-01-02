@@ -234,8 +234,9 @@ impl WipeCommand {
 
     /// Deserializes command from JSON bytes
     pub fn from_bytes(data: &[u8]) -> Result<Self> {
-        serde_json::from_slice(data)
-            .map_err(|e| CryptorError::Cryptography(format!("Failed to deserialize command: {}", e)))
+        serde_json::from_slice(data).map_err(|e| {
+            CryptorError::Cryptography(format!("Failed to deserialize command: {}", e))
+        })
     }
 }
 
@@ -568,7 +569,10 @@ impl RemoteWipeManager {
     /// Processes a wipe command
     ///
     /// Returns the result of the command execution.
-    pub fn process_command(&mut self, command: &WipeCommand) -> std::result::Result<WipeResult, WipeError> {
+    pub fn process_command(
+        &mut self,
+        command: &WipeCommand,
+    ) -> std::result::Result<WipeResult, WipeError> {
         // Check if wipe is enabled
         if !self.config.enabled {
             return Err(WipeError::NotEnabled);
@@ -669,7 +673,9 @@ impl RemoteWipeManager {
         self.config.record_nonce(command.data.nonce);
 
         // Check if confirmation is required
-        if self.config.require_confirmation && command.data.command_type == WipeCommandType::DestroyKeys {
+        if self.config.require_confirmation
+            && command.data.command_type == WipeCommandType::DestroyKeys
+        {
             if self.pending_confirmation.is_none() {
                 self.pending_confirmation = Some(command.clone());
                 return Err(WipeError::ConfirmationRequired);
@@ -688,17 +694,23 @@ impl RemoteWipeManager {
         &mut self,
         token: &WipeToken,
     ) -> std::result::Result<WipeResult, WipeError> {
-        let command = self.pending_confirmation.take()
+        let command = self
+            .pending_confirmation
+            .take()
             .ok_or(WipeError::Crypto("No pending command to confirm".into()))?;
 
         // Create confirmation command with new nonce
-        let confirm_cmd = WipeCommand::new(token, &command.data.volume_id, command.data.command_type);
+        let confirm_cmd =
+            WipeCommand::new(token, &command.data.volume_id, command.data.command_type);
 
         self.verify_and_execute(&confirm_cmd, token)
     }
 
     /// Executes the command (called after all verification passes)
-    fn execute_command(&mut self, command: &WipeCommand) -> std::result::Result<WipeResult, WipeError> {
+    fn execute_command(
+        &mut self,
+        command: &WipeCommand,
+    ) -> std::result::Result<WipeResult, WipeError> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -716,9 +728,7 @@ impl RemoteWipeManager {
                 // Lock functionality would integrate with volume manager
                 Ok(WipeResult::Locked { timestamp: now })
             }
-            WipeCommandType::CheckIn => {
-                Ok(WipeResult::CheckedIn { timestamp: now })
-            }
+            WipeCommandType::CheckIn => Ok(WipeResult::CheckedIn { timestamp: now }),
             WipeCommandType::RevokeToken => {
                 self.config.enabled = false;
                 Ok(WipeResult::TokenRevoked { timestamp: now })

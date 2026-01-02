@@ -81,14 +81,14 @@ fn verify_encrypt_rejects_invalid_nonce() {
 ///
 /// Property: decrypt(encrypt(plaintext)) = plaintext
 #[kani::proof]
-#[kani::unwind(8)]  // Higher bound for vector operations
+#[kani::unwind(8)] // Higher bound for vector operations
 fn verify_roundtrip() {
     let encryptor = AesGcmEncryptor::new();
     let key: [u8; 32] = kani::any();
     let nonce: [u8; NONCE_LEN] = kani::any();
 
     let plaintext_len: usize = kani::any();
-    kani::assume(plaintext_len <= 128);  // Small for feasibility
+    kani::assume(plaintext_len <= 128); // Small for feasibility
 
     let mut plaintext = vec![0u8; plaintext_len];
     for i in 0..plaintext_len {
@@ -206,7 +206,7 @@ fn verify_no_overflow() {
 
     // Test with maximum reasonable plaintext size
     let plaintext_len: usize = kani::any();
-    kani::assume(plaintext_len <= 65536);  // 64KB
+    kani::assume(plaintext_len <= 65536); // 64KB
 
     let plaintext = vec![0u8; plaintext_len];
 

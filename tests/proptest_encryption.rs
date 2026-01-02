@@ -7,11 +7,11 @@
 //! for all possible inputs.
 
 use proptest::prelude::*;
-use tesseract_lib::{encrypt_bytes, decrypt_bytes};
-use tesseract_lib::crypto::kdf::Argon2Kdf;
-use tesseract_lib::crypto::KeyDerivation;
 use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
+use tesseract_lib::crypto::kdf::Argon2Kdf;
 use tesseract_lib::crypto::Encryptor;
+use tesseract_lib::crypto::KeyDerivation;
+use tesseract_lib::{decrypt_bytes, encrypt_bytes};
 
 // Strategy for generating arbitrary plaintext (0 bytes to 64KB)
 fn plaintext_strategy() -> impl Strategy<Value = Vec<u8>> {

@@ -7,7 +7,7 @@
 ///
 /// Uses VolumeIOFilesystem for persistent, encrypted storage.
 use std::collections::HashMap;
-use std::ffi::{OsString, c_void};
+use std::ffi::{c_void, OsString};
 use std::os::windows::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
@@ -16,13 +16,12 @@ use std::time::SystemTime;
 use windows::Win32::Foundation::*;
 
 use winfsp::{
-    U16CStr, U16CString,
     filesystem::{
-        FileInfo, FileSecurity, FileSystemContext, DirInfo, DirMarker,
-        OpenFileInfo, VolumeInfo, WideNameInfo,
+        DirInfo, DirMarker, FileInfo, FileSecurity, FileSystemContext, OpenFileInfo, VolumeInfo,
+        WideNameInfo,
     },
     host::{FileSystemHost, VolumeParams},
-    FspError, Result as FspResult,
+    FspError, Result as FspResult, U16CStr, U16CString,
 };
 
 use super::super::container::Container;
@@ -90,9 +89,7 @@ impl WinFspAdapter {
     fn new(fs: VolumeIOFilesystem) -> Self {
         // Initialize with root path
         let mut cache = HashMap::new();
-        cache.insert(PathBuf::from("/"), PathCacheEntry {
-            inode: ROOT_INODE,
-        });
+        cache.insert(PathBuf::from("/"), PathCacheEntry { inode: ROOT_INODE });
 
         Self {
             fs,
@@ -149,9 +146,7 @@ impl WinFspAdapter {
     /// Normalize path for internal use (remove leading backslash, convert to forward slashes)
     fn normalize_path(path: &Path) -> PathBuf {
         let path_str = path.to_string_lossy();
-        let normalized = path_str
-            .trim_start_matches('\\')
-            .replace('\\', "/");
+        let normalized = path_str.trim_start_matches('\\').replace('\\', "/");
 
         if normalized.is_empty() {
             PathBuf::from("/")
@@ -199,9 +194,12 @@ impl WinFspAdapter {
         // Cache the result
         {
             let mut cache = self.path_cache.write().unwrap();
-            cache.insert(path.to_path_buf(), PathCacheEntry {
-                inode: current_inode,
-            });
+            cache.insert(
+                path.to_path_buf(),
+                PathCacheEntry {
+                    inode: current_inode,
+                },
+            );
         }
 
         Ok(current_inode)
@@ -210,7 +208,8 @@ impl WinFspAdapter {
     /// Get parent inode and filename from a path
     fn get_parent_and_name(&self, path: &Path) -> FspResult<(u32, String)> {
         let parent = path.parent().unwrap_or(Path::new("/"));
-        let name = path.file_name()
+        let name = path
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
 
@@ -238,7 +237,8 @@ impl WinFspAdapter {
         file_info.file_attributes = Self::inode_type_to_attributes(file_type);
         file_info.reparse_tag = 0;
         file_info.file_size = inode.size;
-        file_info.allocation_size = inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
+        file_info.allocation_size =
+            inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
         file_info.creation_time = unix_to_filetime(inode.ctime);
         file_info.last_access_time = unix_to_filetime(inode.atime);
         file_info.last_write_time = unix_to_filetime(inode.mtime);
@@ -258,7 +258,8 @@ impl WinFspAdapter {
         cache.remove(path);
 
         // Remove any children (paths that start with this path)
-        let keys_to_remove: Vec<PathBuf> = cache.keys()
+        let keys_to_remove: Vec<PathBuf> = cache
+            .keys()
             .filter(|k| k.starts_with(path) && *k != path)
             .cloned()
             .collect();
@@ -344,10 +345,12 @@ impl FileSystemContext for WinFspAdapter {
         let is_directory = file_attributes & FILE_ATTRIBUTE_DIRECTORY != 0;
 
         let inode_num = if is_directory {
-            self.fs.create_directory(parent_inode, &name, 0o755)
+            self.fs
+                .create_directory(parent_inode, &name, 0o755)
                 .map_err(Self::error_to_fsp)?
         } else {
-            self.fs.create_file(parent_inode, &name, 0o644)
+            self.fs
+                .create_file(parent_inode, &name, 0o644)
                 .map_err(Self::error_to_fsp)?
         };
 
@@ -356,9 +359,7 @@ impl FileSystemContext for WinFspAdapter {
         // Cache the new entry
         {
             let mut cache = self.path_cache.write().unwrap();
-            cache.insert(normalized_path.clone(), PathCacheEntry {
-                inode: inode_num,
-            });
+            cache.insert(normalized_path.clone(), PathCacheEntry { inode: inode_num });
         }
 
         Ok(WinFspFileContext {
@@ -367,13 +368,10 @@ impl FileSystemContext for WinFspAdapter {
         })
     }
 
-    fn read(
-        &self,
-        context: &Self::FileContext,
-        buffer: &mut [u8],
-        offset: u64,
-    ) -> FspResult<u32> {
-        let data = self.fs.read_by_inode(context.inode, offset, buffer.len() as u32)
+    fn read(&self, context: &Self::FileContext, buffer: &mut [u8], offset: u64) -> FspResult<u32> {
+        let data = self
+            .fs
+            .read_by_inode(context.inode, offset, buffer.len() as u32)
             .map_err(Self::error_to_fsp)?;
 
         let bytes_read = data.len();
@@ -391,7 +389,9 @@ impl FileSystemContext for WinFspAdapter {
         _constrained_io: bool,
         file_info: &mut FileInfo,
     ) -> FspResult<u32> {
-        let bytes_written = self.fs.write_by_inode(context.inode, offset, buffer)
+        let bytes_written = self
+            .fs
+            .write_by_inode(context.inode, offset, buffer)
             .map_err(Self::error_to_fsp)?;
 
         // Update file info
@@ -427,7 +427,10 @@ impl FileSystemContext for WinFspAdapter {
         _last_change_time: u64,
         file_info: &mut FileInfo,
     ) -> FspResult<()> {
-        let mut inode = self.fs.get_inode(context.inode).map_err(Self::error_to_fsp)?;
+        let mut inode = self
+            .fs
+            .get_inode(context.inode)
+            .map_err(Self::error_to_fsp)?;
 
         // Update timestamps if specified (0 means don't change)
         if last_access_time != 0 {
@@ -447,7 +450,9 @@ impl FileSystemContext for WinFspAdapter {
             };
         }
 
-        self.fs.set_inode(context.inode, &inode).map_err(Self::error_to_fsp)?;
+        self.fs
+            .set_inode(context.inode, &inode)
+            .map_err(Self::error_to_fsp)?;
 
         // Return updated file info
         self.fill_file_info_from_inode(context.inode, file_info)
@@ -460,7 +465,8 @@ impl FileSystemContext for WinFspAdapter {
         _set_allocation_size: bool,
         file_info: &mut FileInfo,
     ) -> FspResult<()> {
-        self.fs.truncate_file(context.inode, new_size)
+        self.fs
+            .truncate_file(context.inode, new_size)
             .map_err(Self::error_to_fsp)?;
 
         self.fill_file_info_from_inode(context.inode, file_info)
@@ -481,7 +487,8 @@ impl FileSystemContext for WinFspAdapter {
         let (old_parent, old_name) = self.get_parent_and_name(&old_normalized)?;
         let (new_parent, new_name) = self.get_parent_and_name(&new_normalized)?;
 
-        self.fs.rename_entry(old_parent, &old_name, new_parent, &new_name)
+        self.fs
+            .rename_entry(old_parent, &old_name, new_parent, &new_name)
             .map_err(Self::error_to_fsp)?;
 
         // Invalidate cache for both old and new paths
@@ -497,16 +504,21 @@ impl FileSystemContext for WinFspAdapter {
         _file_name: &U16CStr,
         _delete_file: bool,
     ) -> FspResult<()> {
-        let inode = self.fs.get_inode(context.inode).map_err(Self::error_to_fsp)?;
+        let inode = self
+            .fs
+            .get_inode(context.inode)
+            .map_err(Self::error_to_fsp)?;
 
         // Get parent and name from cached path
         let (parent_inode, name) = self.get_parent_and_name(&context.path)?;
 
         if inode.is_dir() {
-            self.fs.remove_directory(parent_inode, &name)
+            self.fs
+                .remove_directory(parent_inode, &name)
                 .map_err(Self::error_to_fsp)?;
         } else {
-            self.fs.remove_file(parent_inode, &name)
+            self.fs
+                .remove_file(parent_inode, &name)
                 .map_err(Self::error_to_fsp)?;
         }
 
@@ -523,7 +535,9 @@ impl FileSystemContext for WinFspAdapter {
         marker: DirMarker,
         buffer: &mut [u8],
     ) -> FspResult<u32> {
-        let entries = self.fs.readdir_by_inode(context.inode)
+        let entries = self
+            .fs
+            .readdir_by_inode(context.inode)
             .map_err(Self::error_to_fsp)?;
 
         let mut cursor = 0u32;
@@ -584,7 +598,8 @@ impl FileSystemContext for WinFspAdapter {
 
                 file_info.file_attributes = Self::inode_type_to_attributes(file_type);
                 file_info.file_size = entry_inode.size;
-                file_info.allocation_size = entry_inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
+                file_info.allocation_size =
+                    entry_inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
                 file_info.creation_time = unix_to_filetime(entry_inode.ctime);
                 file_info.last_access_time = unix_to_filetime(entry_inode.atime);
                 file_info.last_write_time = unix_to_filetime(entry_inode.mtime);
@@ -610,12 +625,15 @@ impl FileSystemContext for WinFspAdapter {
         dir_info: &mut DirInfo,
     ) -> FspResult<()> {
         let name_path = Self::u16_to_path(file_name);
-        let name = name_path.file_name()
+        let name = name_path
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
 
         // Look up the entry in the parent directory
-        let inode_num = self.fs.lookup(context.inode, &name)
+        let inode_num = self
+            .fs
+            .lookup(context.inode, &name)
             .map_err(Self::error_to_fsp)?
             .ok_or_else(|| -> FspError { STATUS_OBJECT_NAME_NOT_FOUND.into() })?;
 
@@ -633,7 +651,8 @@ impl FileSystemContext for WinFspAdapter {
 
         file_info.file_attributes = Self::inode_type_to_attributes(file_type);
         file_info.file_size = inode.size;
-        file_info.allocation_size = inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
+        file_info.allocation_size =
+            inode.size.div_ceil(FS_BLOCK_SIZE as u64) * FS_BLOCK_SIZE as u64;
         file_info.creation_time = unix_to_filetime(inode.ctime);
         file_info.last_access_time = unix_to_filetime(inode.atime);
         file_info.last_write_time = unix_to_filetime(inode.mtime);
@@ -654,7 +673,7 @@ impl FileSystemContext for WinFspAdapter {
             Err(_) => {
                 // Fallback values
                 volume_info.total_size = 1024 * 1024 * 1024 * 10; // 10 GB
-                volume_info.free_size = 1024 * 1024 * 1024 * 5;   // 5 GB free
+                volume_info.free_size = 1024 * 1024 * 1024 * 5; // 5 GB free
             }
         }
         volume_info.set_volume_label("Tesseract");
@@ -702,9 +721,9 @@ pub fn mount(
 
     // Open container to get the master key
     let container = if let Some(hidden_offset) = options.hidden_offset {
-        let hidden_pwd = options.hidden_password
-            .as_deref()
-            .ok_or_else(|| MountError::Other("Hidden password required for hidden volume mount".to_string()))?;
+        let hidden_pwd = options.hidden_password.as_deref().ok_or_else(|| {
+            MountError::Other("Hidden password required for hidden volume mount".to_string())
+        })?;
 
         let outer = Container::open(container_path, password)?;
         outer.open_hidden_volume(hidden_pwd, hidden_offset)?
@@ -713,7 +732,8 @@ pub fn mount(
     };
 
     // Get master key from container
-    let master_key = container.master_key()
+    let master_key = container
+        .master_key()
         .ok_or_else(|| MountError::Other("Container is locked".to_string()))?
         .clone();
 
@@ -778,7 +798,8 @@ pub fn mount(
         .map_err(|e| MountError::Other(format!("Failed to create WinFsp filesystem: {:?}", e)))?;
 
     // Start the filesystem
-    filesystem.start()
+    filesystem
+        .start()
         .map_err(|e| MountError::Other(format!("Failed to start WinFsp filesystem: {:?}", e)))?;
 
     Ok(WinFspMountHandle {

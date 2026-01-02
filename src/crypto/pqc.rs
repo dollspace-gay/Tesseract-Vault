@@ -214,11 +214,10 @@ impl MlKemKeyPair {
         }
 
         // Parse the decapsulation key using the type parameter set directly
-        let dk_array: &[u8; SECRET_KEY_SIZE] = self
-            .decapsulation_key
-            .as_slice()
-            .try_into()
-            .map_err(|_| CryptorError::Cryptography("Invalid decapsulation key size".to_string()))?;
+        let dk_array: &[u8; SECRET_KEY_SIZE] =
+            self.decapsulation_key.as_slice().try_into().map_err(|_| {
+                CryptorError::Cryptography("Invalid decapsulation key size".to_string())
+            })?;
 
         // Use type alias to simplify
         type DK = <MlKem1024 as KemCore>::DecapsulationKey;
@@ -342,7 +341,9 @@ pub fn encapsulate(
     let mut rng = rand_compat::rng();
 
     // Encapsulate to get ciphertext and shared secret (never fails - returns Result<_, Infallible>)
-    let (ct, ss) = ek.encapsulate(&mut rng).expect("Encapsulation is infallible");
+    let (ct, ss) = ek
+        .encapsulate(&mut rng)
+        .expect("Encapsulation is infallible");
 
     // Copy to zeroizing array
     let mut secret_array = Zeroizing::new([0u8; SHARED_SECRET_SIZE]);
@@ -536,7 +537,11 @@ mod tests {
         let result = validate_encapsulation_key(&bad_key);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("ModulusOverflow"), "Error should mention ModulusOverflow: {}", err_msg);
+        assert!(
+            err_msg.contains("ModulusOverflow"),
+            "Error should mention ModulusOverflow: {}",
+            err_msg
+        );
     }
 
     #[test]

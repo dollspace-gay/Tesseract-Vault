@@ -13,11 +13,11 @@
 //! 4. **Reference Comparison**: Compare against known-good test vectors
 
 use proptest::prelude::*;
-use tesseract_lib::{encrypt_bytes, decrypt_bytes};
 use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
-use tesseract_lib::crypto::Encryptor;
 use tesseract_lib::crypto::kdf::Argon2Kdf;
+use tesseract_lib::crypto::Encryptor;
 use tesseract_lib::crypto::KeyDerivation;
+use tesseract_lib::{decrypt_bytes, encrypt_bytes};
 
 /// Generate a valid password that meets requirements
 fn valid_password() -> impl Strategy<Value = String> {
@@ -46,7 +46,11 @@ impl DiffTestVector {
                 let mut nonce = [0u8; 12];
                 key.copy_from_slice(&key_vec);
                 nonce.copy_from_slice(&nonce_vec);
-                DiffTestVector { plaintext, key, nonce }
+                DiffTestVector {
+                    plaintext,
+                    key,
+                    nonce,
+                }
             })
     }
 }

@@ -8,13 +8,13 @@
 //! - Platform-specific service integration
 //! - Automatic cleanup on shutdown
 
+pub mod client;
 pub mod protocol;
 pub mod server;
-pub mod client;
 
 #[cfg(windows)]
 pub mod service;
 
+pub use client::DaemonClient;
 pub use protocol::{DaemonCommand, DaemonResponse, MountInfo};
 pub use server::DaemonServer;
-pub use client::DaemonClient;

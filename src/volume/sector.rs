@@ -35,9 +35,9 @@
 //! disk encryption where sector sizes must be fixed. Authentication can be
 //! added at a higher layer if needed (e.g., in the filesystem).
 
-use aes::Aes256;
 #[allow(deprecated)]
-use aes::cipher::{KeyInit, generic_array::GenericArray};
+use aes::cipher::{generic_array::GenericArray, KeyInit};
+use aes::Aes256;
 use thiserror::Error;
 use xts_mode::{get_tweak_default, Xts128};
 use zeroize::Zeroizing;
@@ -127,16 +127,17 @@ impl SectorCipher {
 
     /// Derives a 64-byte XTS key from the master key using HKDF
     fn derive_xts_key(master_key: &MasterKey) -> Result<Zeroizing<[u8; 64]>> {
+        use crate::config::CryptoConfig;
         use crate::crypto::kdf::Argon2Kdf;
         use crate::crypto::KeyDerivation;
-        use crate::config::CryptoConfig;
 
         // Use a fixed salt for XTS key derivation
         // This is safe because the master key is already randomly generated
         let salt = b"secure-cryptor-xts-v1-2025-salt-";
 
         let kdf = Argon2Kdf::new(CryptoConfig::default());
-        let derived = kdf.derive_key(master_key.as_bytes(), salt)
+        let derived = kdf
+            .derive_key(master_key.as_bytes(), salt)
             .map_err(|_| SectorError::InvalidKeySize)?;
 
         // Extend to 64 bytes using a second derivation if needed
@@ -147,7 +148,8 @@ impl SectorCipher {
 
         // Second 32 bytes (derived with different salt)
         let salt2 = b"secure-cryptor-xts-v1-2025-slt2-";
-        let derived2 = kdf.derive_key(master_key.as_bytes(), salt2)
+        let derived2 = kdf
+            .derive_key(master_key.as_bytes(), salt2)
             .map_err(|_| SectorError::InvalidKeySize)?;
         xts_key[32..64].copy_from_slice(&derived2[..]);
 
@@ -467,12 +469,24 @@ mod tests {
         assert_ne!(ct1, ct2);
 
         // Each key should decrypt its own ciphertext
-        assert_eq!(cipher1.decrypt_sector(sector_index, &ct1).unwrap(), plaintext);
-        assert_eq!(cipher2.decrypt_sector(sector_index, &ct2).unwrap(), plaintext);
+        assert_eq!(
+            cipher1.decrypt_sector(sector_index, &ct1).unwrap(),
+            plaintext
+        );
+        assert_eq!(
+            cipher2.decrypt_sector(sector_index, &ct2).unwrap(),
+            plaintext
+        );
 
         // But not the other's ciphertext
-        assert_ne!(cipher1.decrypt_sector(sector_index, &ct2).unwrap(), plaintext);
-        assert_ne!(cipher2.decrypt_sector(sector_index, &ct1).unwrap(), plaintext);
+        assert_ne!(
+            cipher1.decrypt_sector(sector_index, &ct2).unwrap(),
+            plaintext
+        );
+        assert_ne!(
+            cipher2.decrypt_sector(sector_index, &ct1).unwrap(),
+            plaintext
+        );
     }
 
     /// Test that verifies sector-index-based tweaks prevent cross-sector attacks
@@ -494,22 +508,37 @@ mod tests {
         let ct_sector_1 = cipher.encrypt_sector(1, &plaintext).unwrap();
         let ct_sector_max = cipher.encrypt_sector(u64::MAX, &plaintext).unwrap();
 
-        assert_ne!(ct_sector_0, ct_sector_1, "Same plaintext must produce different ciphertext at different sectors");
-        assert_ne!(ct_sector_0, ct_sector_max, "Sector index must affect ciphertext even for extreme values");
+        assert_ne!(
+            ct_sector_0, ct_sector_1,
+            "Same plaintext must produce different ciphertext at different sectors"
+        );
+        assert_ne!(
+            ct_sector_0, ct_sector_max,
+            "Sector index must affect ciphertext even for extreme values"
+        );
 
         // Security property 2: Overwriting same sector multiple times is deterministic
         // This is REQUIRED for disk semantics (no storage expansion)
         let ct_overwrite_1 = cipher.encrypt_sector(42, &plaintext).unwrap();
         let ct_overwrite_2 = cipher.encrypt_sector(42, &plaintext).unwrap();
-        assert_eq!(ct_overwrite_1, ct_overwrite_2, "Same sector index must produce identical ciphertext");
+        assert_eq!(
+            ct_overwrite_1, ct_overwrite_2,
+            "Same sector index must produce identical ciphertext"
+        );
 
         // Security property 3: All ciphertexts decrypt correctly with their sector index
         assert_eq!(cipher.decrypt_sector(0, &ct_sector_0).unwrap(), plaintext);
         assert_eq!(cipher.decrypt_sector(1, &ct_sector_1).unwrap(), plaintext);
-        assert_eq!(cipher.decrypt_sector(u64::MAX, &ct_sector_max).unwrap(), plaintext);
+        assert_eq!(
+            cipher.decrypt_sector(u64::MAX, &ct_sector_max).unwrap(),
+            plaintext
+        );
 
         // Security property 4: Cross-sector decryption produces garbage (not original plaintext)
         let wrong_decrypt = cipher.decrypt_sector(1, &ct_sector_0).unwrap();
-        assert_ne!(wrong_decrypt, plaintext, "Wrong sector index must not decrypt to original plaintext");
+        assert_ne!(
+            wrong_decrypt, plaintext,
+            "Wrong sector index must not decrypt to original plaintext"
+        );
     }
 }

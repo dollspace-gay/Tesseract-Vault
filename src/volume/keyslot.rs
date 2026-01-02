@@ -187,7 +187,10 @@ impl KeySlot {
     /// # Errors
     ///
     /// Returns an error if encryption fails
-    fn new_with_derived_key(master_key: &MasterKey, derived_key: &[u8; 32]) -> Result<Self, KeySlotError> {
+    fn new_with_derived_key(
+        master_key: &MasterKey,
+        derived_key: &[u8; 32],
+    ) -> Result<Self, KeySlotError> {
         // Generate random salt (stored but not used for derivation since key is pre-derived)
         // We still store a salt for format compatibility
         let mut salt = [0u8; 32];
@@ -271,10 +274,7 @@ impl KeySlots {
     /// Creates a new key slots collection with all slots empty
     pub fn new() -> Self {
         Self {
-            slots: [
-                KeySlot::empty(),
-                KeySlot::empty(),
-            ],
+            slots: [KeySlot::empty(), KeySlot::empty()],
             duress_password_slot: None,
         }
     }
@@ -293,7 +293,11 @@ impl KeySlots {
     /// # Errors
     ///
     /// Returns an error if all slots are full
-    pub fn add_slot(&mut self, master_key: &MasterKey, password: &str) -> Result<usize, KeySlotError> {
+    pub fn add_slot(
+        &mut self,
+        master_key: &MasterKey,
+        password: &str,
+    ) -> Result<usize, KeySlotError> {
         // Find first inactive slot
         for (i, slot) in self.slots.iter_mut().enumerate() {
             if !slot.active {
@@ -322,7 +326,11 @@ impl KeySlots {
     /// # Errors
     ///
     /// Returns an error if all slots are full
-    pub fn add_slot_with_derived_key(&mut self, master_key: &MasterKey, derived_key: &[u8; 32]) -> Result<usize, KeySlotError> {
+    pub fn add_slot_with_derived_key(
+        &mut self,
+        master_key: &MasterKey,
+        derived_key: &[u8; 32],
+    ) -> Result<usize, KeySlotError> {
         // Find first inactive slot
         for (i, slot) in self.slots.iter_mut().enumerate() {
             if !slot.active {
@@ -363,7 +371,12 @@ impl KeySlots {
     /// # Errors
     ///
     /// Returns an error if the index is invalid
-    pub fn update_slot(&mut self, index: usize, master_key: &MasterKey, new_password: &str) -> Result<(), KeySlotError> {
+    pub fn update_slot(
+        &mut self,
+        index: usize,
+        master_key: &MasterKey,
+        new_password: &str,
+    ) -> Result<(), KeySlotError> {
         if index >= MAX_KEY_SLOTS {
             return Err(KeySlotError::InvalidSlotIndex(index));
         }
@@ -383,7 +396,12 @@ impl KeySlots {
     /// # Errors
     ///
     /// Returns an error if the index is invalid
-    pub fn update_slot_with_derived_key(&mut self, index: usize, master_key: &MasterKey, derived_key: &[u8; 32]) -> Result<(), KeySlotError> {
+    pub fn update_slot_with_derived_key(
+        &mut self,
+        index: usize,
+        master_key: &MasterKey,
+        derived_key: &[u8; 32],
+    ) -> Result<(), KeySlotError> {
         if index >= MAX_KEY_SLOTS {
             return Err(KeySlotError::InvalidSlotIndex(index));
         }
@@ -457,7 +475,10 @@ impl KeySlots {
     /// # Errors
     ///
     /// Returns an error if no slots can be unlocked with this key
-    pub fn unlock_with_derived_key(&self, derived_key: &[u8; 32]) -> Result<MasterKey, KeySlotError> {
+    pub fn unlock_with_derived_key(
+        &self,
+        derived_key: &[u8; 32],
+    ) -> Result<MasterKey, KeySlotError> {
         // Try each active slot
         for slot in &self.slots {
             if slot.active {
@@ -487,9 +508,7 @@ impl KeySlots {
     ///
     /// Some(index) if a free slot is found, None if all slots are full
     pub fn find_free_slot(&self) -> Option<usize> {
-        self.slots
-            .iter()
-            .position(|slot| !slot.active)
+        self.slots.iter().position(|slot| !slot.active)
     }
 
     /// Changes the password for an existing key slot
@@ -888,7 +907,10 @@ mod tests {
         // Both should return the same error variant
         assert!(wrong_password_result.is_err());
         assert!(duress_result.is_err());
-        assert!(matches!(wrong_password_result, Err(KeySlotError::DecryptionFailed)));
+        assert!(matches!(
+            wrong_password_result,
+            Err(KeySlotError::DecryptionFailed)
+        ));
         assert!(matches!(duress_result, Err(KeySlotError::DecryptionFailed)));
 
         // But only duress password should have destroyed keys

@@ -176,9 +176,9 @@ impl YubiKey {
 
         // Create Yubico instance and find device
         let mut yubi = Yubico::new();
-        let device = yubi.find_yubikey().map_err(|e| {
-            CryptorError::HardwareError(format!("Failed to find YubiKey: {:?}", e))
-        })?;
+        let device = yubi
+            .find_yubikey()
+            .map_err(|e| CryptorError::HardwareError(format!("Failed to find YubiKey: {:?}", e)))?;
 
         // Configure for HMAC-SHA1 challenge-response
         let config = Config::new_from(device)
@@ -187,9 +187,11 @@ impl YubiKey {
             .set_slot(self.config.slot.to_yk_slot());
 
         // Perform challenge-response
-        let response = yubi.challenge_response_hmac(challenge, config).map_err(|e| {
-            CryptorError::HardwareError(format!("Challenge-response failed: {:?}", e))
-        })?;
+        let response = yubi
+            .challenge_response_hmac(challenge, config)
+            .map_err(|e| {
+                CryptorError::HardwareError(format!("Challenge-response failed: {:?}", e))
+            })?;
 
         Ok(Zeroizing::new(response.to_vec()))
     }
@@ -450,8 +452,7 @@ mod tests {
             let challenge = [0x42u8; 32];
 
             // Check if YubiKey hardware is available
-            let available = std::panic::catch_unwind(|| yubikey.is_available())
-                .unwrap_or(false);
+            let available = std::panic::catch_unwind(|| yubikey.is_available()).unwrap_or(false);
 
             // Should use backup if YubiKey is not available
             let result = yubikey.derive_key(password, &salt, &challenge);

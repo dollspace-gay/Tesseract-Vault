@@ -3,7 +3,6 @@
 /// Linux systemd service integration for Tesseract daemon
 ///
 /// Manages systemd unit file installation and service control
-
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -85,11 +84,26 @@ pub fn install_service() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n✓ Service installed successfully");
     println!("\nYou can now:");
-    println!("  • Enable the service:  systemctl --user enable {}", SERVICE_NAME);
-    println!("  • Start the service:   systemctl --user start {}", SERVICE_NAME);
-    println!("  • Stop the service:    systemctl --user stop {}", SERVICE_NAME);
-    println!("  • Check status:        systemctl --user status {}", SERVICE_NAME);
-    println!("  • View logs:           journalctl --user -u {}", SERVICE_NAME);
+    println!(
+        "  • Enable the service:  systemctl --user enable {}",
+        SERVICE_NAME
+    );
+    println!(
+        "  • Start the service:   systemctl --user start {}",
+        SERVICE_NAME
+    );
+    println!(
+        "  • Stop the service:    systemctl --user stop {}",
+        SERVICE_NAME
+    );
+    println!(
+        "  • Check status:        systemctl --user status {}",
+        SERVICE_NAME
+    );
+    println!(
+        "  • View logs:           journalctl --user -u {}",
+        SERVICE_NAME
+    );
 
     Ok(())
 }

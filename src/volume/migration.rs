@@ -25,11 +25,13 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-use super::header::{VolumeHeader, PqVolumeMetadata, PqAlgorithm, HeaderError, HEADER_SIZE, PQC_PADDING_SIZE};
-use super::keyslot::{KeySlots, MasterKey, KeySlotError};
-use super::container::{PRIMARY_HEADER_OFFSET, KEYSLOTS_OFFSET, KEYSLOTS_SIZE};
-use crate::crypto::pqc::{MlKemKeyPair, encapsulate};
+use super::container::{KEYSLOTS_OFFSET, KEYSLOTS_SIZE, PRIMARY_HEADER_OFFSET};
+use super::header::{
+    HeaderError, PqAlgorithm, PqVolumeMetadata, VolumeHeader, HEADER_SIZE, PQC_PADDING_SIZE,
+};
+use super::keyslot::{KeySlotError, KeySlots, MasterKey};
 use crate::crypto::aes_gcm::AesGcmEncryptor;
+use crate::crypto::pqc::{encapsulate, MlKemKeyPair};
 use crate::crypto::Encryptor;
 
 /// Errors that can occur during volume migration
@@ -114,9 +116,7 @@ impl MigrationBackup {
 
     /// Restore backup to volume
     pub fn restore(&self, volume_path: &Path) -> Result<()> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .open(volume_path)?;
+        let mut file = OpenOptions::new().write(true).open(volume_path)?;
 
         // Restore header at offset 0
         file.seek(SeekFrom::Start(PRIMARY_HEADER_OFFSET))?;
@@ -229,7 +229,8 @@ impl VolumeMigration {
 
         // 3. Unlock to get master key
         // WARNING: This may destroy all keys if duress password is entered
-        let master_key = keyslots.unlock(password)
+        let master_key = keyslots
+            .unlock(password)
             .map_err(|_| MigrationError::UnlockFailed)?;
 
         // 4. Create backup before making changes
@@ -294,7 +295,8 @@ impl VolumeMigration {
         let (_, dk_bytes) = keypair.to_bytes();
 
         // Convert master key bytes to fixed-size array reference
-        let key_array: &[u8; 32] = master_key.as_bytes()
+        let key_array: &[u8; 32] = master_key
+            .as_bytes()
             .try_into()
             .map_err(|_| MigrationError::Encryption("Invalid master key size".to_string()))?;
 
@@ -307,9 +309,7 @@ impl VolumeMigration {
 
     /// Write V2 header and PQC metadata to volume
     fn write_v2_volume(&self, header: &VolumeHeader, pqc_metadata: &[u8]) -> Result<()> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .open(&self.volume_path)?;
+        let mut file = OpenOptions::new().write(true).open(&self.volume_path)?;
 
         // Write V2 header at offset 0
         file.seek(SeekFrom::Start(PRIMARY_HEADER_OFFSET))?;
@@ -351,30 +351,27 @@ impl VolumeMigration {
 
         // Verify keyslots still work
         let mut keyslots = self.read_keyslots()?;
-        keyslots.unlock(password)
-            .map_err(|_| MigrationError::VerificationFailed(
-                "Cannot unlock volume after migration".to_string(),
-            ))?;
+        keyslots.unlock(password).map_err(|_| {
+            MigrationError::VerificationFailed("Cannot unlock volume after migration".to_string())
+        })?;
 
         // Verify PQC metadata exists and is valid
         file.seek(SeekFrom::Start(HEADER_SIZE as u64))?;
         let mut pqc_bytes = vec![0u8; header.pq_metadata_size() as usize];
         file.read_exact(&mut pqc_bytes)?;
 
-        let _pqc_metadata = PqVolumeMetadata::from_bytes(&pqc_bytes)
-            .map_err(|e| MigrationError::VerificationFailed(format!(
-                "Invalid PQC metadata: {}", e
-            )))?;
+        let _pqc_metadata = PqVolumeMetadata::from_bytes(&pqc_bytes).map_err(|e| {
+            MigrationError::VerificationFailed(format!("Invalid PQC metadata: {}", e))
+        })?;
 
         Ok(())
     }
 
     /// Rollback migration using backup
     pub fn rollback(&self) -> Result<()> {
-        let backup = self.backup.as_ref()
-            .ok_or_else(|| MigrationError::BackupFailed(
-                "No backup available for rollback".to_string()
-            ))?;
+        let backup = self.backup.as_ref().ok_or_else(|| {
+            MigrationError::BackupFailed("No backup available for rollback".to_string())
+        })?;
 
         backup.restore(&self.volume_path)?;
 
@@ -390,8 +387,6 @@ impl VolumeMigration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
 
     #[test]
     fn test_migration_manager_creation() {

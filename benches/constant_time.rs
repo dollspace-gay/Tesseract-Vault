@@ -30,8 +30,8 @@
 //! - Original paper: https://eprint.iacr.org/2016/1123.pdf
 //! - dudect-bencher: https://crates.io/crates/dudect-bencher
 
-use dudect_bencher::{ctbench_main, BenchRng, Class, CtRunner};
 use dudect_bencher::rand::RngCore;
+use dudect_bencher::{ctbench_main, BenchRng, Class, CtRunner};
 
 use aes_gcm::{
     aead::{Aead, KeyInit, Payload},

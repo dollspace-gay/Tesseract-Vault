@@ -14,7 +14,9 @@ pub mod linux;
 
 // Re-export platform-specific functions
 #[cfg(windows)]
-pub use self::windows::{install_service, uninstall_service, run_service};
+pub use self::windows::{install_service, run_service, uninstall_service};
 
 #[cfg(target_os = "linux")]
-pub use self::linux::{install_service, uninstall_service, enable_service, start_service, stop_service};
+pub use self::linux::{
+    enable_service, install_service, start_service, stop_service, uninstall_service,
+};

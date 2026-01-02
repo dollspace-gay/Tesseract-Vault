@@ -17,7 +17,7 @@ use tempfile::Builder;
 pub fn write_file_atomic(_path: &Path, _data: &[u8]) -> Result<()> {
     Err(CryptorError::Io(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
-        "File operations are not supported in WebAssembly"
+        "File operations are not supported in WebAssembly",
     )))
 }
 
@@ -28,7 +28,7 @@ where
 {
     Err(CryptorError::Io(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
-        "File operations are not supported in WebAssembly"
+        "File operations are not supported in WebAssembly",
     )))
 }
 
@@ -176,10 +176,9 @@ pub mod format {
         // Read salt
         let mut salt_bytes = vec![0u8; salt_len];
         file.read_exact(&mut salt_bytes)?;
-        let salt_str =
-            std::str::from_utf8(&salt_bytes).map_err(|_| CryptorError::InvalidFormat)?;
-        let salt =
-            SaltString::from_b64(salt_str).map_err(|e| CryptorError::PasswordHash(e.to_string()))?;
+        let salt_str = std::str::from_utf8(&salt_bytes).map_err(|_| CryptorError::InvalidFormat)?;
+        let salt = SaltString::from_b64(salt_str)
+            .map_err(|e| CryptorError::PasswordHash(e.to_string()))?;
 
         // Read nonce
         let mut nonce = vec![0u8; NONCE_LEN];

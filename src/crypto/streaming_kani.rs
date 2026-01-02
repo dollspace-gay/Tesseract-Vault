@@ -93,7 +93,10 @@ fn verify_max_file_size_bound() {
     let max_file_bytes = MAX_CHUNKS.saturating_mul(CHUNK_SIZE);
 
     // Should not overflow (saturating_mul handles this)
-    assert!(max_file_bytes > 0, "File size calculation should not underflow");
+    assert!(
+        max_file_bytes > 0,
+        "File size calculation should not underflow"
+    );
 }
 
 /// Verify nonce uniqueness for sequential chunks.
@@ -123,7 +126,11 @@ fn verify_zero_index_valid() {
     let nonce = derive_chunk_nonce(&base_nonce, 0);
 
     // Counter portion should be all zeros for index 0
-    assert_eq!(&nonce[4..12], &[0u8; 8], "Zero index counter should be zeros");
+    assert_eq!(
+        &nonce[4..12],
+        &[0u8; 8],
+        "Zero index counter should be zeros"
+    );
 
     // Fixed portion should match
     assert_eq!(&nonce[0..4], &base_nonce[0..4], "Fixed field should match");
@@ -139,7 +146,11 @@ fn verify_max_index_valid() {
     let nonce = derive_chunk_nonce(&base_nonce, u64::MAX);
 
     // Counter portion should be all 0xFF for max index
-    assert_eq!(&nonce[4..12], &[0xFF; 8], "Max index counter should be all 1s");
+    assert_eq!(
+        &nonce[4..12],
+        &[0xFF; 8],
+        "Max index counter should be all 1s"
+    );
 
     // Fixed portion should match
     assert_eq!(&nonce[0..4], &base_nonce[0..4], "Fixed field should match");

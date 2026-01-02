@@ -5,11 +5,11 @@
 //! Manages mounted volumes and handles IPC requests
 
 use std::collections::HashMap;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::io::{Read, Write};
 
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -395,8 +395,7 @@ impl DaemonServer {
 
             DaemonCommand::List => {
                 let mounts_guard = mounts.lock().unwrap();
-                let mount_list: Vec<MountInfo> =
-                    mounts_guard.values().cloned().collect();
+                let mount_list: Vec<MountInfo> = mounts_guard.values().cloned().collect();
 
                 DaemonResponse::MountList { mounts: mount_list }
             }
@@ -405,9 +404,7 @@ impl DaemonServer {
                 let mounts_guard = mounts.lock().unwrap();
 
                 if let Some(info) = mounts_guard.get(&container_path) {
-                    DaemonResponse::MountInfo {
-                        info: info.clone(),
-                    }
+                    DaemonResponse::MountInfo { info: info.clone() }
                 } else {
                     DaemonResponse::error("Volume is not mounted")
                 }

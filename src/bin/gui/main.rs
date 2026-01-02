@@ -8,15 +8,15 @@
 mod tray;
 
 use eframe::egui;
-use tesseract_lib::{
-    ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig,
-    crypto::{aes_gcm::AesGcmEncryptor, kdf::Argon2Kdf, KeyDerivation},
-    validation::validate_password,
-};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use tesseract_lib::{
+    crypto::{aes_gcm::AesGcmEncryptor, kdf::Argon2Kdf, KeyDerivation},
+    validation::validate_password,
+    ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig,
+};
 use tokio::runtime::Runtime;
 use zeroize::Zeroizing;
 
@@ -174,9 +174,15 @@ fn notify_queue_complete(total: usize, succeeded: usize, failed: usize, enabled:
         return;
     }
     let message = if failed == 0 {
-        format!("Queue processing complete! {} items processed successfully.", succeeded)
+        format!(
+            "Queue processing complete! {} items processed successfully.",
+            succeeded
+        )
     } else {
-        format!("Queue processing complete! {} succeeded, {} failed out of {} total.", succeeded, failed, total)
+        format!(
+            "Queue processing complete! {} succeeded, {} failed out of {} total.",
+            succeeded, failed, total
+        )
     };
     show_notification("Tesseract - Queue Complete", &message, failed > 0);
 }
@@ -219,7 +225,13 @@ struct QueueItem {
 }
 
 impl QueueItem {
-    fn new(input_path: String, output_path: String, mode: Mode, password: String, use_compression: bool) -> Self {
+    fn new(
+        input_path: String,
+        output_path: String,
+        mode: Mode,
+        password: String,
+        use_compression: bool,
+    ) -> Self {
         Self {
             input_path,
             output_path,
@@ -309,7 +321,10 @@ impl CryptorApp {
                 Some(tray)
             }
             Err(e) => {
-                eprintln!("Failed to initialize system tray: {}. Running without tray icon.", e);
+                eprintln!(
+                    "Failed to initialize system tray: {}. Running without tray icon.",
+                    e
+                );
                 None
             }
         };
@@ -378,7 +393,8 @@ impl CryptorApp {
             app.input_path = file_path.clone();
 
             // Auto-detect mode if not explicitly provided
-            let detected_mode = if file_path.ends_with(".enc") || file_path.ends_with(".encrypted") {
+            let detected_mode = if file_path.ends_with(".enc") || file_path.ends_with(".encrypted")
+            {
                 Mode::Decrypt
             } else {
                 Mode::Encrypt
@@ -417,9 +433,13 @@ impl CryptorApp {
             // Auto-detect mode based on file
             if self.input_path.ends_with(".enc") || self.input_path.ends_with(".encrypted") {
                 self.mode = Some(Mode::Decrypt);
-                self.output_path = self.input_path.trim_end_matches(".enc")
-                    .trim_end_matches(".encrypted").to_string();
-                self.status_message = "Encrypted file detected - switched to Decrypt mode".to_string();
+                self.output_path = self
+                    .input_path
+                    .trim_end_matches(".enc")
+                    .trim_end_matches(".encrypted")
+                    .to_string();
+                self.status_message =
+                    "Encrypted file detected - switched to Decrypt mode".to_string();
             } else {
                 self.mode = Some(Mode::Encrypt);
                 self.output_path = format!("{}.enc", self.input_path);
@@ -519,10 +539,23 @@ impl CryptorApp {
 
             let result = match item.mode {
                 Mode::Encrypt => rt.block_on(async {
-                    encrypt_file(&item.input_path, &item.output_path, &item.password, item.use_compression, yubikey_enabled, yubikey_slot)
+                    encrypt_file(
+                        &item.input_path,
+                        &item.output_path,
+                        &item.password,
+                        item.use_compression,
+                        yubikey_enabled,
+                        yubikey_slot,
+                    )
                 }),
                 Mode::Decrypt => rt.block_on(async {
-                    decrypt_file(&item.input_path, &item.output_path, &item.password, yubikey_enabled, yubikey_slot)
+                    decrypt_file(
+                        &item.input_path,
+                        &item.output_path,
+                        &item.password,
+                        yubikey_enabled,
+                        yubikey_slot,
+                    )
                 }),
                 Mode::Volume => {
                     // Volume operations don't go through the queue
@@ -571,20 +604,29 @@ impl CryptorApp {
             .resizable(false)
             .show(ctx, |ui| {
                 let panel_frame = egui::Frame::default()
-                    .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, self.settings.panel_transparency))
+                    .fill(egui::Color32::from_rgba_unmultiplied(
+                        255,
+                        255,
+                        255,
+                        self.settings.panel_transparency,
+                    ))
                     .rounding(egui::Rounding::same(15.0))
                     .inner_margin(egui::Margin::same(20.0));
 
                 panel_frame.show(ui, |ui| {
-                    ui.heading(egui::RichText::new("Batch Operations Queue")
-                        .size(24.0)
-                        .color(egui::Color32::from_rgb(50, 50, 50)));
+                    ui.heading(
+                        egui::RichText::new("Batch Operations Queue")
+                            .size(24.0)
+                            .color(egui::Color32::from_rgb(50, 50, 50)),
+                    );
 
                     ui.add_space(15.0);
 
-                    ui.label(egui::RichText::new(format!("Items in queue: {}", self.queue.len()))
-                        .size(14.0)
-                        .color(egui::Color32::from_rgb(80, 80, 80)));
+                    ui.label(
+                        egui::RichText::new(format!("Items in queue: {}", self.queue.len()))
+                            .size(14.0)
+                            .color(egui::Color32::from_rgb(80, 80, 80)),
+                    );
 
                     ui.add_space(10.0);
 
@@ -601,15 +643,25 @@ impl CryptorApp {
                                     ui.horizontal(|ui| {
                                         // Status icon
                                         let (status_icon, status_color) = match &item.status {
-                                            QueueStatus::Pending => ("⏳", egui::Color32::from_rgb(200, 200, 200)),
-                                            QueueStatus::Processing => ("⚙", egui::Color32::from_rgb(91, 206, 250)),
-                                            QueueStatus::Completed => ("✓", egui::Color32::from_rgb(100, 200, 100)),
-                                            QueueStatus::Failed(_) => ("✗", egui::Color32::from_rgb(255, 100, 100)),
+                                            QueueStatus::Pending => {
+                                                ("⏳", egui::Color32::from_rgb(200, 200, 200))
+                                            }
+                                            QueueStatus::Processing => {
+                                                ("⚙", egui::Color32::from_rgb(91, 206, 250))
+                                            }
+                                            QueueStatus::Completed => {
+                                                ("✓", egui::Color32::from_rgb(100, 200, 100))
+                                            }
+                                            QueueStatus::Failed(_) => {
+                                                ("✗", egui::Color32::from_rgb(255, 100, 100))
+                                            }
                                         };
 
-                                        ui.label(egui::RichText::new(status_icon)
-                                            .size(18.0)
-                                            .color(status_color));
+                                        ui.label(
+                                            egui::RichText::new(status_icon)
+                                                .size(18.0)
+                                                .color(status_color),
+                                        );
 
                                         ui.vertical(|ui| {
                                             // File path
@@ -618,9 +670,11 @@ impl CryptorApp {
                                                 .and_then(|n| n.to_str())
                                                 .unwrap_or(&item.input_path);
 
-                                            ui.label(egui::RichText::new(filename)
-                                                .size(14.0)
-                                                .color(egui::Color32::from_rgb(50, 50, 50)));
+                                            ui.label(
+                                                egui::RichText::new(filename)
+                                                    .size(14.0)
+                                                    .color(egui::Color32::from_rgb(50, 50, 50)),
+                                            );
 
                                             // Mode indicator
                                             let mode_text = match item.mode {
@@ -628,33 +682,44 @@ impl CryptorApp {
                                                 Mode::Decrypt => "Decrypt",
                                                 Mode::Volume => "Volume",
                                             };
-                                            ui.label(egui::RichText::new(mode_text)
-                                                .size(11.0)
-                                                .color(egui::Color32::from_rgb(120, 120, 120)));
+                                            ui.label(
+                                                egui::RichText::new(mode_text)
+                                                    .size(11.0)
+                                                    .color(egui::Color32::from_rgb(120, 120, 120)),
+                                            );
 
                                             // Error message if failed
                                             if let QueueStatus::Failed(err) = &item.status {
-                                                ui.label(egui::RichText::new(format!("Error: {}", err))
-                                                    .size(11.0)
-                                                    .color(egui::Color32::from_rgb(255, 100, 100)));
+                                                ui.label(
+                                                    egui::RichText::new(format!("Error: {}", err))
+                                                        .size(11.0)
+                                                        .color(egui::Color32::from_rgb(
+                                                            255, 100, 100,
+                                                        )),
+                                                );
                                             }
                                         });
 
-                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                            // Remove button
-                                            if !matches!(item.status, QueueStatus::Processing) {
-                                                let remove_btn = egui::Button::new(
-                                                    egui::RichText::new("✗").size(14.0).color(egui::Color32::WHITE)
-                                                )
-                                                .fill(egui::Color32::from_rgb(245, 169, 184))
-                                                .min_size(egui::vec2(30.0, 30.0))
-                                                .rounding(egui::Rounding::same(15.0));
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                // Remove button
+                                                if !matches!(item.status, QueueStatus::Processing) {
+                                                    let remove_btn = egui::Button::new(
+                                                        egui::RichText::new("✗")
+                                                            .size(14.0)
+                                                            .color(egui::Color32::WHITE),
+                                                    )
+                                                    .fill(egui::Color32::from_rgb(245, 169, 184))
+                                                    .min_size(egui::vec2(30.0, 30.0))
+                                                    .rounding(egui::Rounding::same(15.0));
 
-                                                if ui.add(remove_btn).clicked() {
-                                                    items_to_remove.push(index);
+                                                    if ui.add(remove_btn).clicked() {
+                                                        items_to_remove.push(index);
+                                                    }
                                                 }
-                                            }
-                                        });
+                                            },
+                                        );
                                     });
                                 });
 
@@ -672,33 +737,48 @@ impl CryptorApp {
                     // Action buttons
                     ui.horizontal(|ui| {
                         let process_btn = egui::Button::new(
-                            egui::RichText::new("⚙ Process Queue").size(16.0).color(egui::Color32::WHITE)
+                            egui::RichText::new("⚙ Process Queue")
+                                .size(16.0)
+                                .color(egui::Color32::WHITE),
                         )
                         .fill(egui::Color32::from_rgb(91, 206, 250))
                         .min_size(egui::vec2(180.0, 40.0))
                         .rounding(egui::Rounding::same(20.0));
 
-                        if ui.add_enabled(!self.is_processing_queue && !self.queue.is_empty(), process_btn).clicked() {
+                        if ui
+                            .add_enabled(
+                                !self.is_processing_queue && !self.queue.is_empty(),
+                                process_btn,
+                            )
+                            .clicked()
+                        {
                             self.process_queue();
                         }
 
                         ui.add_space(10.0);
 
                         let clear_btn = egui::Button::new(
-                            egui::RichText::new("Clear Queue").size(16.0).color(egui::Color32::WHITE)
+                            egui::RichText::new("Clear Queue")
+                                .size(16.0)
+                                .color(egui::Color32::WHITE),
                         )
                         .fill(egui::Color32::from_rgb(245, 169, 184))
                         .min_size(egui::vec2(150.0, 40.0))
                         .rounding(egui::Rounding::same(20.0));
 
-                        if ui.add_enabled(!self.is_processing_queue, clear_btn).clicked() {
+                        if ui
+                            .add_enabled(!self.is_processing_queue, clear_btn)
+                            .clicked()
+                        {
                             self.clear_queue();
                         }
 
                         ui.add_space(10.0);
 
                         let close_btn = egui::Button::new(
-                            egui::RichText::new("Close").size(16.0).color(egui::Color32::WHITE)
+                            egui::RichText::new("Close")
+                                .size(16.0)
+                                .color(egui::Color32::WHITE),
                         )
                         .fill(egui::Color32::from_rgb(120, 120, 120))
                         .min_size(egui::vec2(100.0, 40.0))
@@ -711,9 +791,11 @@ impl CryptorApp {
 
                     if self.is_processing_queue {
                         ui.add_space(10.0);
-                        ui.label(egui::RichText::new("Processing queue...")
-                            .size(13.0)
-                            .color(egui::Color32::from_rgb(91, 206, 250)));
+                        ui.label(
+                            egui::RichText::new("Processing queue...")
+                                .size(13.0)
+                                .color(egui::Color32::from_rgb(91, 206, 250)),
+                        );
                     }
                 });
             });
@@ -919,7 +1001,14 @@ impl CryptorApp {
         match mode {
             Mode::Encrypt => {
                 let result = rt.block_on(async {
-                    encrypt_file(&input_path, &output_path, &password, use_compression, yubikey_enabled, yubikey_slot)
+                    encrypt_file(
+                        &input_path,
+                        &output_path,
+                        &password,
+                        use_compression,
+                        yubikey_enabled,
+                        yubikey_slot,
+                    )
                 });
 
                 match result {
@@ -939,13 +1028,23 @@ impl CryptorApp {
                         self.progress = 0.0;
 
                         // Show error notification
-                        notify_error("Encryption", &e.to_string(), self.settings.enable_notifications);
+                        notify_error(
+                            "Encryption",
+                            &e.to_string(),
+                            self.settings.enable_notifications,
+                        );
                     }
                 }
             }
             Mode::Decrypt => {
                 let result = rt.block_on(async {
-                    decrypt_file(&input_path, &output_path, &password, yubikey_enabled, yubikey_slot)
+                    decrypt_file(
+                        &input_path,
+                        &output_path,
+                        &password,
+                        yubikey_enabled,
+                        yubikey_slot,
+                    )
                 });
 
                 match result {
@@ -965,7 +1064,11 @@ impl CryptorApp {
                         self.progress = 0.0;
 
                         // Show error notification
-                        notify_error("Decryption", &e.to_string(), self.settings.enable_notifications);
+                        notify_error(
+                            "Decryption",
+                            &e.to_string(),
+                            self.settings.enable_notifications,
+                        );
                     }
                 }
             }
@@ -1033,64 +1136,127 @@ impl CryptorApp {
                     egui::Color32::from_rgb(200, 200, 200)
                 };
 
-                if ui.add(egui::Button::new(egui::RichText::new("📦 Create").size(14.0).color(egui::Color32::WHITE))
-                    .fill(create_color)
-                    .min_size(egui::vec2(120.0, 40.0))
-                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("📦 Create")
+                                .size(14.0)
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(create_color)
+                        .min_size(egui::vec2(120.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0)),
+                    )
+                    .clicked()
+                {
                     self.volume_tab = VolumeTab::Create;
                 }
 
                 ui.add_space(10.0);
 
-                if ui.add(egui::Button::new(egui::RichText::new("💾 Mount").size(14.0).color(egui::Color32::WHITE))
-                    .fill(mount_color)
-                    .min_size(egui::vec2(120.0, 40.0))
-                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("💾 Mount")
+                                .size(14.0)
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(mount_color)
+                        .min_size(egui::vec2(120.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0)),
+                    )
+                    .clicked()
+                {
                     self.volume_tab = VolumeTab::Mount;
                 }
 
                 ui.add_space(10.0);
 
-                if ui.add(egui::Button::new(egui::RichText::new("🔒 Hidden").size(14.0).color(egui::Color32::WHITE))
-                    .fill(hidden_color)
-                    .min_size(egui::vec2(120.0, 40.0))
-                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("🔒 Hidden")
+                                .size(14.0)
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(hidden_color)
+                        .min_size(egui::vec2(120.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0)),
+                    )
+                    .clicked()
+                {
                     self.volume_tab = VolumeTab::Hidden;
                 }
 
                 ui.add_space(10.0);
 
-                if ui.add(egui::Button::new(egui::RichText::new("ℹ️ Info").size(14.0).color(egui::Color32::WHITE))
-                    .fill(info_color)
-                    .min_size(egui::vec2(120.0, 40.0))
-                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("ℹ️ Info")
+                                .size(14.0)
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(info_color)
+                        .min_size(egui::vec2(120.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0)),
+                    )
+                    .clicked()
+                {
                     self.volume_tab = VolumeTab::Info;
                 }
 
                 ui.add_space(10.0);
 
-                if ui.add(egui::Button::new(egui::RichText::new("🔐 Password").size(14.0).color(egui::Color32::WHITE))
-                    .fill(password_color)
-                    .min_size(egui::vec2(120.0, 40.0))
-                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("🔐 Password")
+                                .size(14.0)
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(password_color)
+                        .min_size(egui::vec2(120.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0)),
+                    )
+                    .clicked()
+                {
                     self.volume_tab = VolumeTab::Password;
                 }
 
                 ui.add_space(10.0);
 
-                if ui.add(egui::Button::new(egui::RichText::new("🛡️ Security").size(14.0).color(egui::Color32::WHITE))
-                    .fill(security_color)
-                    .min_size(egui::vec2(120.0, 40.0))
-                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("🛡️ Security")
+                                .size(14.0)
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(security_color)
+                        .min_size(egui::vec2(120.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0)),
+                    )
+                    .clicked()
+                {
                     self.volume_tab = VolumeTab::Security;
                 }
 
                 ui.add_space(10.0);
 
-                if ui.add(egui::Button::new(egui::RichText::new("📡 Remote Wipe").size(14.0).color(egui::Color32::WHITE))
-                    .fill(remote_wipe_color)
-                    .min_size(egui::vec2(130.0, 40.0))
-                    .rounding(egui::Rounding::same(20.0))).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("📡 Remote Wipe")
+                                .size(14.0)
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(remote_wipe_color)
+                        .min_size(egui::vec2(130.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0)),
+                    )
+                    .clicked()
+                {
                     self.volume_tab = VolumeTab::RemoteWipe;
                 }
             });
@@ -1110,8 +1276,10 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Container Path").size(14.0));
                     ui.add_space(10.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_container_path)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_container_path)
+                            .desired_width(450.0),
+                    );
                     ui.add_space(10.0);
                     if ui.button("Browse...").clicked() {
                         if let Some(path) = rfd::FileDialog::new()
@@ -1129,8 +1297,7 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Volume Size").size(14.0));
                     ui.add_space(38.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_size)
-                        .desired_width(450.0));
+                    ui.add(egui::TextEdit::singleline(&mut self.volume_size).desired_width(450.0));
                     ui.add_space(10.0);
                     ui.label("(e.g., 100M, 1G, 500M)");
                 });
@@ -1141,9 +1308,11 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Password").size(14.0));
                     ui.add_space(58.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
-                        .password(true)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_password)
+                            .password(true)
+                            .desired_width(450.0),
+                    );
                 });
 
                 ui.add_space(15.0);
@@ -1151,9 +1320,11 @@ impl CryptorApp {
                 // Confirm password
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Confirm Password").size(14.0));
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_password_confirm)
-                        .password(true)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_password_confirm)
+                            .password(true)
+                            .desired_width(450.0),
+                    );
                 });
 
                 ui.add_space(20.0);
@@ -1161,7 +1332,9 @@ impl CryptorApp {
                 // Duress password section
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.enable_duress_password, "");
-                    ui.label(egui::RichText::new("Enable Duress Password (Self-Destruct)").size(14.0));
+                    ui.label(
+                        egui::RichText::new("Enable Duress Password (Self-Destruct)").size(14.0),
+                    );
                 });
 
                 if self.enable_duress_password {
@@ -1184,9 +1357,11 @@ impl CryptorApp {
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("Duress Password").size(14.0));
                         ui.add_space(22.0);
-                        ui.add(egui::TextEdit::singleline(&mut self.duress_password)
-                            .password(true)
-                            .desired_width(450.0));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.duress_password)
+                                .password(true)
+                                .desired_width(450.0),
+                        );
                     });
 
                     ui.add_space(10.0);
@@ -1195,17 +1370,25 @@ impl CryptorApp {
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("Confirm Duress").size(14.0));
                         ui.add_space(30.0);
-                        ui.add(egui::TextEdit::singleline(&mut self.duress_password_confirm)
-                            .password(true)
-                            .desired_width(450.0));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.duress_password_confirm)
+                                .password(true)
+                                .desired_width(450.0),
+                        );
                     });
 
                     // Validation
-                    if !self.duress_password.is_empty() && self.duress_password == self.volume_password {
+                    if !self.duress_password.is_empty()
+                        && self.duress_password == self.volume_password
+                    {
                         ui.add_space(5.0);
-                        ui.label(egui::RichText::new("✗ Duress password must be different from main password")
+                        ui.label(
+                            egui::RichText::new(
+                                "✗ Duress password must be different from main password",
+                            )
                             .size(12.0)
-                            .color(egui::Color32::from_rgb(255, 100, 100)));
+                            .color(egui::Color32::from_rgb(255, 100, 100)),
+                        );
                     }
                 }
 
@@ -1308,8 +1491,10 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Container Path").size(14.0));
                     ui.add_space(10.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_container_path)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_container_path)
+                            .desired_width(450.0),
+                    );
                     ui.add_space(10.0);
                     if ui.button("Browse...").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_file() {
@@ -1324,8 +1509,10 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Mount Point").size(14.0));
                     ui.add_space(25.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_mount_point)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_mount_point)
+                            .desired_width(450.0),
+                    );
                     ui.add_space(10.0);
                     if ui.button("Browse...").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_folder() {
@@ -1340,9 +1527,11 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Password").size(14.0));
                     ui.add_space(58.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
-                        .password(true)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_password)
+                            .password(true)
+                            .desired_width(450.0),
+                    );
                 });
 
                 ui.add_space(15.0);
@@ -1367,8 +1556,10 @@ impl CryptorApp {
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("Hidden Offset").size(14.0));
                         ui.add_space(20.0);
-                        ui.add(egui::TextEdit::singleline(&mut self.mount_hidden_offset)
-                            .desired_width(420.0));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.mount_hidden_offset)
+                                .desired_width(420.0),
+                        );
                         ui.add_space(10.0);
                         ui.label("(e.g., 500M)");
                     });
@@ -1379,9 +1570,11 @@ impl CryptorApp {
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("Hidden Password").size(14.0));
                         ui.add_space(2.0);
-                        ui.add(egui::TextEdit::singleline(&mut self.mount_hidden_password)
-                            .password(true)
-                            .desired_width(420.0));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.mount_hidden_password)
+                                .password(true)
+                                .desired_width(420.0),
+                        );
                     });
                 }
 
@@ -1395,19 +1588,28 @@ impl CryptorApp {
                             && !self.volume_password.is_empty();
 
                         let hidden_valid = if self.mount_as_hidden {
-                            !self.mount_hidden_offset.is_empty() && !self.mount_hidden_password.is_empty()
+                            !self.mount_hidden_offset.is_empty()
+                                && !self.mount_hidden_password.is_empty()
                         } else {
                             true
                         };
 
                         let can_mount = basic_valid && hidden_valid;
 
-                        if ui.add_enabled(can_mount, egui::Button::new(
-                            egui::RichText::new("💾 Mount Volume").size(16.0).color(egui::Color32::WHITE))
-                            .fill(egui::Color32::from_rgb(91, 206, 250))
-                            .min_size(egui::vec2(200.0, 50.0))
-                            .rounding(egui::Rounding::same(25.0))).clicked() {
-
+                        if ui
+                            .add_enabled(
+                                can_mount,
+                                egui::Button::new(
+                                    egui::RichText::new("💾 Mount Volume")
+                                        .size(16.0)
+                                        .color(egui::Color32::WHITE),
+                                )
+                                .fill(egui::Color32::from_rgb(91, 206, 250))
+                                .min_size(egui::vec2(200.0, 50.0))
+                                .rounding(egui::Rounding::same(25.0)),
+                            )
+                            .clicked()
+                        {
                             #[cfg(feature = "encrypted-volumes")]
                             {
                                 use tesseract_lib::volume::MountOptions;
@@ -1415,9 +1617,12 @@ impl CryptorApp {
                                 // Parse hidden offset if mounting hidden volume
                                 let (hidden_offset, hidden_password) = if self.mount_as_hidden {
                                     match parse_size(&self.mount_hidden_offset) {
-                                        Ok(offset) => (Some(offset), Some(self.mount_hidden_password.clone())),
+                                        Ok(offset) => {
+                                            (Some(offset), Some(self.mount_hidden_password.clone()))
+                                        }
                                         Err(e) => {
-                                            self.volume_status = format!("✗ Invalid hidden offset: {}", e);
+                                            self.volume_status =
+                                                format!("✗ Invalid hidden offset: {}", e);
                                             return;
                                         }
                                     }
@@ -1427,7 +1632,9 @@ impl CryptorApp {
 
                                 if let Some(ref mut manager) = self.volume_manager {
                                     let options = MountOptions {
-                                        mount_point: std::path::PathBuf::from(&self.volume_mount_point),
+                                        mount_point: std::path::PathBuf::from(
+                                            &self.volume_mount_point,
+                                        ),
                                         read_only: self.volume_read_only,
                                         allow_other: false,
                                         auto_unmount: true,
@@ -1442,8 +1649,15 @@ impl CryptorApp {
                                         options,
                                     ) {
                                         Ok(_) => {
-                                            let mount_type = if self.mount_as_hidden { "Hidden volume" } else { "Volume" };
-                                            self.volume_status = format!("✓ {} mounted at {}", mount_type, self.volume_mount_point);
+                                            let mount_type = if self.mount_as_hidden {
+                                                "Hidden volume"
+                                            } else {
+                                                "Volume"
+                                            };
+                                            self.volume_status = format!(
+                                                "✓ {} mounted at {}",
+                                                mount_type, self.volume_mount_point
+                                            );
                                             self.volume_password.clear();
                                             self.mount_hidden_password.clear();
                                             // Update mounted volumes list
@@ -1459,18 +1673,29 @@ impl CryptorApp {
 
                         ui.add_space(20.0);
 
-                        if ui.add_enabled(!self.volume_container_path.is_empty(), egui::Button::new(
-                            egui::RichText::new("⏏️ Unmount").size(16.0).color(egui::Color32::WHITE))
-                            .fill(egui::Color32::from_rgb(245, 169, 184))
-                            .min_size(egui::vec2(200.0, 50.0))
-                            .rounding(egui::Rounding::same(25.0))).clicked() {
-
+                        if ui
+                            .add_enabled(
+                                !self.volume_container_path.is_empty(),
+                                egui::Button::new(
+                                    egui::RichText::new("⏏️ Unmount")
+                                        .size(16.0)
+                                        .color(egui::Color32::WHITE),
+                                )
+                                .fill(egui::Color32::from_rgb(245, 169, 184))
+                                .min_size(egui::vec2(200.0, 50.0))
+                                .rounding(egui::Rounding::same(25.0)),
+                            )
+                            .clicked()
+                        {
                             #[cfg(feature = "encrypted-volumes")]
                             {
                                 if let Some(ref mut manager) = self.volume_manager {
-                                    match manager.unmount(std::path::Path::new(&self.volume_container_path)) {
+                                    match manager
+                                        .unmount(std::path::Path::new(&self.volume_container_path))
+                                    {
                                         Ok(_) => {
-                                            self.volume_status = "✓ Volume unmounted successfully".to_string();
+                                            self.volume_status =
+                                                "✓ Volume unmounted successfully".to_string();
                                             // Update mounted volumes list
                                             self.mounted_volumes = manager.list_mounted();
                                         }
@@ -1502,9 +1727,11 @@ impl CryptorApp {
 
                     for vol_info in &self.mounted_volumes {
                         ui.horizontal(|ui| {
-                            ui.label(format!("📦 {} → {}",
+                            ui.label(format!(
+                                "📦 {} → {}",
                                 vol_info.container_path.display(),
-                                vol_info.mount_point.display()));
+                                vol_info.mount_point.display()
+                            ));
                         });
                     }
                 }
@@ -1533,8 +1760,10 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Outer Container").size(14.0));
                     ui.add_space(10.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.hidden_volume_container)
-                        .desired_width(420.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.hidden_volume_container)
+                            .desired_width(420.0),
+                    );
                     ui.add_space(10.0);
                     if ui.button("Browse...").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_file() {
@@ -1549,8 +1778,10 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Hidden Size").size(14.0));
                     ui.add_space(32.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.hidden_volume_size)
-                        .desired_width(420.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.hidden_volume_size)
+                            .desired_width(420.0),
+                    );
                     ui.add_space(10.0);
                     ui.label("(e.g., 50M, 100M)");
                 });
@@ -1561,8 +1792,10 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Offset").size(14.0));
                     ui.add_space(65.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.hidden_volume_offset)
-                        .desired_width(420.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.hidden_volume_offset)
+                            .desired_width(420.0),
+                    );
                     ui.add_space(10.0);
                     ui.label("(e.g., 500M from start)");
                 });
@@ -1573,9 +1806,11 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Outer Password").size(14.0));
                     ui.add_space(10.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
-                        .password(true)
-                        .desired_width(420.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_password)
+                            .password(true)
+                            .desired_width(420.0),
+                    );
                 });
 
                 ui.add_space(15.0);
@@ -1584,9 +1819,11 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Hidden Password").size(14.0));
                     ui.add_space(2.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.hidden_volume_password)
-                        .password(true)
-                        .desired_width(420.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.hidden_volume_password)
+                            .password(true)
+                            .desired_width(420.0),
+                    );
                 });
 
                 ui.add_space(15.0);
@@ -1595,9 +1832,11 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Confirm Hidden").size(14.0));
                     ui.add_space(12.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.hidden_volume_password_confirm)
-                        .password(true)
-                        .desired_width(420.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.hidden_volume_password_confirm)
+                            .password(true)
+                            .desired_width(420.0),
+                    );
                 });
 
                 ui.add_space(25.0);
@@ -1611,12 +1850,20 @@ impl CryptorApp {
                         && !self.hidden_volume_password.is_empty()
                         && self.hidden_volume_password == self.hidden_volume_password_confirm;
 
-                    if ui.add_enabled(can_create, egui::Button::new(
-                        egui::RichText::new("🔒 Create Hidden Volume").size(16.0).color(egui::Color32::WHITE))
-                        .fill(egui::Color32::from_rgb(91, 206, 250))
-                        .min_size(egui::vec2(250.0, 50.0))
-                        .rounding(egui::Rounding::same(25.0))).clicked() {
-
+                    if ui
+                        .add_enabled(
+                            can_create,
+                            egui::Button::new(
+                                egui::RichText::new("🔒 Create Hidden Volume")
+                                    .size(16.0)
+                                    .color(egui::Color32::WHITE),
+                            )
+                            .fill(egui::Color32::from_rgb(91, 206, 250))
+                            .min_size(egui::vec2(250.0, 50.0))
+                            .rounding(egui::Rounding::same(25.0)),
+                        )
+                        .clicked()
+                    {
                         #[cfg(feature = "encrypted-volumes")]
                         {
                             use tesseract_lib::volume::Container;
@@ -1650,17 +1897,22 @@ impl CryptorApp {
                                                     self.hidden_volume_password_confirm.clear();
                                                 }
                                                 Err(e) => {
-                                                    self.hidden_volume_status = format!("❌ Failed to create hidden volume: {}", e);
+                                                    self.hidden_volume_status = format!(
+                                                        "❌ Failed to create hidden volume: {}",
+                                                        e
+                                                    );
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            self.hidden_volume_status = format!("❌ Failed to open outer container: {}", e);
+                                            self.hidden_volume_status =
+                                                format!("❌ Failed to open outer container: {}", e);
                                         }
                                     }
                                 }
                                 (Err(e), _) => {
-                                    self.hidden_volume_status = format!("❌ Invalid hidden size: {}", e);
+                                    self.hidden_volume_status =
+                                        format!("❌ Invalid hidden size: {}", e);
                                 }
                                 (_, Err(e)) => {
                                     self.hidden_volume_status = format!("❌ Invalid offset: {}", e);
@@ -1701,8 +1953,10 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Container Path").size(14.0));
                     ui.add_space(10.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_container_path)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_container_path)
+                            .desired_width(450.0),
+                    );
                     ui.add_space(10.0);
                     if ui.button("Browse...").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_file() {
@@ -1717,9 +1971,11 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Password").size(14.0));
                     ui.add_space(58.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
-                        .password(true)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_password)
+                            .password(true)
+                            .desired_width(450.0),
+                    );
                 });
 
                 ui.add_space(30.0);
@@ -1771,7 +2027,11 @@ impl CryptorApp {
                     egui::ScrollArea::vertical()
                         .max_height(200.0)
                         .show(ui, |ui| {
-                            ui.label(egui::RichText::new(info).size(12.0).family(egui::FontFamily::Monospace));
+                            ui.label(
+                                egui::RichText::new(info)
+                                    .size(12.0)
+                                    .family(egui::FontFamily::Monospace),
+                            );
                         });
                 }
 
@@ -1794,8 +2054,10 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Container Path").size(14.0));
                     ui.add_space(10.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_container_path)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_container_path)
+                            .desired_width(450.0),
+                    );
                     ui.add_space(10.0);
                     if ui.button("Browse...").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_file() {
@@ -1810,9 +2072,11 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Current Password").size(14.0));
                     ui.add_space(10.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
-                        .password(true)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_password)
+                            .password(true)
+                            .desired_width(450.0),
+                    );
                 });
 
                 ui.add_space(15.0);
@@ -1821,9 +2085,11 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("New Password").size(14.0));
                     ui.add_space(34.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_password_confirm)
-                        .password(true)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_password_confirm)
+                            .password(true)
+                            .desired_width(450.0),
+                    );
                 });
 
                 ui.add_space(30.0);
@@ -1834,12 +2100,20 @@ impl CryptorApp {
                         && !self.volume_password.is_empty()
                         && !self.volume_password_confirm.is_empty();
 
-                    if ui.add_enabled(can_change, egui::Button::new(
-                        egui::RichText::new("🔐 Change Password").size(16.0).color(egui::Color32::WHITE))
-                        .fill(egui::Color32::from_rgb(91, 206, 250))
-                        .min_size(egui::vec2(250.0, 50.0))
-                        .rounding(egui::Rounding::same(25.0))).clicked() {
-
+                    if ui
+                        .add_enabled(
+                            can_change,
+                            egui::Button::new(
+                                egui::RichText::new("🔐 Change Password")
+                                    .size(16.0)
+                                    .color(egui::Color32::WHITE),
+                            )
+                            .fill(egui::Color32::from_rgb(91, 206, 250))
+                            .min_size(egui::vec2(250.0, 50.0))
+                            .rounding(egui::Rounding::same(25.0)),
+                        )
+                        .clicked()
+                    {
                         match Container::open(
                             std::path::Path::new(&self.volume_container_path),
                             &self.volume_password,
@@ -1847,7 +2121,8 @@ impl CryptorApp {
                             Ok(mut container) => {
                                 match container.change_password(&self.volume_password_confirm) {
                                     Ok(()) => {
-                                        self.volume_status = "✓ Password changed successfully".to_string();
+                                        self.volume_status =
+                                            "✓ Password changed successfully".to_string();
                                         self.volume_password.clear();
                                         self.volume_password_confirm.clear();
                                     }
@@ -1900,8 +2175,10 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Container Path").size(14.0));
                     ui.add_space(10.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_container_path)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_container_path)
+                            .desired_width(450.0),
+                    );
                     ui.add_space(10.0);
                     if ui.button("Browse...").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_file() {
@@ -1918,9 +2195,11 @@ impl CryptorApp {
                 // Container password to unlock
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Container Password").size(14.0));
-                    ui.add(egui::TextEdit::singleline(&mut self.volume_password)
-                        .password(true)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.volume_password)
+                            .password(true)
+                            .desired_width(450.0),
+                    );
                 });
 
                 ui.add_space(15.0);
@@ -1929,9 +2208,11 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Duress Password").size(14.0));
                     ui.add_space(18.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.duress_password)
-                        .password(true)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.duress_password)
+                            .password(true)
+                            .desired_width(450.0),
+                    );
                 });
 
                 ui.add_space(15.0);
@@ -1940,9 +2221,11 @@ impl CryptorApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Confirm Duress").size(14.0));
                     ui.add_space(27.0);
-                    ui.add(egui::TextEdit::singleline(&mut self.duress_password_confirm)
-                        .password(true)
-                        .desired_width(450.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.duress_password_confirm)
+                            .password(true)
+                            .desired_width(450.0),
+                    );
                 });
 
                 ui.add_space(30.0);
@@ -1958,12 +2241,20 @@ impl CryptorApp {
                         && self.duress_password == self.duress_password_confirm
                         && self.duress_password != self.volume_password;
 
-                    if ui.add_enabled(can_set, egui::Button::new(
-                        egui::RichText::new("🛡️ Set Duress Password").size(14.0).color(egui::Color32::WHITE))
-                        .fill(egui::Color32::from_rgb(180, 50, 50))
-                        .min_size(egui::vec2(200.0, 45.0))
-                        .rounding(egui::Rounding::same(20.0))).clicked() {
-
+                    if ui
+                        .add_enabled(
+                            can_set,
+                            egui::Button::new(
+                                egui::RichText::new("🛡️ Set Duress Password")
+                                    .size(14.0)
+                                    .color(egui::Color32::WHITE),
+                            )
+                            .fill(egui::Color32::from_rgb(180, 50, 50))
+                            .min_size(egui::vec2(200.0, 45.0))
+                            .rounding(egui::Rounding::same(20.0)),
+                        )
+                        .clicked()
+                    {
                         match Container::open(
                             std::path::Path::new(&self.volume_container_path),
                             &self.volume_password,
@@ -1971,7 +2262,8 @@ impl CryptorApp {
                             Ok(mut container) => {
                                 match container.set_duress_password(&self.duress_password) {
                                     Ok(()) => {
-                                        self.duress_status = "✓ Duress password set successfully".to_string();
+                                        self.duress_status =
+                                            "✓ Duress password set successfully".to_string();
                                         self.has_duress_password = true;
                                         self.duress_password.clear();
                                         self.duress_password_confirm.clear();
@@ -1990,26 +2282,36 @@ impl CryptorApp {
                     ui.add_space(20.0);
 
                     // Remove duress password button
-                    let can_remove = !self.volume_container_path.is_empty()
-                        && !self.volume_password.is_empty();
+                    let can_remove =
+                        !self.volume_container_path.is_empty() && !self.volume_password.is_empty();
 
-                    if ui.add_enabled(can_remove, egui::Button::new(
-                        egui::RichText::new("🗑️ Remove Duress Password").size(14.0).color(egui::Color32::WHITE))
-                        .fill(egui::Color32::from_rgb(100, 100, 100))
-                        .min_size(egui::vec2(220.0, 45.0))
-                        .rounding(egui::Rounding::same(20.0))).clicked() {
-
+                    if ui
+                        .add_enabled(
+                            can_remove,
+                            egui::Button::new(
+                                egui::RichText::new("🗑️ Remove Duress Password")
+                                    .size(14.0)
+                                    .color(egui::Color32::WHITE),
+                            )
+                            .fill(egui::Color32::from_rgb(100, 100, 100))
+                            .min_size(egui::vec2(220.0, 45.0))
+                            .rounding(egui::Rounding::same(20.0)),
+                        )
+                        .clicked()
+                    {
                         match Container::open(
                             std::path::Path::new(&self.volume_container_path),
                             &self.volume_password,
                         ) {
                             Ok(mut container) => {
                                 if !container.has_duress_password() {
-                                    self.duress_status = "Note: No duress password is currently set".to_string();
+                                    self.duress_status =
+                                        "Note: No duress password is currently set".to_string();
                                 } else {
                                     match container.remove_duress_password() {
                                         Ok(()) => {
-                                            self.duress_status = "✓ Duress password removed".to_string();
+                                            self.duress_status =
+                                                "✓ Duress password removed".to_string();
                                             self.has_duress_password = false;
                                         }
                                         Err(e) => {
@@ -2027,17 +2329,31 @@ impl CryptorApp {
 
                 // Validation messages
                 ui.add_space(15.0);
-                if !self.duress_password.is_empty() && !self.duress_password_confirm.is_empty()
-                    && self.duress_password != self.duress_password_confirm {
+                if !self.duress_password.is_empty()
+                    && !self.duress_password_confirm.is_empty()
+                    && self.duress_password != self.duress_password_confirm
+                {
                     ui.vertical_centered(|ui| {
-                        ui.label(egui::RichText::new("⚠️ Duress passwords do not match").size(12.0).color(egui::Color32::from_rgb(255, 150, 150)));
+                        ui.label(
+                            egui::RichText::new("⚠️ Duress passwords do not match")
+                                .size(12.0)
+                                .color(egui::Color32::from_rgb(255, 150, 150)),
+                        );
                     });
                 }
 
-                if !self.duress_password.is_empty() && !self.volume_password.is_empty()
-                    && self.duress_password == self.volume_password {
+                if !self.duress_password.is_empty()
+                    && !self.volume_password.is_empty()
+                    && self.duress_password == self.volume_password
+                {
                     ui.vertical_centered(|ui| {
-                        ui.label(egui::RichText::new("⚠️ Duress password must be different from container password").size(12.0).color(egui::Color32::from_rgb(255, 150, 150)));
+                        ui.label(
+                            egui::RichText::new(
+                                "⚠️ Duress password must be different from container password",
+                            )
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(255, 150, 150)),
+                        );
                     });
                 }
 
@@ -2088,26 +2404,19 @@ impl CryptorApp {
                         let px = x * scale + sx;
                         let py = y * scale + sy;
                         let idx = (py * img_size + px) * 4;
-                        pixels[idx] = color;     // R
+                        pixels[idx] = color; // R
                         pixels[idx + 1] = color; // G
                         pixels[idx + 2] = color; // B
-                        pixels[idx + 3] = 255;   // A
+                        pixels[idx + 3] = 255; // A
                     }
                 }
             }
         }
 
         // Create egui texture
-        let color_image = egui::ColorImage::from_rgba_unmultiplied(
-            [img_size, img_size],
-            &pixels,
-        );
+        let color_image = egui::ColorImage::from_rgba_unmultiplied([img_size, img_size], &pixels);
 
-        Some(ctx.load_texture(
-            "qr_code",
-            color_image,
-            egui::TextureOptions::NEAREST,
-        ))
+        Some(ctx.load_texture("qr_code", color_image, egui::TextureOptions::NEAREST))
     }
 
     #[cfg(feature = "encrypted-volumes")]
@@ -2147,16 +2456,24 @@ impl CryptorApp {
 
         if self.remote_wipe_token_display.is_empty() {
             // Generate new token button
-            if ui.add(egui::Button::new(
-                egui::RichText::new("🔑 Generate Wipe Token").size(14.0).color(egui::Color32::WHITE))
-                .fill(egui::Color32::from_rgb(91, 206, 250))
-                .min_size(egui::vec2(200.0, 40.0))
-                .rounding(egui::Rounding::same(20.0))).clicked() {
-
+            if ui
+                .add(
+                    egui::Button::new(
+                        egui::RichText::new("🔑 Generate Wipe Token")
+                            .size(14.0)
+                            .color(egui::Color32::WHITE),
+                    )
+                    .fill(egui::Color32::from_rgb(91, 206, 250))
+                    .min_size(egui::vec2(200.0, 40.0))
+                    .rounding(egui::Rounding::same(20.0)),
+                )
+                .clicked()
+            {
                 let token = WipeToken::generate();
                 self.remote_wipe_token = token.to_hex().to_string();
                 self.remote_wipe_token_display = self.remote_wipe_token.clone();
-                self.remote_wipe_status = "✓ Token generated - SAVE THIS TOKEN SECURELY!".to_string();
+                self.remote_wipe_status =
+                    "✓ Token generated - SAVE THIS TOKEN SECURELY!".to_string();
                 generate_qr = true;
                 qr_token = self.remote_wipe_token.clone();
             }
@@ -2168,7 +2485,11 @@ impl CryptorApp {
                 .inner_margin(egui::Margin::same(12.0))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("Token:").size(12.0).color(egui::Color32::GRAY));
+                        ui.label(
+                            egui::RichText::new("Token:")
+                                .size(12.0)
+                                .color(egui::Color32::GRAY),
+                        );
                         ui.add_space(10.0);
                         // Show truncated token with copy button
                         let display_token = if self.remote_wipe_token_display.len() > 32 {
@@ -2176,7 +2497,12 @@ impl CryptorApp {
                         } else {
                             self.remote_wipe_token_display.clone()
                         };
-                        ui.label(egui::RichText::new(&display_token).size(11.0).color(egui::Color32::from_rgb(150, 255, 150)).monospace());
+                        ui.label(
+                            egui::RichText::new(&display_token)
+                                .size(11.0)
+                                .color(egui::Color32::from_rgb(150, 255, 150))
+                                .monospace(),
+                        );
                     });
                 });
 
@@ -2184,11 +2510,19 @@ impl CryptorApp {
 
             ui.horizontal(|ui| {
                 // Copy to clipboard button
-                if ui.add(egui::Button::new(
-                    egui::RichText::new("📋 Copy Token").size(12.0).color(egui::Color32::WHITE))
-                    .fill(egui::Color32::from_rgb(100, 100, 100))
-                    .min_size(egui::vec2(120.0, 30.0))
-                    .rounding(egui::Rounding::same(15.0))).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("📋 Copy Token")
+                                .size(12.0)
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(egui::Color32::from_rgb(100, 100, 100))
+                        .min_size(egui::vec2(120.0, 30.0))
+                        .rounding(egui::Rounding::same(15.0)),
+                    )
+                    .clicked()
+                {
                     ui.output_mut(|o| o.copied_text = self.remote_wipe_token_display.clone());
                     self.remote_wipe_status = "✓ Token copied to clipboard".to_string();
                 }
@@ -2196,15 +2530,24 @@ impl CryptorApp {
                 ui.add_space(10.0);
 
                 // Regenerate token button
-                if ui.add(egui::Button::new(
-                    egui::RichText::new("🔄 Regenerate").size(12.0).color(egui::Color32::WHITE))
-                    .fill(egui::Color32::from_rgb(180, 100, 50))
-                    .min_size(egui::vec2(120.0, 30.0))
-                    .rounding(egui::Rounding::same(15.0))).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("🔄 Regenerate")
+                                .size(12.0)
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(egui::Color32::from_rgb(180, 100, 50))
+                        .min_size(egui::vec2(120.0, 30.0))
+                        .rounding(egui::Rounding::same(15.0)),
+                    )
+                    .clicked()
+                {
                     let token = WipeToken::generate();
                     self.remote_wipe_token = token.to_hex().to_string();
                     self.remote_wipe_token_display = self.remote_wipe_token.clone();
-                    self.remote_wipe_status = "✓ New token generated - old token is now INVALID!".to_string();
+                    self.remote_wipe_status =
+                        "✓ New token generated - old token is now INVALID!".to_string();
                     generate_qr = true;
                     qr_token = self.remote_wipe_token.clone();
                 }
@@ -2212,11 +2555,19 @@ impl CryptorApp {
                 ui.add_space(10.0);
 
                 // Clear token button
-                if ui.add(egui::Button::new(
-                    egui::RichText::new("🗑️ Clear").size(12.0).color(egui::Color32::WHITE))
-                    .fill(egui::Color32::from_rgb(180, 50, 50))
-                    .min_size(egui::vec2(80.0, 30.0))
-                    .rounding(egui::Rounding::same(15.0))).clicked() {
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("🗑️ Clear")
+                                .size(12.0)
+                                .color(egui::Color32::WHITE),
+                        )
+                        .fill(egui::Color32::from_rgb(180, 50, 50))
+                        .min_size(egui::vec2(80.0, 30.0))
+                        .rounding(egui::Rounding::same(15.0)),
+                    )
+                    .clicked()
+                {
                     self.remote_wipe_token.clear();
                     self.remote_wipe_token_display.clear();
                     self.remote_wipe_qr_texture = None;
@@ -2227,12 +2578,24 @@ impl CryptorApp {
 
                 // Toggle QR code button
                 if self.remote_wipe_qr_texture.is_some() {
-                    let qr_btn_text = if self.remote_wipe_show_qr { "Hide QR" } else { "Show QR" };
-                    if ui.add(egui::Button::new(
-                        egui::RichText::new(qr_btn_text).size(12.0).color(egui::Color32::WHITE))
-                        .fill(egui::Color32::from_rgb(70, 70, 120))
-                        .min_size(egui::vec2(80.0, 30.0))
-                        .rounding(egui::Rounding::same(15.0))).clicked() {
+                    let qr_btn_text = if self.remote_wipe_show_qr {
+                        "Hide QR"
+                    } else {
+                        "Show QR"
+                    };
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new(qr_btn_text)
+                                    .size(12.0)
+                                    .color(egui::Color32::WHITE),
+                            )
+                            .fill(egui::Color32::from_rgb(70, 70, 120))
+                            .min_size(egui::vec2(80.0, 30.0))
+                            .rounding(egui::Rounding::same(15.0)),
+                        )
+                        .clicked()
+                    {
                         self.remote_wipe_show_qr = !self.remote_wipe_show_qr;
                     }
                 }
@@ -2248,11 +2611,17 @@ impl CryptorApp {
                             .rounding(egui::Rounding::same(8.0))
                             .inner_margin(egui::Margin::same(10.0))
                             .show(ui, |ui| {
-                                ui.image(egui::load::SizedTexture::new(texture.id(), egui::vec2(200.0, 200.0)));
+                                ui.image(egui::load::SizedTexture::new(
+                                    texture.id(),
+                                    egui::vec2(200.0, 200.0),
+                                ));
                             });
                         ui.add_space(5.0);
-                        ui.label(egui::RichText::new("Scan to copy token to password manager")
-                            .size(11.0).color(egui::Color32::GRAY));
+                        ui.label(
+                            egui::RichText::new("Scan to copy token to password manager")
+                                .size(11.0)
+                                .color(egui::Color32::GRAY),
+                        );
                     });
                 } else if !self.remote_wipe_token_display.is_empty() {
                     // Generate QR code if token exists but no texture
@@ -2276,8 +2645,13 @@ impl CryptorApp {
         // Keyfile paths section
         ui.label(egui::RichText::new("Protected Keyfile Paths").size(16.0));
         ui.add_space(5.0);
-        ui.label(egui::RichText::new("Files at these paths will be securely destroyed when a wipe command is received.")
-            .size(11.0).color(egui::Color32::GRAY));
+        ui.label(
+            egui::RichText::new(
+                "Files at these paths will be securely destroyed when a wipe command is received.",
+            )
+            .size(11.0)
+            .color(egui::Color32::GRAY),
+        );
         ui.add_space(10.0);
 
         // List existing paths
@@ -2292,11 +2666,14 @@ impl CryptorApp {
                         ui.horizontal(|ui| {
                             ui.label(egui::RichText::new("📄").size(12.0));
                             ui.label(egui::RichText::new(path).size(11.0).monospace());
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.small_button("✗").clicked() {
-                                    path_to_remove = Some(idx);
-                                }
-                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui.small_button("✗").clicked() {
+                                        path_to_remove = Some(idx);
+                                    }
+                                },
+                            );
                         });
                     }
                     if let Some(idx) = path_to_remove {
@@ -2308,9 +2685,11 @@ impl CryptorApp {
 
         // Add new path
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.remote_wipe_new_path)
-                .hint_text("Enter keyfile path...")
-                .desired_width(400.0));
+            ui.add(
+                egui::TextEdit::singleline(&mut self.remote_wipe_new_path)
+                    .hint_text("Enter keyfile path...")
+                    .desired_width(400.0),
+            );
             ui.add_space(10.0);
             if ui.button("Browse...").clicked() {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
@@ -2318,9 +2697,19 @@ impl CryptorApp {
                 }
             }
             ui.add_space(10.0);
-            if ui.add_enabled(!self.remote_wipe_new_path.is_empty(), egui::Button::new("+ Add")).clicked() {
-                if !self.remote_wipe_keyfile_paths.contains(&self.remote_wipe_new_path) {
-                    self.remote_wipe_keyfile_paths.push(self.remote_wipe_new_path.clone());
+            if ui
+                .add_enabled(
+                    !self.remote_wipe_new_path.is_empty(),
+                    egui::Button::new("+ Add"),
+                )
+                .clicked()
+            {
+                if !self
+                    .remote_wipe_keyfile_paths
+                    .contains(&self.remote_wipe_new_path)
+                {
+                    self.remote_wipe_keyfile_paths
+                        .push(self.remote_wipe_new_path.clone());
                 }
                 self.remote_wipe_new_path.clear();
             }
@@ -2361,7 +2750,11 @@ impl CryptorApp {
                 } else {
                     egui::Color32::from_rgb(200, 200, 200)
                 };
-                ui.label(egui::RichText::new(&self.remote_wipe_status).size(13.0).color(color));
+                ui.label(
+                    egui::RichText::new(&self.remote_wipe_status)
+                        .size(13.0)
+                        .color(color),
+                );
             });
         }
 
@@ -2373,12 +2766,20 @@ impl CryptorApp {
             .rounding(egui::Rounding::same(10.0))
             .inner_margin(egui::Margin::same(15.0))
             .show(ui, |ui| {
-                ui.label(egui::RichText::new("🌐 Web Dashboard").size(14.0).color(egui::Color32::from_rgb(91, 206, 250)));
+                ui.label(
+                    egui::RichText::new("🌐 Web Dashboard")
+                        .size(14.0)
+                        .color(egui::Color32::from_rgb(91, 206, 250)),
+                );
                 ui.add_space(5.0);
-                ui.label(egui::RichText::new(
-                    "To trigger a remote wipe, use the web dashboard from any device.\n\
-                    You'll need your wipe token and volume ID."
-                ).size(11.0).color(egui::Color32::from_rgb(180, 180, 200)));
+                ui.label(
+                    egui::RichText::new(
+                        "To trigger a remote wipe, use the web dashboard from any device.\n\
+                    You'll need your wipe token and volume ID.",
+                    )
+                    .size(11.0)
+                    .color(egui::Color32::from_rgb(180, 180, 200)),
+                );
             });
     }
 }
@@ -2464,19 +2865,21 @@ impl eframe::App for CryptorApp {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if self.tray_manager.is_some()
-                        && ui.button("Minimize to Tray").clicked() {
-                            self.window_visible = false;
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-                            ui.close_menu();
-                        }
+                    if self.tray_manager.is_some() && ui.button("Minimize to Tray").clicked() {
+                        self.window_visible = false;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                        ui.close_menu();
+                    }
                     if ui.button("Exit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
 
                 ui.menu_button("Queue", |ui| {
-                    if ui.button(format!("📋 View Queue ({})", self.queue.len())).clicked() {
+                    if ui
+                        .button(format!("📋 View Queue ({})", self.queue.len()))
+                        .clicked()
+                    {
                         self.show_queue_panel = true;
                         ui.close_menu();
                     }
@@ -2524,7 +2927,12 @@ impl eframe::App for CryptorApp {
                 // Center the main panel
                 ui.vertical_centered(|ui| {
                     let panel_frame = egui::Frame::default()
-                        .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, self.settings.panel_transparency))
+                        .fill(egui::Color32::from_rgba_unmultiplied(
+                            255,
+                            255,
+                            255,
+                            self.settings.panel_transparency,
+                        ))
                         .rounding(egui::Rounding::same(20.0))
                         .inner_margin(egui::Margin::same(50.0))
                         .shadow(egui::epaint::Shadow {
@@ -2539,9 +2947,11 @@ impl eframe::App for CryptorApp {
 
                         // Title
                         ui.vertical_centered(|ui| {
-                            ui.label(egui::RichText::new("Tesseract")
-                                .size(42.0)
-                                .color(egui::Color32::from_rgb(50, 50, 50)));
+                            ui.label(
+                                egui::RichText::new("Tesseract")
+                                    .size(42.0)
+                                    .color(egui::Color32::from_rgb(50, 50, 50)),
+                            );
                         });
 
                         ui.add_space(30.0);
@@ -2569,7 +2979,9 @@ impl eframe::App for CryptorApp {
 
                                 // Encrypt button
                                 let encrypt_btn = egui::Button::new(
-                                    egui::RichText::new("🔐 Encrypt").size(16.0).color(egui::Color32::WHITE)
+                                    egui::RichText::new("🔐 Encrypt")
+                                        .size(16.0)
+                                        .color(egui::Color32::WHITE),
                                 )
                                 .fill(encrypt_color)
                                 .min_size(egui::vec2(140.0, 45.0))
@@ -2586,7 +2998,9 @@ impl eframe::App for CryptorApp {
 
                                 // Decrypt button
                                 let decrypt_btn = egui::Button::new(
-                                    egui::RichText::new("🔓 Decrypt").size(16.0).color(egui::Color32::WHITE)
+                                    egui::RichText::new("🔓 Decrypt")
+                                        .size(16.0)
+                                        .color(egui::Color32::WHITE),
                                 )
                                 .fill(decrypt_color)
                                 .min_size(egui::vec2(140.0, 45.0))
@@ -2615,7 +3029,9 @@ impl eframe::App for CryptorApp {
                                     };
 
                                     let volume_btn = egui::Button::new(
-                                        egui::RichText::new("💾 Volume").size(16.0).color(egui::Color32::WHITE)
+                                        egui::RichText::new("💾 Volume")
+                                            .size(16.0)
+                                            .color(egui::Color32::WHITE),
                                     )
                                     .fill(volume_color)
                                     .min_size(egui::vec2(140.0, 45.0))
@@ -2635,178 +3051,200 @@ impl eframe::App for CryptorApp {
                             Some(Mode::Encrypt) | Some(Mode::Decrypt) | None => {
                                 // File encryption/decryption UI
 
-                        // Input file row
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("Input File").size(14.0));
-                            ui.add_space(20.0);
-                            ui.add(egui::TextEdit::singleline(&mut self.input_path)
-                                .desired_width(500.0)
-                                .interactive(false));
-                            ui.add_space(10.0);
-                            let browse_btn = egui::Button::new("Browse...")
-                                .fill(egui::Color32::from_rgb(200, 230, 255))
-                                .min_size(egui::vec2(100.0, 30.0));
-                            if ui.add_enabled(!self.is_processing, browse_btn).clicked() {
-                                self.select_input_file();
-                            }
-                        });
-
-                        ui.add_space(15.0);
-
-                        // Output file row
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("Output File").size(14.0));
-                            ui.add_space(10.0);
-                            ui.add(egui::TextEdit::singleline(&mut self.output_path)
-                                .desired_width(500.0));
-                            ui.add_space(10.0);
-                            let browse_btn = egui::Button::new("Browse...")
-                                .fill(egui::Color32::from_rgb(200, 230, 255))
-                                .min_size(egui::vec2(100.0, 30.0));
-                            if ui.add_enabled(!self.is_processing, browse_btn).clicked() {
-                                self.select_output_file();
-                            }
-                        });
-
-                        ui.add_space(15.0);
-
-                        // Password row
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("Password").size(14.0));
-                            ui.add_space(22.0);
-                            ui.add(egui::TextEdit::singleline(&mut self.password)
-                                .password(true)
-                                .desired_width(500.0));
-                            // Spacer to match Browse button width in file rows
-                            ui.add_space(120.0);
-                        });
-
-                        // Confirm password row (only for encryption)
-                        if self.mode == Some(Mode::Encrypt) {
-                            ui.add_space(15.0);
-                            ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("Confirm").size(14.0));
-                                ui.add_space(30.0);
-                                ui.add(egui::TextEdit::singleline(&mut self.confirm_password)
-                                    .password(true)
-                                    .desired_width(500.0));
-                                // Spacer to match Browse button width in file rows
-                                ui.add_space(120.0);
-                            });
-                        }
-
-                        ui.add_space(30.0);
-
-                        // Action buttons
-                        ui.vertical_centered(|ui| {
-                            ui.horizontal(|ui| {
-                                ui.add_space(80.0);
-
-                                let button_text = if self.is_processing {
-                                    "⏳ Processing..."
-                                } else {
-                                    match &self.mode {
-                                        Some(Mode::Encrypt) => "🔐 Encrypt File",
-                                        Some(Mode::Decrypt) => "🔓 Decrypt File",
-                                        Some(Mode::Volume) => "📦 Manage Volumes",
-                                        None => "Select Mode First",
+                                // Input file row
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("Input File").size(14.0));
+                                    ui.add_space(20.0);
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut self.input_path)
+                                            .desired_width(500.0)
+                                            .interactive(false),
+                                    );
+                                    ui.add_space(10.0);
+                                    let browse_btn = egui::Button::new("Browse...")
+                                        .fill(egui::Color32::from_rgb(200, 230, 255))
+                                        .min_size(egui::vec2(100.0, 30.0));
+                                    if ui.add_enabled(!self.is_processing, browse_btn).clicked() {
+                                        self.select_input_file();
                                     }
-                                };
-
-                                let button_enabled = !self.is_processing
-                                    && !self.is_processing_queue
-                                    && self.mode.is_some()
-                                    && !self.input_path.is_empty()
-                                    && !self.output_path.is_empty()
-                                    && !self.password.is_empty();
-
-                                let button_color = egui::Color32::from_rgb(91, 206, 250);
-
-                                let action_btn = egui::Button::new(
-                                    egui::RichText::new(button_text).size(18.0).color(egui::Color32::WHITE)
-                                )
-                                .fill(button_color)
-                                .min_size(egui::vec2(280.0, 50.0))
-                                .rounding(egui::Rounding::same(25.0));
-
-                                if ui.add_enabled(button_enabled, action_btn).clicked() {
-                                    self.process_file();
-                                }
+                                });
 
                                 ui.add_space(15.0);
 
-                                // Add to Queue button
-                                let queue_btn = egui::Button::new(
-                                    egui::RichText::new("➕ Add to Queue").size(18.0).color(egui::Color32::WHITE)
-                                )
-                                .fill(egui::Color32::from_rgb(245, 169, 184))
-                                .min_size(egui::vec2(200.0, 50.0))
-                                .rounding(egui::Rounding::same(25.0));
-
-                                if ui.add_enabled(button_enabled, queue_btn).clicked() {
-                                    self.add_to_queue();
-                                }
-                            });
-                        });
-
-                        ui.add_space(20.0);
-
-                        // Progress bar
-                        if self.is_processing || self.progress > 0.0 {
-                            ui.vertical_centered(|ui| {
-                                ui.label(egui::RichText::new(format!("{}%", (self.progress * 100.0) as i32))
-                                    .size(14.0));
-                                ui.add_space(5.0);
-
-                                // Custom striped progress bar
-                                let progress_bar_height = 30.0;
-                                let progress_bar_width = 650.0;
-                                let (rect, _response) = ui.allocate_exact_size(
-                                    egui::vec2(progress_bar_width, progress_bar_height),
-                                    egui::Sense::hover(),
-                                );
-
-                                // Background
-                                ui.painter().rect_filled(
-                                    rect,
-                                    egui::Rounding::same(15.0),
-                                    egui::Color32::from_rgb(220, 220, 220),
-                                );
-
-                                // Progress fill with pink/white stripes
-                                let fill_width = rect.width() * self.progress;
-                                let fill_rect = egui::Rect::from_min_size(
-                                    rect.min,
-                                    egui::vec2(fill_width, rect.height()),
-                                );
-
-                                if fill_width > 0.0 {
-                                    ui.painter().rect_filled(
-                                        fill_rect,
-                                        egui::Rounding::same(15.0),
-                                        egui::Color32::from_rgb(245, 169, 184),
+                                // Output file row
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("Output File").size(14.0));
+                                    ui.add_space(10.0);
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut self.output_path)
+                                            .desired_width(500.0),
                                     );
+                                    ui.add_space(10.0);
+                                    let browse_btn = egui::Button::new("Browse...")
+                                        .fill(egui::Color32::from_rgb(200, 230, 255))
+                                        .min_size(egui::vec2(100.0, 30.0));
+                                    if ui.add_enabled(!self.is_processing, browse_btn).clicked() {
+                                        self.select_output_file();
+                                    }
+                                });
+
+                                ui.add_space(15.0);
+
+                                // Password row
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("Password").size(14.0));
+                                    ui.add_space(22.0);
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut self.password)
+                                            .password(true)
+                                            .desired_width(500.0),
+                                    );
+                                    // Spacer to match Browse button width in file rows
+                                    ui.add_space(120.0);
+                                });
+
+                                // Confirm password row (only for encryption)
+                                if self.mode == Some(Mode::Encrypt) {
+                                    ui.add_space(15.0);
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new("Confirm").size(14.0));
+                                        ui.add_space(30.0);
+                                        ui.add(
+                                            egui::TextEdit::singleline(&mut self.confirm_password)
+                                                .password(true)
+                                                .desired_width(500.0),
+                                        );
+                                        // Spacer to match Browse button width in file rows
+                                        ui.add_space(120.0);
+                                    });
                                 }
 
-                                // Border
-                                ui.painter().rect_stroke(
-                                    rect,
-                                    egui::Rounding::same(15.0),
-                                    egui::Stroke::new(2.0, egui::Color32::from_rgb(91, 206, 250)),
-                                );
-                            });
+                                ui.add_space(30.0);
 
-                            ui.add_space(10.0);
-                        }
+                                // Action buttons
+                                ui.vertical_centered(|ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.add_space(80.0);
 
-                        // Status message
-                        if !self.status_message.is_empty() {
-                            ui.vertical_centered(|ui| {
-                                ui.label(egui::RichText::new(&self.status_message)
-                                    .size(13.0)
-                                    .color(egui::Color32::from_rgb(80, 80, 80)));
-                            });
-                        }
+                                        let button_text = if self.is_processing {
+                                            "⏳ Processing..."
+                                        } else {
+                                            match &self.mode {
+                                                Some(Mode::Encrypt) => "🔐 Encrypt File",
+                                                Some(Mode::Decrypt) => "🔓 Decrypt File",
+                                                Some(Mode::Volume) => "📦 Manage Volumes",
+                                                None => "Select Mode First",
+                                            }
+                                        };
+
+                                        let button_enabled = !self.is_processing
+                                            && !self.is_processing_queue
+                                            && self.mode.is_some()
+                                            && !self.input_path.is_empty()
+                                            && !self.output_path.is_empty()
+                                            && !self.password.is_empty();
+
+                                        let button_color = egui::Color32::from_rgb(91, 206, 250);
+
+                                        let action_btn = egui::Button::new(
+                                            egui::RichText::new(button_text)
+                                                .size(18.0)
+                                                .color(egui::Color32::WHITE),
+                                        )
+                                        .fill(button_color)
+                                        .min_size(egui::vec2(280.0, 50.0))
+                                        .rounding(egui::Rounding::same(25.0));
+
+                                        if ui.add_enabled(button_enabled, action_btn).clicked() {
+                                            self.process_file();
+                                        }
+
+                                        ui.add_space(15.0);
+
+                                        // Add to Queue button
+                                        let queue_btn = egui::Button::new(
+                                            egui::RichText::new("➕ Add to Queue")
+                                                .size(18.0)
+                                                .color(egui::Color32::WHITE),
+                                        )
+                                        .fill(egui::Color32::from_rgb(245, 169, 184))
+                                        .min_size(egui::vec2(200.0, 50.0))
+                                        .rounding(egui::Rounding::same(25.0));
+
+                                        if ui.add_enabled(button_enabled, queue_btn).clicked() {
+                                            self.add_to_queue();
+                                        }
+                                    });
+                                });
+
+                                ui.add_space(20.0);
+
+                                // Progress bar
+                                if self.is_processing || self.progress > 0.0 {
+                                    ui.vertical_centered(|ui| {
+                                        ui.label(
+                                            egui::RichText::new(format!(
+                                                "{}%",
+                                                (self.progress * 100.0) as i32
+                                            ))
+                                            .size(14.0),
+                                        );
+                                        ui.add_space(5.0);
+
+                                        // Custom striped progress bar
+                                        let progress_bar_height = 30.0;
+                                        let progress_bar_width = 650.0;
+                                        let (rect, _response) = ui.allocate_exact_size(
+                                            egui::vec2(progress_bar_width, progress_bar_height),
+                                            egui::Sense::hover(),
+                                        );
+
+                                        // Background
+                                        ui.painter().rect_filled(
+                                            rect,
+                                            egui::Rounding::same(15.0),
+                                            egui::Color32::from_rgb(220, 220, 220),
+                                        );
+
+                                        // Progress fill with pink/white stripes
+                                        let fill_width = rect.width() * self.progress;
+                                        let fill_rect = egui::Rect::from_min_size(
+                                            rect.min,
+                                            egui::vec2(fill_width, rect.height()),
+                                        );
+
+                                        if fill_width > 0.0 {
+                                            ui.painter().rect_filled(
+                                                fill_rect,
+                                                egui::Rounding::same(15.0),
+                                                egui::Color32::from_rgb(245, 169, 184),
+                                            );
+                                        }
+
+                                        // Border
+                                        ui.painter().rect_stroke(
+                                            rect,
+                                            egui::Rounding::same(15.0),
+                                            egui::Stroke::new(
+                                                2.0,
+                                                egui::Color32::from_rgb(91, 206, 250),
+                                            ),
+                                        );
+                                    });
+
+                                    ui.add_space(10.0);
+                                }
+
+                                // Status message
+                                if !self.status_message.is_empty() {
+                                    ui.vertical_centered(|ui| {
+                                        ui.label(
+                                            egui::RichText::new(&self.status_message)
+                                                .size(13.0)
+                                                .color(egui::Color32::from_rgb(80, 80, 80)),
+                                        );
+                                    });
+                                }
                             }
                             #[cfg(feature = "encrypted-volumes")]
                             Some(Mode::Volume) => {
@@ -2816,9 +3254,11 @@ impl eframe::App for CryptorApp {
                             #[cfg(not(feature = "encrypted-volumes"))]
                             Some(Mode::Volume) => {
                                 ui.vertical_centered(|ui| {
-                                    ui.label(egui::RichText::new("Volume feature not enabled")
-                                        .size(14.0)
-                                        .color(egui::Color32::from_rgb(200, 100, 100)));
+                                    ui.label(
+                                        egui::RichText::new("Volume feature not enabled")
+                                            .size(14.0)
+                                            .color(egui::Color32::from_rgb(200, 100, 100)),
+                                    );
                                 });
                             }
                         }
@@ -2832,7 +3272,9 @@ impl eframe::App for CryptorApp {
 
                                 // AES badge
                                 let aes_badge = egui::Button::new(
-                                    egui::RichText::new("🔒 AES-256-GCM").size(12.0).color(egui::Color32::WHITE)
+                                    egui::RichText::new("🔒 AES-256-GCM")
+                                        .size(12.0)
+                                        .color(egui::Color32::WHITE),
                                 )
                                 .fill(egui::Color32::from_rgb(100, 180, 230))
                                 .min_size(egui::vec2(140.0, 35.0))
@@ -2843,7 +3285,9 @@ impl eframe::App for CryptorApp {
 
                                 // Argon2id badge
                                 let argon_badge = egui::Button::new(
-                                    egui::RichText::new("🌀 Argon2id").size(12.0).color(egui::Color32::WHITE)
+                                    egui::RichText::new("🌀 Argon2id")
+                                        .size(12.0)
+                                        .color(egui::Color32::WHITE),
                                 )
                                 .fill(egui::Color32::from_rgb(235, 150, 170))
                                 .min_size(egui::vec2(110.0, 35.0))
@@ -2854,7 +3298,9 @@ impl eframe::App for CryptorApp {
 
                                 // Authenticated badge
                                 let auth_badge = egui::Button::new(
-                                    egui::RichText::new("✓ Authenticated").size(12.0).color(egui::Color32::WHITE)
+                                    egui::RichText::new("✓ Authenticated")
+                                        .size(12.0)
+                                        .color(egui::Color32::WHITE),
                                 )
                                 .fill(egui::Color32::from_rgb(100, 180, 230))
                                 .min_size(egui::vec2(140.0, 35.0))
@@ -2865,7 +3311,9 @@ impl eframe::App for CryptorApp {
                                 if self.settings.yubikey_enabled {
                                     ui.add_space(10.0);
                                     let yubikey_badge = egui::Button::new(
-                                        egui::RichText::new("🔑 YubiKey 2FA").size(12.0).color(egui::Color32::WHITE)
+                                        egui::RichText::new("🔑 YubiKey 2FA")
+                                            .size(12.0)
+                                            .color(egui::Color32::WHITE),
                                     )
                                     .fill(egui::Color32::from_rgb(80, 180, 80))
                                     .min_size(egui::vec2(120.0, 35.0))
@@ -2919,7 +3367,10 @@ fn encrypt_file(
         }
 
         tesseract_lib::encrypt_file_with_hsm(&input, &output, password, &yubikey)?;
-        return Ok(format!("File encrypted with YubiKey 2FA: {}", output.display()));
+        return Ok(format!(
+            "File encrypted with YubiKey 2FA: {}",
+            output.display()
+        ));
     }
 
     #[cfg(not(feature = "yubikey"))]
@@ -2941,7 +3392,8 @@ fn encrypt_file(
     let key = kdf.derive_key(password.as_bytes(), &salt)?;
 
     let mut base_nonce = [0u8; 12];
-    OsRng.try_fill_bytes(&mut base_nonce)
+    OsRng
+        .try_fill_bytes(&mut base_nonce)
         .map_err(|e| format!("RNG error: {}", e))?;
 
     let encryptor = ChunkedEncryptor::new(
@@ -2991,7 +3443,10 @@ fn decrypt_file(
         }
 
         tesseract_lib::decrypt_file_with_hsm(&input, &output, password, &yubikey)?;
-        return Ok(format!("File decrypted with YubiKey 2FA: {}", output.display()));
+        return Ok(format!(
+            "File decrypted with YubiKey 2FA: {}",
+            output.display()
+        ));
     }
 
     #[cfg(not(feature = "yubikey"))]
@@ -3014,11 +3469,7 @@ fn decrypt_file(
     let key = kdf.derive_key(password.as_bytes(), salt)?;
 
     let input_file = std::fs::File::open(&input)?;
-    let mut decryptor = ChunkedDecryptor::new(
-        input_file,
-        Box::new(AesGcmEncryptor::new()),
-        key,
-    )?;
+    let mut decryptor = ChunkedDecryptor::new(input_file, Box::new(AesGcmEncryptor::new()), key)?;
 
     let mut output_file = std::fs::File::create(&output)?;
     decryptor.decrypt_to(&mut output_file)?;
@@ -3036,16 +3487,16 @@ fn parse_size(size_str: &str) -> Result<u64, Box<dyn std::error::Error>> {
     }
 
     if size_str.ends_with('K') {
-        let num = size_str[..size_str.len()-1].parse::<u64>()?;
+        let num = size_str[..size_str.len() - 1].parse::<u64>()?;
         Ok(num * 1024)
     } else if size_str.ends_with('M') {
-        let num = size_str[..size_str.len()-1].parse::<u64>()?;
+        let num = size_str[..size_str.len() - 1].parse::<u64>()?;
         Ok(num * 1024 * 1024)
     } else if size_str.ends_with('G') {
-        let num = size_str[..size_str.len()-1].parse::<u64>()?;
+        let num = size_str[..size_str.len() - 1].parse::<u64>()?;
         Ok(num * 1024 * 1024 * 1024)
     } else if size_str.ends_with('T') {
-        let num = size_str[..size_str.len()-1].parse::<u64>()?;
+        let num = size_str[..size_str.len() - 1].parse::<u64>()?;
         Ok(num * 1024 * 1024 * 1024 * 1024)
     } else {
         // No suffix, parse as raw bytes

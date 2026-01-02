@@ -5,8 +5,8 @@
 //! Integrates with Windows Service Control Manager (SCM)
 
 use std::ffi::OsString;
-use std::time::Duration;
 use std::sync::mpsc;
+use std::time::Duration;
 
 use windows_service::{
     define_windows_service,
@@ -65,14 +65,10 @@ pub fn uninstall_service() -> Result<(), Box<dyn std::error::Error>> {
     println!("Uninstalling Tesseract Daemon Windows Service...");
 
     // Stop the service first if it's running
-    let _ = Command::new("sc")
-        .args(["stop", SERVICE_NAME])
-        .output();
+    let _ = Command::new("sc").args(["stop", SERVICE_NAME]).output();
 
     // Delete the service
-    let output = Command::new("sc")
-        .args(["delete", SERVICE_NAME])
-        .output()?;
+    let output = Command::new("sc").args(["delete", SERVICE_NAME]).output()?;
 
     if output.status.success() {
         println!("✓ Service uninstalled successfully");

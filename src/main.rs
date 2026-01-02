@@ -6,8 +6,8 @@
 //! with Argon2id key derivation.
 
 use clap::{Parser, Subcommand};
-use tesseract_lib::{validation, CryptorError};
 use std::path::PathBuf;
+use tesseract_lib::{validation, CryptorError};
 
 /// Command-line interface definition
 #[derive(Parser, Debug)]
@@ -221,7 +221,12 @@ fn main() -> Result<(), CryptorError> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Encrypt { input, output, yubikey, yubikey_slot } => {
+        Commands::Encrypt {
+            input,
+            output,
+            yubikey,
+            yubikey_slot,
+        } => {
             println!("Encrypting '{}' -> '{}'", input.display(), output.display());
             if yubikey {
                 #[cfg(feature = "yubikey")]
@@ -232,7 +237,8 @@ fn main() -> Result<(), CryptorError> {
                 {
                     let _ = yubikey_slot; // Suppress unused warning
                     return Err(CryptorError::InvalidInput(
-                        "YubiKey support not compiled in. Rebuild with --features yubikey".to_string()
+                        "YubiKey support not compiled in. Rebuild with --features yubikey"
+                            .to_string(),
                     ));
                 }
             } else {
@@ -240,7 +246,12 @@ fn main() -> Result<(), CryptorError> {
             }
             println!("✓ Encryption successful.");
         }
-        Commands::Decrypt { input, output, yubikey, yubikey_slot } => {
+        Commands::Decrypt {
+            input,
+            output,
+            yubikey,
+            yubikey_slot,
+        } => {
             println!("Decrypting '{}' -> '{}'", input.display(), output.display());
             if yubikey {
                 #[cfg(feature = "yubikey")]
@@ -251,7 +262,8 @@ fn main() -> Result<(), CryptorError> {
                 {
                     let _ = yubikey_slot; // Suppress unused warning
                     return Err(CryptorError::InvalidInput(
-                        "YubiKey support not compiled in. Rebuild with --features yubikey".to_string()
+                        "YubiKey support not compiled in. Rebuild with --features yubikey"
+                            .to_string(),
                     ));
                 }
             } else {
@@ -325,7 +337,10 @@ fn encrypt_file_with_yubikey(
         ));
     }
 
-    println!("YubiKey detected. Using slot {} for two-factor encryption.", slot);
+    println!(
+        "YubiKey detected. Using slot {} for two-factor encryption.",
+        slot
+    );
 
     // Get password with validation
     let password = validation::get_and_validate_password()?;
@@ -371,7 +386,10 @@ fn decrypt_file_with_yubikey(
         ));
     }
 
-    println!("YubiKey detected. Using slot {} for two-factor decryption.", slot);
+    println!(
+        "YubiKey detected. Using slot {} for two-factor decryption.",
+        slot
+    );
 
     // Get password
     let password = validation::get_password()?;
@@ -385,10 +403,14 @@ fn decrypt_file_with_yubikey(
 /// Handle volume subcommands
 #[cfg(feature = "encrypted-volumes")]
 fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
-    use tesseract_lib::volume::{Container, VolumeManager, MountOptions};
+    use tesseract_lib::volume::{Container, MountOptions, VolumeManager};
 
     match cmd {
-        VolumeCommands::Create { container, size, mount_point } => {
+        VolumeCommands::Create {
+            container,
+            size,
+            mount_point,
+        } => {
             println!("Creating encrypted volume at '{}'", container.display());
 
             // Parse size string (e.g., "100M", "1G")
@@ -399,17 +421,17 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Create the container
             Container::create(
-                &container,
-                size_bytes,
-                &password,
-                4096, // Default sector size
-            ).map_err(|e| CryptorError::Io(
-                std::io::Error::other(e.to_string())
-            ))?;
+                &container, size_bytes, &password, 4096, // Default sector size
+            )
+            .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             println!("✓ Volume created successfully.");
             println!("  Container: {}", container.display());
-            println!("  Size: {} bytes ({} MB)", size_bytes, size_bytes / 1024 / 1024);
+            println!(
+                "  Size: {} bytes ({} MB)",
+                size_bytes,
+                size_bytes / 1024 / 1024
+            );
 
             // Mount if requested
             if let Some(mount_pt) = mount_point {
@@ -425,10 +447,9 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                     hidden_password: None,
                 };
 
-                manager.mount(&container, &password, options)
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::other(e.to_string())
-                    ))?;
+                manager
+                    .mount(&container, &password, options)
+                    .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
                 println!("✓ Volume mounted at '{}'", mount_pt.display());
                 println!("  Press Ctrl+C to unmount and exit.");
@@ -438,22 +459,30 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                 let r = running.clone();
                 ctrlc::set_handler(move || {
                     r.store(false, std::sync::atomic::Ordering::SeqCst);
-                }).expect("Error setting Ctrl-C handler");
+                })
+                .expect("Error setting Ctrl-C handler");
 
                 while running.load(std::sync::atomic::Ordering::SeqCst) {
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
 
                 println!("\nUnmounting volume...");
-                manager.unmount(&container)
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::other(e.to_string())
-                    ))?;
+                manager
+                    .unmount(&container)
+                    .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
                 println!("✓ Volume unmounted.");
             }
         }
-        VolumeCommands::Mount { container, mount_point, read_only } => {
-            println!("Mounting '{}' at '{}'", container.display(), mount_point.display());
+        VolumeCommands::Mount {
+            container,
+            mount_point,
+            read_only,
+        } => {
+            println!(
+                "Mounting '{}' at '{}'",
+                container.display(),
+                mount_point.display()
+            );
 
             let password = validation::get_password()?;
             let mut manager = VolumeManager::new();
@@ -468,10 +497,9 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                 hidden_password: None,
             };
 
-            manager.mount(&container, &password, options)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+            manager
+                .mount(&container, &password, options)
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             println!("✓ Volume mounted successfully.");
             println!("  Mount point: {}", mount_point.display());
@@ -485,17 +513,17 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             let r = running.clone();
             ctrlc::set_handler(move || {
                 r.store(false, std::sync::atomic::Ordering::SeqCst);
-            }).expect("Error setting Ctrl-C handler");
+            })
+            .expect("Error setting Ctrl-C handler");
 
             while running.load(std::sync::atomic::Ordering::SeqCst) {
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
 
             println!("\nUnmounting volume...");
-            manager.unmount(&container)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+            manager
+                .unmount(&container)
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
             println!("✓ Volume unmounted.");
         }
         VolumeCommands::Unmount { path } => {
@@ -507,9 +535,9 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             if !client.is_running() {
                 println!("Error: Daemon is not running.");
                 println!("Start the daemon with: tesseract daemon start");
-                return Err(CryptorError::Io(
-                    std::io::Error::other("Daemon not running")
-                ));
+                return Err(CryptorError::Io(std::io::Error::other(
+                    "Daemon not running",
+                )));
             }
 
             // Unmount by path (could be container or mount point)
@@ -518,9 +546,10 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                     println!("✓ Volume unmounted successfully.");
                 }
                 Err(e) => {
-                    return Err(CryptorError::Io(
-                        std::io::Error::other(format!("Unmount failed: {}", e))
-                    ));
+                    return Err(CryptorError::Io(std::io::Error::other(format!(
+                        "Unmount failed: {}",
+                        e
+                    ))));
                 }
             }
         }
@@ -533,9 +562,9 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             if !client.is_running() {
                 println!("Error: Daemon is not running.");
                 println!("Start the daemon with: tesseract daemon start");
-                return Err(CryptorError::Io(
-                    std::io::Error::other("Daemon not running")
-                ));
+                return Err(CryptorError::Io(std::io::Error::other(
+                    "Daemon not running",
+                )));
             }
 
             match client.list() {
@@ -562,9 +591,10 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                     }
                 }
                 Err(e) => {
-                    return Err(CryptorError::Io(
-                        std::io::Error::other(format!("List failed: {}", e))
-                    ));
+                    return Err(CryptorError::Io(std::io::Error::other(format!(
+                        "List failed: {}",
+                        e
+                    ))));
                 }
             }
         }
@@ -573,24 +603,34 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             let password = validation::get_password()?;
             let cont = Container::open(&container, &password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             println!("\nContainer Information:");
             println!("  Path: {}", container.display());
-            println!("  Data Size: {} bytes ({} MB)",
+            println!(
+                "  Data Size: {} bytes ({} MB)",
                 cont.data_size(),
                 cont.data_size() / 1024 / 1024
             );
-            println!("  Total Size: {} bytes ({} MB)",
+            println!(
+                "  Total Size: {} bytes ({} MB)",
                 cont.total_size(),
                 cont.total_size() / 1024 / 1024
             );
             println!("  Sector Size: {} bytes", cont.sector_size());
             println!("  Active Key Slots: {}", cont.key_slots().active_count());
-            println!("  Duress Password: {}", if cont.has_duress_password() { "Set" } else { "Not set" });
-            println!("  Unlocked: {}", if cont.is_unlocked() { "Yes" } else { "No" });
+            println!(
+                "  Duress Password: {}",
+                if cont.has_duress_password() {
+                    "Set"
+                } else {
+                    "Not set"
+                }
+            );
+            println!(
+                "  Unlocked: {}",
+                if cont.is_unlocked() { "Yes" } else { "No" }
+            );
         }
         VolumeCommands::ChangePassword { container, slot } => {
             println!("Changing password for '{}'", container.display());
@@ -602,22 +642,20 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             };
 
             let mut cont = Container::open(&container, &old_password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             // Single password model - ignore slot parameter, always update slot 0
             if slot.is_some() {
-                println!("Note: Multi-password slots are deprecated. Changing the volume password.");
+                println!(
+                    "Note: Multi-password slots are deprecated. Changing the volume password."
+                );
             }
 
             println!("Enter new password:");
             let new_password = validation::get_and_validate_password()?;
 
             cont.change_password(&new_password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             println!("✓ Password changed successfully.");
         }
@@ -628,22 +666,29 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             let recovery_key = Container::generate_recovery_key();
 
             // Export to file
-            Container::export_recovery_key_file(
-                &recovery_key,
-                &output,
-                name.as_deref(),
-            ).map_err(|e| CryptorError::Io(
-                std::io::Error::other(e.to_string())
-            ))?;
+            Container::export_recovery_key_file(&recovery_key, &output, name.as_deref())
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
-            println!("✓ Recovery key generated and saved to '{}'", output.display());
+            println!(
+                "✓ Recovery key generated and saved to '{}'",
+                output.display()
+            );
             println!("\n  IMPORTANT: Store this file in a secure location!");
             println!("  Anyone with this recovery key can access encrypted volumes.");
             println!("\n  You can use this recovery key to:");
-            println!("  - Add it to a volume: tesseract volume add-recovery-key -c <container> -r {}", output.display());
-            println!("  - Reset a password: tesseract volume reset-password -c <container> -r {}", output.display());
+            println!(
+                "  - Add it to a volume: tesseract volume add-recovery-key -c <container> -r {}",
+                output.display()
+            );
+            println!(
+                "  - Reset a password: tesseract volume reset-password -c <container> -r {}",
+                output.display()
+            );
         }
-        VolumeCommands::AddRecoveryKey { container, recovery_key } => {
+        VolumeCommands::AddRecoveryKey {
+            container,
+            recovery_key,
+        } => {
             println!("Adding recovery key to '{}'", container.display());
 
             // Get the recovery key (from file or direct input)
@@ -654,20 +699,20 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Open container
             let mut cont = Container::open(&container, &password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             // Add recovery key
-            let slot_idx = cont.add_recovery_key(&key)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+            let slot_idx = cont
+                .add_recovery_key(&key)
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             println!("✓ Recovery key added to slot {}.", slot_idx);
             println!("  You can now use this recovery key to reset the password if forgotten.");
         }
-        VolumeCommands::ResetPassword { container, recovery_key } => {
+        VolumeCommands::ResetPassword {
+            container,
+            recovery_key,
+        } => {
             println!("Resetting password for '{}'", container.display());
 
             // Get the recovery key (from file or direct input)
@@ -677,10 +722,12 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             // We need to open it first, so we'll try to unlock with the recovery key directly
             println!("Note: Opening container with recovery key...");
 
-            let mut cont = Container::open(&container, &key)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(format!("Failed to unlock with recovery key: {}", e))
-                ))?;
+            let mut cont = Container::open(&container, &key).map_err(|e| {
+                CryptorError::Io(std::io::Error::other(format!(
+                    "Failed to unlock with recovery key: {}",
+                    e
+                )))
+            })?;
 
             // Get new password
             println!("Enter new password:");
@@ -688,14 +735,16 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Reset password
             cont.reset_password_with_recovery_key(&key, &new_password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             println!("✓ Password reset successfully.");
             println!("  You can now use the new password to access the volume.");
         }
-        VolumeCommands::CreateHidden { container, size, offset } => {
+        VolumeCommands::CreateHidden {
+            container,
+            size,
+            offset,
+        } => {
             println!("Creating hidden volume in '{}'", container.display());
 
             // Parse size and offset
@@ -708,9 +757,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Open outer container
             let mut outer = Container::open(&container, &outer_password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             // Get hidden volume password
             println!("Enter hidden volume password (use a different password!):");
@@ -718,31 +765,51 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Verify passwords are different
             if outer_password == hidden_password {
-                return Err(CryptorError::Io(
-                    std::io::Error::new(std::io::ErrorKind::InvalidInput,
-                        "Hidden volume password must be different from outer volume password")
-                ));
+                return Err(CryptorError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Hidden volume password must be different from outer volume password",
+                )));
             }
 
             // Create hidden volume
-            outer.create_hidden_volume(hidden_size, &hidden_password, hidden_offset)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+            outer
+                .create_hidden_volume(hidden_size, &hidden_password, hidden_offset)
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             println!("✓ Hidden volume created successfully.");
             println!("  Container: {}", container.display());
-            println!("  Hidden Size: {} bytes ({} MB)", hidden_size, hidden_size / 1024 / 1024);
-            println!("  Offset: {} bytes ({} MB)", hidden_offset, hidden_offset / 1024 / 1024);
+            println!(
+                "  Hidden Size: {} bytes ({} MB)",
+                hidden_size,
+                hidden_size / 1024 / 1024
+            );
+            println!(
+                "  Offset: {} bytes ({} MB)",
+                hidden_offset,
+                hidden_offset / 1024 / 1024
+            );
             println!("\n  IMPORTANT SECURITY NOTES:");
             println!("  1. Fill the outer volume with decoy data to hide the hidden volume");
             println!("  2. Never reveal the hidden volume password under duress");
-            println!("  3. Be careful not to overwrite the hidden volume when using the outer volume");
-            println!("  4. The hidden volume is located at offset {} in the outer data area", hidden_offset);
+            println!(
+                "  3. Be careful not to overwrite the hidden volume when using the outer volume"
+            );
+            println!(
+                "  4. The hidden volume is located at offset {} in the outer data area",
+                hidden_offset
+            );
         }
-        VolumeCommands::MountHidden { container, mount_point, offset, read_only } => {
-            println!("Mounting hidden volume from '{}' at '{}'",
-                container.display(), mount_point.display());
+        VolumeCommands::MountHidden {
+            container,
+            mount_point,
+            offset,
+            read_only,
+        } => {
+            println!(
+                "Mounting hidden volume from '{}' at '{}'",
+                container.display(),
+                mount_point.display()
+            );
 
             // Parse offset
             let hidden_offset = parse_size(&offset)?;
@@ -753,19 +820,16 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Verify outer container can be opened
             let outer = Container::open(&container, &outer_password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             // Get hidden volume password
             println!("Enter hidden volume password:");
             let hidden_password = validation::get_password()?;
 
             // Verify hidden volume can be opened
-            let hidden = outer.open_hidden_volume(&hidden_password, hidden_offset)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+            let hidden = outer
+                .open_hidden_volume(&hidden_password, hidden_offset)
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             let hidden_size = hidden.data_size();
             drop(hidden);
@@ -784,16 +848,23 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             };
 
             // Pass the outer password to mount() - it will use hidden_password from options
-            manager.mount(&container, &outer_password, options)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+            manager
+                .mount(&container, &outer_password, options)
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             println!("✓ Hidden volume mounted successfully.");
             println!("  Container: {}", container.display());
             println!("  Mount point: {}", mount_point.display());
-            println!("  Offset: {} bytes ({} MB)", hidden_offset, hidden_offset / 1024 / 1024);
-            println!("  Size: {} bytes ({} MB)", hidden_size, hidden_size / 1024 / 1024);
+            println!(
+                "  Offset: {} bytes ({} MB)",
+                hidden_offset,
+                hidden_offset / 1024 / 1024
+            );
+            println!(
+                "  Size: {} bytes ({} MB)",
+                hidden_size,
+                hidden_size / 1024 / 1024
+            );
             if read_only {
                 println!("  Mode: Read-only");
             }
@@ -804,17 +875,17 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             let r = running.clone();
             ctrlc::set_handler(move || {
                 r.store(false, std::sync::atomic::Ordering::SeqCst);
-            }).expect("Error setting Ctrl-C handler");
+            })
+            .expect("Error setting Ctrl-C handler");
 
             while running.load(std::sync::atomic::Ordering::SeqCst) {
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
 
             println!("\nUnmounting hidden volume...");
-            manager.unmount(&container)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+            manager
+                .unmount(&container)
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
             println!("✓ Hidden volume unmounted.");
         }
         VolumeCommands::CheckHidden { container, offset } => {
@@ -828,30 +899,42 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Open outer container
             let outer = Container::open(&container, &outer_password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             // Check if hidden volume exists
             if outer.has_hidden_volume(hidden_offset) {
-                println!("✓ A volume header was found at offset {} ({} MB).",
-                    hidden_offset, hidden_offset / 1024 / 1024);
+                println!(
+                    "✓ A volume header was found at offset {} ({} MB).",
+                    hidden_offset,
+                    hidden_offset / 1024 / 1024
+                );
                 println!("  This may be a hidden volume.");
                 println!("  Use 'mount-hidden' to mount it with the correct password.");
             } else {
-                println!("✗ No volume header found at offset {} ({} MB).",
-                    hidden_offset, hidden_offset / 1024 / 1024);
+                println!(
+                    "✗ No volume header found at offset {} ({} MB).",
+                    hidden_offset,
+                    hidden_offset / 1024 / 1024
+                );
                 println!("  No hidden volume exists at this location.");
             }
         }
-        VolumeCommands::MigrateToPqc { container, keypair_output } => {
-            use tesseract_lib::volume::VolumeMigration;
+        VolumeCommands::MigrateToPqc {
+            container,
+            keypair_output,
+        } => {
             use std::fs;
+            use tesseract_lib::volume::VolumeMigration;
 
-            println!("Migrating volume '{}' to V2 with post-quantum cryptography", container.display());
+            println!(
+                "Migrating volume '{}' to V2 with post-quantum cryptography",
+                container.display()
+            );
             println!();
             println!("⚠️  WARNING: This will modify your volume header.");
-            println!("   A backup will be created, but please ensure you have backups of your data.");
+            println!(
+                "   A backup will be created, but please ensure you have backups of your data."
+            );
             println!();
 
             // Get password to unlock volume
@@ -862,10 +945,9 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Perform migration
             println!("Starting migration...");
-            let pqc_keypair = migration.migrate(&password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+            let pqc_keypair = migration
+                .migrate(&password)
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             // Determine output path for keypair
             let keypair_path = keypair_output.unwrap_or_else(|| {
@@ -889,8 +971,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             let json_str = serde_json::to_string_pretty(&keypair_data)
                 .map_err(|e| CryptorError::Io(std::io::Error::other(e)))?;
-            fs::write(&keypair_path, json_str)
-                .map_err(CryptorError::Io)?;
+            fs::write(&keypair_path, json_str).map_err(CryptorError::Io)?;
 
             println!();
             println!("✓ Migration successful!");
@@ -916,7 +997,9 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             println!("   - Data recovery will be IMPOSSIBLE");
             println!("   - The error will appear identical to a wrong password");
             println!();
-            println!("RECOMMENDED: Generate and store a recovery key BEFORE setting a duress password.");
+            println!(
+                "RECOMMENDED: Generate and store a recovery key BEFORE setting a duress password."
+            );
             println!();
 
             // Get container password first
@@ -926,9 +1009,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Open container
             let mut cont = Container::open(&container, &password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             // Check if duress password already set
             if cont.has_duress_password() {
@@ -946,26 +1027,23 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             let duress_confirm = validation::get_password()?;
 
             if duress_password != duress_confirm {
-                return Err(CryptorError::Io(
-                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Duress passwords do not match")
-                ));
+                return Err(CryptorError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Duress passwords do not match",
+                )));
             }
 
             // Ensure duress password is different from container password
             if duress_password == password {
-                return Err(CryptorError::Io(
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "Duress password must be different from the container password"
-                    )
-                ));
+                return Err(CryptorError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Duress password must be different from the container password",
+                )));
             }
 
             // Set duress password
             cont.set_duress_password(&duress_password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             println!();
             println!("✓ Duress password set successfully.");
@@ -981,9 +1059,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Open container
             let mut cont = Container::open(&container, &password)
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             // Check if duress password is set
             if !cont.has_duress_password() {
@@ -993,9 +1069,7 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
 
             // Remove duress password
             cont.remove_duress_password()
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
 
             println!("✓ Duress password removed successfully.");
         }
@@ -1018,17 +1092,14 @@ fn load_recovery_key(input: &str) -> Result<String, CryptorError> {
     // Otherwise, try to load from file
     let path = Path::new(input);
     if !path.exists() {
-        return Err(CryptorError::Io(
-            std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Recovery key file not found: {}", input)
-            )
-        ));
+        return Err(CryptorError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Recovery key file not found: {}", input),
+        )));
     }
 
     // Read file and extract recovery key
-    let content = fs::read_to_string(path)
-        .map_err(CryptorError::Io)?;
+    let content = fs::read_to_string(path).map_err(CryptorError::Io)?;
 
     // Look for the recovery key line (64 hex characters on its own line)
     for line in content.lines() {
@@ -1038,12 +1109,10 @@ fn load_recovery_key(input: &str) -> Result<String, CryptorError> {
         }
     }
 
-    Err(CryptorError::Io(
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Could not find valid recovery key (64 hex characters) in file"
-        )
-    ))
+    Err(CryptorError::Io(std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        "Could not find valid recovery key (64 hex characters) in file",
+    )))
 }
 
 /// Handle volume subcommands (stub when feature is disabled)
@@ -1056,16 +1125,15 @@ fn handle_volume_command(_cmd: VolumeCommands) -> Result<(), CryptorError> {
 
 /// Handle daemon subcommands
 fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
-    use tesseract_lib::daemon::{DaemonServer, DaemonClient};
+    use tesseract_lib::daemon::{DaemonClient, DaemonServer};
 
     match cmd {
         DaemonCommands::Start => {
             println!("Starting Tesseract Daemon...");
             let server = DaemonServer::new();
-            server.run()
-                .map_err(|e| CryptorError::Io(
-                    std::io::Error::other(e.to_string())
-                ))?;
+            server
+                .run()
+                .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
         }
         DaemonCommands::Stop => {
             println!("Stopping Tesseract Daemon...");
@@ -1079,9 +1147,10 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             match client.send_command(tesseract_lib::daemon::DaemonCommand::Shutdown) {
                 Ok(_) => println!("✓ Daemon stopped successfully."),
                 Err(e) => {
-                    return Err(CryptorError::Io(
-                        std::io::Error::other(format!("Failed to stop daemon: {}", e))
-                    ));
+                    return Err(CryptorError::Io(std::io::Error::other(format!(
+                        "Failed to stop daemon: {}",
+                        e
+                    ))));
                 }
             }
         }
@@ -1111,16 +1180,15 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             {
                 use tesseract_lib::daemon::service;
                 service::install_service()
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::other(e.to_string())
-                    ))?;
+                    .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
             }
             #[cfg(not(windows))]
             {
                 eprintln!("Service installation is only supported on Windows");
-                return Err(CryptorError::Io(
-                    std::io::Error::new(std::io::ErrorKind::Unsupported, "Service installation not supported on this platform")
-                ));
+                return Err(CryptorError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Service installation not supported on this platform",
+                )));
             }
         }
         DaemonCommands::UninstallService => {
@@ -1128,16 +1196,15 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
             {
                 use tesseract_lib::daemon::service;
                 service::uninstall_service()
-                    .map_err(|e| CryptorError::Io(
-                        std::io::Error::other(e.to_string())
-                    ))?;
+                    .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
             }
             #[cfg(not(windows))]
             {
                 eprintln!("Service uninstallation is only supported on Windows");
-                return Err(CryptorError::Io(
-                    std::io::Error::new(std::io::ErrorKind::Unsupported, "Service uninstallation not supported on this platform")
-                ));
+                return Err(CryptorError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Service uninstallation not supported on this platform",
+                )));
             }
         }
         DaemonCommands::StartService => {
@@ -1153,17 +1220,19 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
                     println!("✓ Service started successfully.");
                 } else {
                     let error = String::from_utf8_lossy(&output.stderr);
-                    return Err(CryptorError::Io(
-                        std::io::Error::other(format!("Failed to start service: {}", error))
-                    ));
+                    return Err(CryptorError::Io(std::io::Error::other(format!(
+                        "Failed to start service: {}",
+                        error
+                    ))));
                 }
             }
             #[cfg(not(windows))]
             {
                 eprintln!("Service start is only supported on Windows");
-                return Err(CryptorError::Io(
-                    std::io::Error::new(std::io::ErrorKind::Unsupported, "Service start not supported on this platform")
-                ));
+                return Err(CryptorError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Service start not supported on this platform",
+                )));
             }
         }
         DaemonCommands::StopService => {
@@ -1179,17 +1248,19 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
                     println!("✓ Service stopped successfully.");
                 } else {
                     let error = String::from_utf8_lossy(&output.stderr);
-                    return Err(CryptorError::Io(
-                        std::io::Error::other(format!("Failed to stop service: {}", error))
-                    ));
+                    return Err(CryptorError::Io(std::io::Error::other(format!(
+                        "Failed to stop service: {}",
+                        error
+                    ))));
                 }
             }
             #[cfg(not(windows))]
             {
                 eprintln!("Service stop is only supported on Windows");
-                return Err(CryptorError::Io(
-                    std::io::Error::new(std::io::ErrorKind::Unsupported, "Service stop not supported on this platform")
-                ));
+                return Err(CryptorError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Service stop not supported on this platform",
+                )));
             }
         }
     }
@@ -1203,32 +1274,36 @@ fn parse_size(size_str: &str) -> Result<u64, CryptorError> {
     let size_str = size_str.trim().to_uppercase();
 
     if size_str.ends_with('K') {
-        let num = size_str[..size_str.len()-1].parse::<u64>()
-            .map_err(|e| CryptorError::Io(
-                std::io::Error::new(std::io::ErrorKind::InvalidInput,
-                    format!("Invalid size: {}", e))
-            ))?;
+        let num = size_str[..size_str.len() - 1].parse::<u64>().map_err(|e| {
+            CryptorError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid size: {}", e),
+            ))
+        })?;
         Ok(num * 1024)
     } else if size_str.ends_with('M') {
-        let num = size_str[..size_str.len()-1].parse::<u64>()
-            .map_err(|e| CryptorError::Io(
-                std::io::Error::new(std::io::ErrorKind::InvalidInput,
-                    format!("Invalid size: {}", e))
-            ))?;
+        let num = size_str[..size_str.len() - 1].parse::<u64>().map_err(|e| {
+            CryptorError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid size: {}", e),
+            ))
+        })?;
         Ok(num * 1024 * 1024)
     } else if size_str.ends_with('G') {
-        let num = size_str[..size_str.len()-1].parse::<u64>()
-            .map_err(|e| CryptorError::Io(
-                std::io::Error::new(std::io::ErrorKind::InvalidInput,
-                    format!("Invalid size: {}", e))
-            ))?;
+        let num = size_str[..size_str.len() - 1].parse::<u64>().map_err(|e| {
+            CryptorError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid size: {}", e),
+            ))
+        })?;
         Ok(num * 1024 * 1024 * 1024)
     } else {
         // Assume bytes
-        size_str.parse::<u64>()
-            .map_err(|e| CryptorError::Io(
-                std::io::Error::new(std::io::ErrorKind::InvalidInput,
-                    format!("Invalid size: {}", e))
+        size_str.parse::<u64>().map_err(|e| {
+            CryptorError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid size: {}", e),
             ))
+        })
     }
 }

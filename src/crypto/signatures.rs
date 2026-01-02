@@ -188,7 +188,11 @@ impl MlDsaKeyPair {
     /// # Errors
     ///
     /// Returns an error if the seed is not exactly 32 bytes.
-    pub fn from_bytes(level: SecurityLevel, verifying_key: &[u8], signing_key_seed: &[u8]) -> Result<Self> {
+    pub fn from_bytes(
+        level: SecurityLevel,
+        verifying_key: &[u8],
+        signing_key_seed: &[u8],
+    ) -> Result<Self> {
         if signing_key_seed.len() != 32 {
             return Err(CryptorError::Cryptography(format!(
                 "Invalid seed size: expected 32, got {}",
@@ -244,51 +248,63 @@ pub fn verify(
             type VkArray = ml_dsa::EncodedVerifyingKey<MlDsa44>;
             type SigArray = ml_dsa::EncodedSignature<MlDsa44>;
 
-            let vk_array = VkArray::try_from(verifying_key_bytes)
-                .map_err(|_| CryptorError::Cryptography("Invalid ML-DSA-44 verifying key size".to_string()))?;
-            let sig_array = SigArray::try_from(signature_bytes)
-                .map_err(|_| CryptorError::Cryptography("Invalid ML-DSA-44 signature size".to_string()))?;
+            let vk_array = VkArray::try_from(verifying_key_bytes).map_err(|_| {
+                CryptorError::Cryptography("Invalid ML-DSA-44 verifying key size".to_string())
+            })?;
+            let sig_array = SigArray::try_from(signature_bytes).map_err(|_| {
+                CryptorError::Cryptography("Invalid ML-DSA-44 signature size".to_string())
+            })?;
 
             let vk = ml_dsa::VerifyingKey::<MlDsa44>::decode(&vk_array);
-            let sig = ml_dsa::Signature::<MlDsa44>::decode(&sig_array).ok_or_else(||
-                CryptorError::Cryptography("Failed to decode ML-DSA-44 signature".to_string()))?;
+            let sig = ml_dsa::Signature::<MlDsa44>::decode(&sig_array).ok_or_else(|| {
+                CryptorError::Cryptography("Failed to decode ML-DSA-44 signature".to_string())
+            })?;
 
-            vk.verify(message, &sig)
-                .map_err(|_| CryptorError::Cryptography("ML-DSA-44 signature verification failed".to_string()))?;
+            vk.verify(message, &sig).map_err(|_| {
+                CryptorError::Cryptography("ML-DSA-44 signature verification failed".to_string())
+            })?;
             Ok(())
         }
         SecurityLevel::Level65 => {
             type VkArray = ml_dsa::EncodedVerifyingKey<MlDsa65>;
             type SigArray = ml_dsa::EncodedSignature<MlDsa65>;
 
-            let vk_array = VkArray::try_from(verifying_key_bytes)
-                .map_err(|_| CryptorError::Cryptography("Invalid ML-DSA-65 verifying key size".to_string()))?;
-            let sig_array = SigArray::try_from(signature_bytes)
-                .map_err(|_| CryptorError::Cryptography("Invalid ML-DSA-65 signature size".to_string()))?;
+            let vk_array = VkArray::try_from(verifying_key_bytes).map_err(|_| {
+                CryptorError::Cryptography("Invalid ML-DSA-65 verifying key size".to_string())
+            })?;
+            let sig_array = SigArray::try_from(signature_bytes).map_err(|_| {
+                CryptorError::Cryptography("Invalid ML-DSA-65 signature size".to_string())
+            })?;
 
             let vk = ml_dsa::VerifyingKey::<MlDsa65>::decode(&vk_array);
-            let sig = ml_dsa::Signature::<MlDsa65>::decode(&sig_array).ok_or_else(||
-                CryptorError::Cryptography("Failed to decode ML-DSA-65 signature".to_string()))?;
+            let sig = ml_dsa::Signature::<MlDsa65>::decode(&sig_array).ok_or_else(|| {
+                CryptorError::Cryptography("Failed to decode ML-DSA-65 signature".to_string())
+            })?;
 
-            vk.verify(message, &sig)
-                .map_err(|_| CryptorError::Cryptography("ML-DSA-65 signature verification failed".to_string()))?;
+            vk.verify(message, &sig).map_err(|_| {
+                CryptorError::Cryptography("ML-DSA-65 signature verification failed".to_string())
+            })?;
             Ok(())
         }
         SecurityLevel::Level87 => {
             type VkArray = ml_dsa::EncodedVerifyingKey<MlDsa87>;
             type SigArray = ml_dsa::EncodedSignature<MlDsa87>;
 
-            let vk_array = VkArray::try_from(verifying_key_bytes)
-                .map_err(|_| CryptorError::Cryptography("Invalid ML-DSA-87 verifying key size".to_string()))?;
-            let sig_array = SigArray::try_from(signature_bytes)
-                .map_err(|_| CryptorError::Cryptography("Invalid ML-DSA-87 signature size".to_string()))?;
+            let vk_array = VkArray::try_from(verifying_key_bytes).map_err(|_| {
+                CryptorError::Cryptography("Invalid ML-DSA-87 verifying key size".to_string())
+            })?;
+            let sig_array = SigArray::try_from(signature_bytes).map_err(|_| {
+                CryptorError::Cryptography("Invalid ML-DSA-87 signature size".to_string())
+            })?;
 
             let vk = ml_dsa::VerifyingKey::<MlDsa87>::decode(&vk_array);
-            let sig = ml_dsa::Signature::<MlDsa87>::decode(&sig_array).ok_or_else(||
-                CryptorError::Cryptography("Failed to decode ML-DSA-87 signature".to_string()))?;
+            let sig = ml_dsa::Signature::<MlDsa87>::decode(&sig_array).ok_or_else(|| {
+                CryptorError::Cryptography("Failed to decode ML-DSA-87 signature".to_string())
+            })?;
 
-            vk.verify(message, &sig)
-                .map_err(|_| CryptorError::Cryptography("ML-DSA-87 signature verification failed".to_string()))?;
+            vk.verify(message, &sig).map_err(|_| {
+                CryptorError::Cryptography("ML-DSA-87 signature verification failed".to_string())
+            })?;
             Ok(())
         }
     }
@@ -449,8 +465,20 @@ mod tests {
         assert_eq!(sig1, sig2);
 
         // Both should verify
-        verify(SecurityLevel::Level65, keypair.verifying_key(), message, &sig1).unwrap();
-        verify(SecurityLevel::Level65, keypair.verifying_key(), message, &sig2).unwrap();
+        verify(
+            SecurityLevel::Level65,
+            keypair.verifying_key(),
+            message,
+            &sig1,
+        )
+        .unwrap();
+        verify(
+            SecurityLevel::Level65,
+            keypair.verifying_key(),
+            message,
+            &sig2,
+        )
+        .unwrap();
     }
 
     #[test]

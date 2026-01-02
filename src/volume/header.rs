@@ -227,12 +227,7 @@ impl VolumeHeader {
     /// # Returns
     ///
     /// A new `VolumeHeader` instance
-    pub fn new(
-        volume_size: u64,
-        sector_size: u32,
-        salt: [u8; 32],
-        header_iv: [u8; 12],
-    ) -> Self {
+    pub fn new(volume_size: u64, sector_size: u32, salt: [u8; 32], header_iv: [u8; 12]) -> Self {
         let now = current_unix_timestamp();
 
         let mut header = Self {
@@ -245,10 +240,10 @@ impl VolumeHeader {
             sector_size,
             created_at: now,
             modified_at: now,
-            pq_algorithm: PqAlgorithm::None,  // Can be upgraded later
+            pq_algorithm: PqAlgorithm::None, // Can be upgraded later
             pq_metadata_offset: 0,
             pq_metadata_size: 0,
-            checksum: [0u8; 32],  // Computed later
+            checksum: [0u8; 32], // Computed later
             flags: 0,
             reserved: [0u8; 202],
         };
@@ -291,9 +286,9 @@ impl VolumeHeader {
             created_at: now,
             modified_at: now,
             pq_algorithm: PqAlgorithm::MlKem1024,
-            pq_metadata_offset: HEADER_SIZE as u64,  // PQ metadata follows header
+            pq_metadata_offset: HEADER_SIZE as u64, // PQ metadata follows header
             pq_metadata_size,
-            checksum: [0u8; 32],  // Computed later
+            checksum: [0u8; 32], // Computed later
             flags: 0,
             reserved: [0u8; 202],
         };
@@ -788,7 +783,10 @@ mod tests {
         assert_eq!(deserialized.ciphertext[0], 0xCC);
         assert_eq!(deserialized.ciphertext[1567], 0xCC);
         assert_eq!(deserialized.encrypted_decapsulation_key[0], 0xDD);
-        assert_eq!(deserialized.encrypted_decapsulation_key[ENCRYPTED_DK_SIZE - 1], 0xDD);
+        assert_eq!(
+            deserialized.encrypted_decapsulation_key[ENCRYPTED_DK_SIZE - 1],
+            0xDD
+        );
     }
 
     #[test]
@@ -822,7 +820,10 @@ mod tests {
         assert_eq!(read_metadata.algorithm, metadata.algorithm);
         assert_eq!(read_metadata.encapsulation_key, metadata.encapsulation_key);
         assert_eq!(read_metadata.ciphertext, metadata.ciphertext);
-        assert_eq!(read_metadata.encrypted_decapsulation_key, metadata.encrypted_decapsulation_key);
+        assert_eq!(
+            read_metadata.encrypted_decapsulation_key,
+            metadata.encrypted_decapsulation_key
+        );
     }
 
     #[test]

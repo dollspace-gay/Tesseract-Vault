@@ -31,7 +31,7 @@
 use thiserror::Error;
 
 #[cfg(unix)]
-use libc::{setrlimit, rlimit, RLIMIT_CORE};
+use libc::{rlimit, setrlimit, RLIMIT_CORE};
 
 /// Errors that can occur during dump protection operations
 #[derive(Debug, Error)]
@@ -399,8 +399,8 @@ mod tests {
     #[test]
     #[cfg(windows)]
     fn test_power_state_monitor() {
-        use std::sync::Arc;
         use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
 
         let callback_invoked = Arc::new(AtomicBool::new(false));
         let callback_invoked_clone = Arc::clone(&callback_invoked);

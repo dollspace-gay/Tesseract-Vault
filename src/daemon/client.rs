@@ -4,8 +4,8 @@
 //!
 //! Provides a client interface for communicating with the daemon server
 
-use std::path::PathBuf;
 use std::io::{Read, Write};
+use std::path::PathBuf;
 
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
@@ -49,7 +49,10 @@ impl DaemonClient {
     }
 
     /// Send a command to the daemon
-    pub fn send_command(&self, command: DaemonCommand) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+    pub fn send_command(
+        &self,
+        command: DaemonCommand,
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
         #[cfg(unix)]
         {
             self.send_command_unix(command)
@@ -62,13 +65,19 @@ impl DaemonClient {
     }
 
     #[cfg(unix)]
-    fn send_command_unix(&self, command: DaemonCommand) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+    fn send_command_unix(
+        &self,
+        command: DaemonCommand,
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
         let mut stream = UnixStream::connect(&self.socket_path)?;
         Self::send_command_impl(&mut stream, command)
     }
 
     #[cfg(windows)]
-    fn send_command_windows(&self, command: DaemonCommand) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+    fn send_command_windows(
+        &self,
+        command: DaemonCommand,
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
         let addr = self.socket_path.to_string_lossy();
         let mut stream = TcpStream::connect(addr.as_ref())?;
         Self::send_command_impl(&mut stream, command)
@@ -125,13 +134,19 @@ impl DaemonClient {
     }
 
     /// Unmount a volume by container path
-    pub fn unmount(&self, container_path: PathBuf) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+    pub fn unmount(
+        &self,
+        container_path: PathBuf,
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
         let command = DaemonCommand::Unmount { container_path };
         self.send_command(command)
     }
 
     /// Unmount a volume by mount point
-    pub fn unmount_by_mount_point(&self, mount_point: PathBuf) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+    pub fn unmount_by_mount_point(
+        &self,
+        mount_point: PathBuf,
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
         let command = DaemonCommand::UnmountByMountPoint { mount_point };
         self.send_command(command)
     }
@@ -142,7 +157,10 @@ impl DaemonClient {
     }
 
     /// Get information about a specific mount
-    pub fn get_info(&self, container_path: PathBuf) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+    pub fn get_info(
+        &self,
+        container_path: PathBuf,
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
         let command = DaemonCommand::GetInfo { container_path };
         self.send_command(command)
     }

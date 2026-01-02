@@ -49,11 +49,11 @@
 //! - On write: Modify chunk in cache, mark as dirty
 //! - Dirty chunks are encrypted and written back on flush or eviction
 
+use std::future::Future;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
-use std::future::Future;
 
 use lru::LruCache;
 use thiserror::Error;
@@ -155,7 +155,11 @@ pub trait AsyncStorageBackend: Send + Sync {
     ///
     /// # Returns
     /// The chunk data, or `None` if the chunk doesn't exist yet
-    fn read_chunk<'a>(&'a self, chunk_index: u64, chunk_size: u64) -> AsyncResult<'a, Option<Vec<u8>>>;
+    fn read_chunk<'a>(
+        &'a self,
+        chunk_index: u64,
+        chunk_size: u64,
+    ) -> AsyncResult<'a, Option<Vec<u8>>>;
 
     /// Write a chunk to storage
     ///
@@ -210,16 +214,20 @@ impl BlockingAdapter {
 }
 
 impl AsyncStorageBackend for BlockingAdapter {
-    fn read_chunk<'a>(&'a self, chunk_index: u64, chunk_size: u64) -> AsyncResult<'a, Option<Vec<u8>>> {
+    fn read_chunk<'a>(
+        &'a self,
+        chunk_index: u64,
+        chunk_size: u64,
+    ) -> AsyncResult<'a, Option<Vec<u8>>> {
         let backend = Arc::clone(&self.backend);
         let offset = chunk_index * self.chunk_size;
 
         Box::pin(async move {
             // In a real implementation, this would use tokio::task::spawn_blocking
             // For now, we do it inline since we're keeping it simple
-            let mut guard = backend.lock().map_err(|_| {
-                io::Error::other("lock poisoned")
-            })?;
+            let mut guard = backend
+                .lock()
+                .map_err(|_| io::Error::other("lock poisoned"))?;
 
             let mut buf = vec![0u8; chunk_size as usize];
             let bytes_read = guard.read_at(offset, &mut buf)?;
@@ -238,9 +246,9 @@ impl AsyncStorageBackend for BlockingAdapter {
         let offset = chunk_index * self.chunk_size;
 
         Box::pin(async move {
-            let mut guard = backend.lock().map_err(|_| {
-                io::Error::other("lock poisoned")
-            })?;
+            let mut guard = backend
+                .lock()
+                .map_err(|_| io::Error::other("lock poisoned"))?;
 
             guard.write_at(offset, data)?;
             Ok(())
@@ -251,9 +259,9 @@ impl AsyncStorageBackend for BlockingAdapter {
         let backend = Arc::clone(&self.backend);
 
         Box::pin(async move {
-            let mut guard = backend.lock().map_err(|_| {
-                io::Error::other("lock poisoned")
-            })?;
+            let mut guard = backend
+                .lock()
+                .map_err(|_| io::Error::other("lock poisoned"))?;
 
             guard.flush()
         })
@@ -263,9 +271,9 @@ impl AsyncStorageBackend for BlockingAdapter {
         let backend = Arc::clone(&self.backend);
 
         Box::pin(async move {
-            let guard = backend.lock().map_err(|_| {
-                io::Error::other("lock poisoned")
-            })?;
+            let guard = backend
+                .lock()
+                .map_err(|_| io::Error::other("lock poisoned"))?;
 
             guard.size()
         })
@@ -521,7 +529,9 @@ impl VolumeIO {
             let chunk_end = if chunk_id == range.end.chunk_id {
                 (range.end.chunk_offset + 1) as usize
             } else {
-                self.chunk_mapper.chunk_actual_size(chunk_id).unwrap_or(self.chunk_size) as usize
+                self.chunk_mapper
+                    .chunk_actual_size(chunk_id)
+                    .unwrap_or(self.chunk_size) as usize
             };
 
             let bytes_from_chunk = chunk_end - chunk_start;
@@ -577,7 +587,9 @@ impl VolumeIO {
             let chunk_end = if chunk_id == range.end.chunk_id {
                 (range.end.chunk_offset + 1) as usize
             } else {
-                self.chunk_mapper.chunk_actual_size(chunk_id).unwrap_or(self.chunk_size) as usize
+                self.chunk_mapper
+                    .chunk_actual_size(chunk_id)
+                    .unwrap_or(self.chunk_size) as usize
             };
 
             let bytes_to_chunk = chunk_end - chunk_start;
@@ -598,7 +610,10 @@ impl VolumeIO {
 
     /// Flushes all dirty chunks to storage
     pub fn flush(&self) -> Result<()> {
-        let mut cache = self.cache.write().map_err(|_| VolumeIOError::LockPoisoned)?;
+        let mut cache = self
+            .cache
+            .write()
+            .map_err(|_| VolumeIOError::LockPoisoned)?;
 
         // Collect dirty chunk IDs first
         let dirty_ids: Vec<u64> = cache
@@ -615,7 +630,10 @@ impl VolumeIO {
         }
 
         // Flush the backend
-        let mut backend = self.backend.write().map_err(|_| VolumeIOError::LockPoisoned)?;
+        let mut backend = self
+            .backend
+            .write()
+            .map_err(|_| VolumeIOError::LockPoisoned)?;
         backend.flush()?;
 
         Ok(())
@@ -625,28 +643,38 @@ impl VolumeIO {
     fn get_chunk(&self, chunk_id: u64) -> Result<Vec<u8>> {
         // Check cache first
         {
-            let mut cache = self.cache.write().map_err(|_| VolumeIOError::LockPoisoned)?;
+            let mut cache = self
+                .cache
+                .write()
+                .map_err(|_| VolumeIOError::LockPoisoned)?;
             if let Some(cached) = cache.get(&chunk_id) {
                 return Ok(cached.data.to_vec());
             }
         }
 
         // Cache miss - fetch from backend and decrypt
-        let chunk_size = self.chunk_mapper.chunk_actual_size(chunk_id)
-            .ok_or(ChunkError::OffsetOutOfBounds {
-                offset: chunk_id * self.chunk_size,
-                volume_size: self.volume_size,
-            })?;
+        let chunk_size =
+            self.chunk_mapper
+                .chunk_actual_size(chunk_id)
+                .ok_or(ChunkError::OffsetOutOfBounds {
+                    offset: chunk_id * self.chunk_size,
+                    volume_size: self.volume_size,
+                })?;
 
         let encrypted = self.read_chunk_from_backend(chunk_id, chunk_size)?;
         let decrypted = self.decrypt_chunk(chunk_id, &encrypted)?;
 
         // Store in cache
         {
-            let mut cache = self.cache.write().map_err(|_| VolumeIOError::LockPoisoned)?;
+            let mut cache = self
+                .cache
+                .write()
+                .map_err(|_| VolumeIOError::LockPoisoned)?;
 
             // Check if evicted chunk was dirty
-            if let Some((evicted_id, evicted_chunk)) = cache.push(chunk_id, CachedChunk::new(decrypted.clone())) {
+            if let Some((evicted_id, evicted_chunk)) =
+                cache.push(chunk_id, CachedChunk::new(decrypted.clone()))
+            {
                 if evicted_chunk.dirty {
                     // Write back evicted dirty chunk
                     drop(cache); // Release lock before backend write
@@ -660,7 +688,10 @@ impl VolumeIO {
 
     /// Puts a modified chunk into the cache and marks it as dirty
     fn put_chunk_dirty(&self, chunk_id: u64, data: Vec<u8>) -> Result<()> {
-        let mut cache = self.cache.write().map_err(|_| VolumeIOError::LockPoisoned)?;
+        let mut cache = self
+            .cache
+            .write()
+            .map_err(|_| VolumeIOError::LockPoisoned)?;
 
         let mut cached = CachedChunk::new(data);
         cached.mark_dirty();
@@ -682,7 +713,10 @@ impl VolumeIO {
         let offset = chunk_id * self.chunk_size;
         let mut buf = vec![0u8; chunk_size as usize];
 
-        let mut backend = self.backend.write().map_err(|_| VolumeIOError::LockPoisoned)?;
+        let mut backend = self
+            .backend
+            .write()
+            .map_err(|_| VolumeIOError::LockPoisoned)?;
         let bytes_read = backend.read_at(offset, &mut buf)?;
 
         if bytes_read < chunk_size as usize {
@@ -698,7 +732,10 @@ impl VolumeIO {
         let encrypted = self.encrypt_chunk(chunk_id, plaintext)?;
         let offset = chunk_id * self.chunk_size;
 
-        let mut backend = self.backend.write().map_err(|_| VolumeIOError::LockPoisoned)?;
+        let mut backend = self
+            .backend
+            .write()
+            .map_err(|_| VolumeIOError::LockPoisoned)?;
         backend.write_at(offset, &encrypted)?;
 
         Ok(())
@@ -716,7 +753,9 @@ impl VolumeIO {
             let start = i * self.sector_size;
             let end = start + self.sector_size;
             let sector_ciphertext = &ciphertext[start..end];
-            let decrypted = self.cipher.decrypt_sector(start_sector + i as u64, sector_ciphertext)?;
+            let decrypted = self
+                .cipher
+                .decrypt_sector(start_sector + i as u64, sector_ciphertext)?;
             plaintext.extend_from_slice(&decrypted);
         }
 
@@ -727,7 +766,9 @@ impl VolumeIO {
             let start = sector_count * self.sector_size;
             let mut padded = vec![0u8; self.sector_size];
             padded[..remaining].copy_from_slice(&ciphertext[start..]);
-            let decrypted = self.cipher.decrypt_sector(start_sector + sector_count as u64, &padded)?;
+            let decrypted = self
+                .cipher
+                .decrypt_sector(start_sector + sector_count as u64, &padded)?;
             plaintext.extend_from_slice(&decrypted[..remaining]);
         }
 
@@ -746,7 +787,9 @@ impl VolumeIO {
             let start = i * self.sector_size;
             let end = start + self.sector_size;
             let sector_plaintext = &plaintext[start..end];
-            let encrypted = self.cipher.encrypt_sector(start_sector + i as u64, sector_plaintext)?;
+            let encrypted = self
+                .cipher
+                .encrypt_sector(start_sector + i as u64, sector_plaintext)?;
             ciphertext.extend_from_slice(&encrypted);
         }
 
@@ -757,7 +800,9 @@ impl VolumeIO {
             let start = sector_count * self.sector_size;
             let mut padded = vec![0u8; self.sector_size];
             padded[..remaining].copy_from_slice(&plaintext[start..]);
-            let encrypted = self.cipher.encrypt_sector(start_sector + sector_count as u64, &padded)?;
+            let encrypted = self
+                .cipher
+                .encrypt_sector(start_sector + sector_count as u64, &padded)?;
             ciphertext.extend_from_slice(&encrypted[..remaining]);
         }
 
@@ -797,7 +842,10 @@ impl VolumeIO {
     pub fn clear_cache(&self) -> Result<()> {
         self.flush()?;
 
-        let mut cache = self.cache.write().map_err(|_| VolumeIOError::LockPoisoned)?;
+        let mut cache = self
+            .cache
+            .write()
+            .map_err(|_| VolumeIOError::LockPoisoned)?;
         cache.clear();
         Ok(())
     }
@@ -831,11 +879,17 @@ impl AsyncMemoryBackend {
 }
 
 impl AsyncStorageBackend for AsyncMemoryBackend {
-    fn read_chunk<'a>(&'a self, chunk_index: u64, chunk_size: u64) -> AsyncResult<'a, Option<Vec<u8>>> {
+    fn read_chunk<'a>(
+        &'a self,
+        chunk_index: u64,
+        chunk_size: u64,
+    ) -> AsyncResult<'a, Option<Vec<u8>>> {
         let offset = (chunk_index * self.chunk_size) as usize;
 
         // Lock, clone, release - all synchronously before the async block
-        let data_result: io::Result<Vec<u8>> = self.data.lock()
+        let data_result: io::Result<Vec<u8>> = self
+            .data
+            .lock()
             .map(|guard| guard.clone())
             .map_err(|_| io::Error::other("lock poisoned"));
 
@@ -854,9 +908,10 @@ impl AsyncStorageBackend for AsyncMemoryBackend {
 
         // Perform the write synchronously before the async block
         let result: io::Result<()> = (|| {
-            let mut data = self.data.lock().map_err(|_| {
-                io::Error::other("lock poisoned")
-            })?;
+            let mut data = self
+                .data
+                .lock()
+                .map_err(|_| io::Error::other("lock poisoned"))?;
 
             if offset >= data.len() {
                 return Ok(());
@@ -877,7 +932,9 @@ impl AsyncStorageBackend for AsyncMemoryBackend {
 
     fn size<'a>(&'a self) -> AsyncResult<'a, u64> {
         // Get size synchronously before async block
-        let size_result: io::Result<u64> = self.data.lock()
+        let size_result: io::Result<u64> = self
+            .data
+            .lock()
             .map(|guard| guard.len() as u64)
             .map_err(|_| io::Error::other("lock poisoned"));
 
@@ -899,7 +956,8 @@ mod tests {
             64 * 1024, // 64KB chunks for testing
             SECTOR_SIZE_4K,
             4,
-        ).unwrap()
+        )
+        .unwrap()
     }
 
     #[test]
@@ -1100,7 +1158,8 @@ mod tests {
             64 * 1024, // 64 KB chunks
             SECTOR_SIZE_4K,
             2, // Only 2 chunk cache
-        ).unwrap();
+        )
+        .unwrap();
 
         // Write to 4 chunks (will cause evictions)
         for i in 0..4 {
@@ -1116,14 +1175,18 @@ mod tests {
             let offset = i * 64 * 1024;
             let mut buf = vec![0u8; 100];
             io.read(offset, &mut buf).unwrap();
-            assert!(buf.iter().all(|&b| b == i as u8), "Chunk {} data mismatch", i);
+            assert!(
+                buf.iter().all(|&b| b == i as u8),
+                "Chunk {} data mismatch",
+                i
+            );
         }
     }
 
     #[test]
     fn test_total_chunks() {
         let io = create_test_io(256 * 1024); // 256 KB
-        // 256 KB / 64 KB = 4 chunks
+                                             // 256 KB / 64 KB = 4 chunks
         assert_eq!(io.total_chunks(), 4);
     }
 
@@ -1204,5 +1267,4 @@ mod tests {
         let result = poll_once(backend.size());
         assert_eq!(result.unwrap(), 64 * 1024);
     }
-
 }

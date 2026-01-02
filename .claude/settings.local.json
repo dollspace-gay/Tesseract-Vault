@@ -111,7 +111,9 @@
       "Bash(python:*)",
       "Bash(git config:*)",
       "Bash(if not exist .cargo mkdir .cargo)",
-      "Bash(cargo fmt:*)"
+      "Bash(cargo fmt:*)",
+      "Bash(git log:*)",
+      "Bash(cargo llvm-cov:*)"
     ],
     "deny": [],
     "ask": []

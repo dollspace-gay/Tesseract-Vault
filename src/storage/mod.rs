@@ -206,6 +206,12 @@ mod tests {
     }
 
     #[test]
+    fn test_read_file_not_found() {
+        let result = read_file(Path::new("/nonexistent/file/path.txt"));
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_write_file_atomic() {
         let temp_dir = tempfile::tempdir().unwrap();
         let temp_path = temp_dir.path().join("test_file.txt");
@@ -215,6 +221,18 @@ mod tests {
 
         let data = read_file(&temp_path).unwrap();
         assert_eq!(data, test_data);
+    }
+
+    #[test]
+    fn test_write_file_atomic_overwrite() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_path = temp_dir.path().join("test_file.txt");
+
+        write_file_atomic(&temp_path, b"initial data").unwrap();
+        write_file_atomic(&temp_path, b"new data").unwrap();
+
+        let data = read_file(&temp_path).unwrap();
+        assert_eq!(data, b"new data");
     }
 
     #[test]
@@ -231,5 +249,118 @@ mod tests {
 
         let data = read_file(&temp_path).unwrap();
         assert_eq!(data, b"line 1\nline 2\n");
+    }
+
+    #[test]
+    fn test_write_atomically_empty() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_path = temp_dir.path().join("empty_file.txt");
+
+        write_atomically(&temp_path, |_file| Ok(())).unwrap();
+
+        let data = read_file(&temp_path).unwrap();
+        assert!(data.is_empty());
+    }
+
+    mod format_tests {
+        use super::super::format::*;
+        use crate::config::{MAGIC_BYTES, NONCE_LEN};
+        use crate::crypto::kdf::generate_salt_string;
+        use std::io::{Seek, SeekFrom, Write};
+        use tempfile::NamedTempFile;
+
+        #[test]
+        fn test_write_and_read_encrypted_file_header() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+
+            let salt = generate_salt_string();
+            let nonce = vec![0xAB; NONCE_LEN];
+            let ciphertext = b"encrypted data here";
+
+            write_encrypted_file(temp_file.as_file_mut(), &salt, &nonce, ciphertext).unwrap();
+            temp_file.flush().unwrap();
+            temp_file.seek(SeekFrom::Start(0)).unwrap();
+
+            let header = read_encrypted_header(temp_file.as_file_mut()).unwrap();
+
+            assert_eq!(header.salt.as_str(), salt.as_str());
+            assert_eq!(header.nonce, nonce);
+        }
+
+        #[test]
+        fn test_read_encrypted_header_invalid_magic() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            temp_file.write_all(b"INVALID!").unwrap();
+            temp_file.flush().unwrap();
+            temp_file.seek(SeekFrom::Start(0)).unwrap();
+
+            let result = read_encrypted_header(temp_file.as_file_mut());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_read_encrypted_header_salt_too_long() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            temp_file.write_all(MAGIC_BYTES).unwrap();
+            temp_file.write_all(&[255u8]).unwrap();
+            temp_file.flush().unwrap();
+            temp_file.seek(SeekFrom::Start(0)).unwrap();
+
+            let result = read_encrypted_header(temp_file.as_file_mut());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_read_encrypted_header_invalid_salt_utf8() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            temp_file.write_all(MAGIC_BYTES).unwrap();
+            temp_file.write_all(&[4u8]).unwrap();
+            temp_file.write_all(&[0xFF, 0xFE, 0xFF, 0xFE]).unwrap();
+            temp_file.flush().unwrap();
+            temp_file.seek(SeekFrom::Start(0)).unwrap();
+
+            let result = read_encrypted_header(temp_file.as_file_mut());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_encrypted_header_struct_debug() {
+            let salt = generate_salt_string();
+            let header = EncryptedHeader {
+                salt: salt.clone(),
+                nonce: vec![1, 2, 3],
+            };
+            let debug_str = format!("{:?}", header);
+            assert!(debug_str.contains("EncryptedHeader"));
+        }
+
+        #[test]
+        fn test_encrypted_header_clone() {
+            let salt = generate_salt_string();
+            let header = EncryptedHeader {
+                salt: salt.clone(),
+                nonce: vec![1, 2, 3, 4, 5],
+            };
+            let cloned = header.clone();
+            assert_eq!(cloned.salt.as_str(), header.salt.as_str());
+            assert_eq!(cloned.nonce, header.nonce);
+        }
+
+        #[test]
+        fn test_write_encrypted_file_complete() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+
+            let salt = generate_salt_string();
+            let nonce = vec![0x42; NONCE_LEN];
+            let ciphertext = b"test ciphertext with more data";
+
+            write_encrypted_file(temp_file.as_file_mut(), &salt, &nonce, ciphertext).unwrap();
+            temp_file.flush().unwrap();
+
+            // Verify file size is correct
+            let metadata = temp_file.as_file().metadata().unwrap();
+            let expected_size = MAGIC_BYTES.len() + 1 + salt.as_str().len() + NONCE_LEN + ciphertext.len();
+            assert_eq!(metadata.len() as usize, expected_size);
+        }
     }
 }

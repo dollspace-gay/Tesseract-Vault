@@ -526,4 +526,156 @@ mod tests {
         let result = encrypt_file_validated(&input_path, &encrypted_path, "StrongPass123!");
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_decrypt_file_invalid_format() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let invalid_path = temp_dir.path().join("invalid.bin");
+        let output_path = temp_dir.path().join("output.txt");
+
+        // Write random data that doesn't match any magic bytes
+        std::fs::write(&invalid_path, b"RANDOMXX12345678901234567890").unwrap();
+
+        let result = decrypt_file(&invalid_path, &output_path, "password123");
+        assert!(result.is_err());
+        if let Err(CryptorError::InvalidFormat) = result {
+            // Expected
+        } else {
+            panic!("Expected InvalidFormat error");
+        }
+    }
+
+    #[test]
+    fn test_decrypt_bytes_invalid_salt_utf8() {
+        let result = decrypt_bytes(&[0xFF, 0xFE], &[0u8; 12], &[0u8; 32], "password");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_bytes_invalid_salt_base64() {
+        let result = decrypt_bytes(b"not-valid-base64!!", &[0u8; 12], &[0u8; 32], "password");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_empty_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let input_path = temp_dir.path().join("empty.txt");
+        let encrypted_path = temp_dir.path().join("encrypted.bin");
+        let output_path = temp_dir.path().join("output.txt");
+
+        std::fs::write(&input_path, b"").unwrap();
+
+        let password = "TestPassword123!";
+
+        encrypt_file(&input_path, &encrypted_path, password).unwrap();
+        decrypt_file(&encrypted_path, &output_path, password).unwrap();
+
+        let decrypted_data = std::fs::read(&output_path).unwrap();
+        assert!(decrypted_data.is_empty());
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_large_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let input_path = temp_dir.path().join("large.bin");
+        let encrypted_path = temp_dir.path().join("encrypted.bin");
+        let output_path = temp_dir.path().join("output.bin");
+
+        // Create 1MB file with pattern data
+        let test_data: Vec<u8> = (0u8..=255).cycle().take(1024 * 1024).collect();
+        std::fs::write(&input_path, &test_data).unwrap();
+
+        let password = "TestPassword123!";
+
+        encrypt_file(&input_path, &encrypted_path, password).unwrap();
+        decrypt_file(&encrypted_path, &output_path, password).unwrap();
+
+        let decrypted_data = std::fs::read(&output_path).unwrap();
+        assert_eq!(decrypted_data, test_data);
+    }
+
+    #[test]
+    fn test_encrypt_bytes_empty() {
+        let (salt, nonce, ciphertext) = encrypt_bytes(&[], "TestPassword123!").unwrap();
+        assert!(!salt.is_empty());
+        assert!(!nonce.is_empty());
+        // Ciphertext has auth tag even for empty plaintext
+        assert!(!ciphertext.is_empty());
+
+        let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, "TestPassword123!").unwrap();
+        assert!(decrypted.is_empty());
+    }
+
+    #[test]
+    fn test_encrypt_bytes_large() {
+        let plaintext: Vec<u8> = (0u8..=255).cycle().take(100_000).collect();
+        let password = "TestPassword123!";
+
+        let (salt, nonce, ciphertext) = encrypt_bytes(&plaintext, password).unwrap();
+        let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, password).unwrap();
+
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn test_decrypt_bytes_wrong_password() {
+        let plaintext = b"secret data";
+        let (salt, nonce, ciphertext) = encrypt_bytes(plaintext, "CorrectPass123!").unwrap();
+        let result = decrypt_bytes(&salt, &nonce, &ciphertext, "WrongPassword!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_encrypt_file_nonexistent_input() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let input_path = temp_dir.path().join("nonexistent.txt");
+        let encrypted_path = temp_dir.path().join("encrypted.bin");
+
+        let result = encrypt_file(&input_path, &encrypted_path, "TestPassword123!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_file_nonexistent_input() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let input_path = temp_dir.path().join("nonexistent.bin");
+        let output_path = temp_dir.path().join("output.txt");
+
+        let result = decrypt_file(&input_path, &output_path, "TestPassword123!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_bytes_tampered_ciphertext() {
+        let plaintext = b"important data";
+        let (salt, nonce, mut ciphertext) = encrypt_bytes(plaintext, "TestPassword123!").unwrap();
+
+        // Tamper with ciphertext
+        if let Some(byte) = ciphertext.get_mut(0) {
+            *byte ^= 0xFF;
+        }
+
+        let result = decrypt_bytes(&salt, &nonce, &ciphertext, "TestPassword123!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_unicode_content() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let input_path = temp_dir.path().join("unicode.txt");
+        let encrypted_path = temp_dir.path().join("encrypted.bin");
+        let output_path = temp_dir.path().join("output.txt");
+
+        let test_data = "Hello 世界 🌍 Привет мир 你好".as_bytes();
+        std::fs::write(&input_path, test_data).unwrap();
+
+        let password = "TestPassword123!";
+
+        encrypt_file(&input_path, &encrypted_path, password).unwrap();
+        decrypt_file(&encrypted_path, &output_path, password).unwrap();
+
+        let decrypted_data = std::fs::read(&output_path).unwrap();
+        assert_eq!(decrypted_data, test_data);
+    }
 }

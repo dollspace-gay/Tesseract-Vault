@@ -387,6 +387,8 @@ impl VolumeMigration {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_migration_manager_creation() {
@@ -395,6 +397,145 @@ mod tests {
         assert!(migration.backup.is_none());
     }
 
-    // Note: Full integration tests require creating actual volume files,
-    // which is complex. These should be added in integration tests.
+    #[test]
+    fn test_migration_manager_creation_pathbuf() {
+        let path = PathBuf::from("/some/path/volume.vol");
+        let migration = VolumeMigration::new(path.clone());
+        assert_eq!(migration.volume_path, path);
+        assert!(migration.backup_path().is_none());
+    }
+
+    #[test]
+    fn test_migration_error_display() {
+        let io_err = MigrationError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "file not found",
+        ));
+        assert!(io_err.to_string().contains("I/O error"));
+
+        let already_migrated = MigrationError::AlreadyMigrated;
+        assert!(already_migrated.to_string().contains("already V2"));
+
+        let volume_not_found = MigrationError::VolumeNotFound(PathBuf::from("/test/path"));
+        assert!(volume_not_found.to_string().contains("/test/path"));
+
+        let unlock_failed = MigrationError::UnlockFailed;
+        assert!(unlock_failed.to_string().contains("incorrect password"));
+
+        let verification_failed =
+            MigrationError::VerificationFailed("test failure".to_string());
+        assert!(verification_failed.to_string().contains("test failure"));
+
+        let serialization = MigrationError::Serialization("ser error".to_string());
+        assert!(serialization.to_string().contains("ser error"));
+
+        let encryption = MigrationError::Encryption("enc error".to_string());
+        assert!(encryption.to_string().contains("enc error"));
+
+        let backup_failed = MigrationError::BackupFailed("backup error".to_string());
+        assert!(backup_failed.to_string().contains("backup error"));
+    }
+
+    #[test]
+    fn test_migration_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+        let migration_err: MigrationError = io_err.into();
+        assert!(matches!(migration_err, MigrationError::Io(_)));
+    }
+
+    #[test]
+    fn test_read_v1_header_file_not_found() {
+        let migration = VolumeMigration::new("/nonexistent/path/volume.vol");
+        let result = migration.read_v1_header();
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), MigrationError::VolumeNotFound(_)));
+    }
+
+    #[test]
+    fn test_read_keyslots_file_not_found() {
+        let migration = VolumeMigration::new("/nonexistent/path/volume.vol");
+        let result = migration.read_keyslots();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rollback_no_backup() {
+        let migration = VolumeMigration::new("test.vol");
+        let result = migration.rollback();
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), MigrationError::BackupFailed(_)));
+    }
+
+    #[test]
+    fn test_migration_backup_save_invalid_path() {
+        use super::super::header::VolumeHeader;
+        use super::super::keyslot::KeySlots;
+
+        let salt = [0u8; 32];
+        let header_iv = [0u8; 12];
+        let header = VolumeHeader::new(1024 * 1024, 4096, salt, header_iv);
+        let keyslots = KeySlots::new();
+
+        let backup = MigrationBackup {
+            original_header: header,
+            original_keyslots: keyslots,
+            backup_path: PathBuf::from("/nonexistent/directory/backup.bak"),
+        };
+
+        let result = backup.save();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_migration_backup_restore_invalid_path() {
+        use super::super::header::VolumeHeader;
+        use super::super::keyslot::KeySlots;
+
+        let salt = [0u8; 32];
+        let header_iv = [0u8; 12];
+        let header = VolumeHeader::new(1024 * 1024, 4096, salt, header_iv);
+        let keyslots = KeySlots::new();
+
+        let backup = MigrationBackup {
+            original_header: header,
+            original_keyslots: keyslots,
+            backup_path: PathBuf::from("test.backup"),
+        };
+
+        let result = backup.restore(Path::new("/nonexistent/volume.vol"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_migration_backup_debug() {
+        use super::super::header::VolumeHeader;
+        use super::super::keyslot::KeySlots;
+
+        let salt = [0u8; 32];
+        let header_iv = [0u8; 12];
+        let header = VolumeHeader::new(1024 * 1024, 4096, salt, header_iv);
+        let keyslots = KeySlots::new();
+
+        let backup = MigrationBackup {
+            original_header: header,
+            original_keyslots: keyslots,
+            backup_path: PathBuf::from("test.backup"),
+        };
+
+        let debug_str = format!("{:?}", backup);
+        assert!(debug_str.contains("MigrationBackup"));
+    }
+
+    #[test]
+    fn test_read_v1_header_invalid_header() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        // Write invalid header data
+        temp_file.write_all(&[0u8; 4096]).unwrap();
+        temp_file.flush().unwrap();
+
+        let migration = VolumeMigration::new(temp_file.path());
+        let result = migration.read_v1_header();
+        // Should fail due to invalid header format
+        assert!(result.is_err());
+    }
 }

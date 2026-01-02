@@ -3488,7 +3488,8 @@ mod tests {
     fn test_rename_entry_to_different_parent() {
         let fs = create_test_fs(1);
         fs.create_file(ROOT_INODE, "moveme.txt", 0o644).unwrap();
-        fs.create_directory(ROOT_INODE, "target_dir", 0o755).unwrap();
+        fs.create_directory(ROOT_INODE, "target_dir", 0o755)
+            .unwrap();
 
         let target_inode = fs.lookup(ROOT_INODE, "target_dir").unwrap().unwrap();
         fs.rename_entry(ROOT_INODE, "moveme.txt", target_inode, "moved.txt")
@@ -3536,8 +3537,10 @@ mod tests {
     #[test]
     fn test_rename_directory_updates_dotdot() {
         let fs = create_test_fs(1);
-        fs.create_directory(ROOT_INODE, "src_parent", 0o755).unwrap();
-        fs.create_directory(ROOT_INODE, "dest_parent", 0o755).unwrap();
+        fs.create_directory(ROOT_INODE, "src_parent", 0o755)
+            .unwrap();
+        fs.create_directory(ROOT_INODE, "dest_parent", 0o755)
+            .unwrap();
 
         let src_parent = fs.lookup(ROOT_INODE, "src_parent").unwrap().unwrap();
         let dest_parent = fs.lookup(ROOT_INODE, "dest_parent").unwrap().unwrap();

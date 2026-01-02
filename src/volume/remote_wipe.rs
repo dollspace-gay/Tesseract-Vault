@@ -957,4 +957,432 @@ mod tests {
         manager.remove_keyfile_path("/etc/tesseract/key1");
         assert_eq!(manager.config.keyfile_paths.len(), 1);
     }
+
+    // ========================================================================
+    // Additional WipeToken Tests
+    // ========================================================================
+
+    #[test]
+    fn test_wipe_token_from_bytes_valid() {
+        let bytes = [42u8; WIPE_TOKEN_SIZE];
+        let token = WipeToken::from_bytes(&bytes).unwrap();
+        assert_eq!(token.token, bytes);
+    }
+
+    #[test]
+    fn test_wipe_token_from_bytes_wrong_size() {
+        let bytes = [42u8; 16]; // Too short
+        let result = WipeToken::from_bytes(&bytes);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_wipe_token_from_hex_invalid() {
+        let result = WipeToken::from_hex("not-valid-hex!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_wipe_token_verification_hash() {
+        let token = WipeToken::generate();
+        let salt = [1u8; TOKEN_SALT_SIZE];
+
+        let hash1 = token.compute_verification_hash(&salt);
+        let hash2 = token.compute_verification_hash(&salt);
+
+        // Same inputs produce same hash
+        assert_eq!(hash1, hash2);
+
+        // Different salt produces different hash
+        let other_salt = [2u8; TOKEN_SALT_SIZE];
+        let hash3 = token.compute_verification_hash(&other_salt);
+        assert_ne!(hash1, hash3);
+    }
+
+    #[test]
+    fn test_wipe_token_sign_command() {
+        let token = WipeToken::generate();
+        let data = WipeCommandData {
+            volume_id: "test-vol".to_string(),
+            timestamp: 12345,
+            nonce: [0u8; COMMAND_NONCE_SIZE],
+            command_type: WipeCommandType::Lock,
+            message: None,
+        };
+
+        let sig1 = token.sign_command(&data);
+        let sig2 = token.sign_command(&data);
+        assert_eq!(sig1, sig2);
+
+        // Different token produces different signature
+        let other_token = WipeToken::generate();
+        let sig3 = other_token.sign_command(&data);
+        assert_ne!(sig1, sig3);
+    }
+
+    // ========================================================================
+    // Additional WipeCommand Tests
+    // ========================================================================
+
+    #[test]
+    fn test_wipe_command_with_message() {
+        let token = WipeToken::generate();
+        let cmd = WipeCommand::with_message(
+            &token,
+            "test-vol",
+            WipeCommandType::DestroyKeys,
+            "Emergency wipe initiated",
+        );
+
+        assert_eq!(cmd.data.message, Some("Emergency wipe initiated".to_string()));
+        assert!(cmd.verify(&token));
+    }
+
+    #[test]
+    fn test_wipe_command_serialization() {
+        let token = WipeToken::generate();
+        let cmd = WipeCommand::new(&token, "test-vol", WipeCommandType::Lock);
+
+        let bytes = cmd.to_bytes().unwrap();
+        let restored = WipeCommand::from_bytes(&bytes).unwrap();
+
+        assert_eq!(restored.data.volume_id, cmd.data.volume_id);
+        assert_eq!(restored.data.timestamp, cmd.data.timestamp);
+        assert_eq!(restored.signature, cmd.signature);
+    }
+
+    #[test]
+    fn test_wipe_command_from_bytes_invalid() {
+        let result = WipeCommand::from_bytes(b"not valid json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_wipe_command_future_timestamp() {
+        let token = WipeToken::generate();
+        let mut cmd = WipeCommand::new(&token, "test-vol", WipeCommandType::CheckIn);
+
+        // Set timestamp far in the future
+        cmd.data.timestamp = u64::MAX;
+        assert!(!cmd.is_fresh());
+    }
+
+    // ========================================================================
+    // Additional WipeCommandType Tests
+    // ========================================================================
+
+    #[test]
+    fn test_wipe_command_type_clone() {
+        let cmd_type = WipeCommandType::DestroyKeys;
+        let cloned = cmd_type;
+        assert_eq!(cmd_type, cloned);
+    }
+
+    #[test]
+    fn test_wipe_command_type_debug() {
+        let cmd_type = WipeCommandType::Lock;
+        let debug_str = format!("{:?}", cmd_type);
+        assert!(debug_str.contains("Lock"));
+    }
+
+    #[test]
+    fn test_wipe_command_type_serialize() {
+        let cmd_type = WipeCommandType::CheckIn;
+        let json = serde_json::to_string(&cmd_type).unwrap();
+        let restored: WipeCommandType = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, cmd_type);
+    }
+
+    // ========================================================================
+    // Additional StoredWipeConfig Tests
+    // ========================================================================
+
+    #[test]
+    fn test_stored_config_serialization() {
+        let token = WipeToken::generate();
+        let config = StoredWipeConfig::new(&token, "test-vol");
+
+        let bytes = config.to_bytes().unwrap();
+        let restored = StoredWipeConfig::from_bytes(&bytes).unwrap();
+
+        assert_eq!(restored.volume_id, config.volume_id);
+        assert_eq!(restored.token_hash, config.token_hash);
+    }
+
+    #[test]
+    fn test_stored_config_from_bytes_invalid() {
+        let result = StoredWipeConfig::from_bytes(b"invalid json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_stored_config_lockout_expired() {
+        let token = WipeToken::generate();
+        let mut config = StoredWipeConfig::new(&token, "test");
+
+        // Set lockout to past time
+        config.lockout_until = 1;
+        assert!(!config.is_locked_out());
+    }
+
+    #[test]
+    fn test_stored_config_record_success_resets_failure() {
+        let token = WipeToken::generate();
+        let mut config = StoredWipeConfig::new(&token, "test");
+
+        // Record some failures
+        config.record_failure();
+        config.record_failure();
+        assert_eq!(config.failed_attempts, 2);
+
+        // Success should reset
+        config.record_success();
+        assert_eq!(config.failed_attempts, 0);
+        assert_eq!(config.lockout_until, 0);
+    }
+
+    #[test]
+    fn test_stored_config_nonce_pruning() {
+        let token = WipeToken::generate();
+        let mut config = StoredWipeConfig::new(&token, "test");
+
+        // Add old nonces with past timestamps
+        config.used_nonces.push((0, [1u8; COMMAND_NONCE_SIZE])); // Very old
+        config.used_nonces.push((0, [2u8; COMMAND_NONCE_SIZE])); // Very old
+
+        // Add a new nonce - should prune old ones
+        config.record_nonce([3u8; COMMAND_NONCE_SIZE]);
+
+        // Old nonces should be pruned, only new one remains
+        assert_eq!(config.used_nonces.len(), 1);
+    }
+
+    #[test]
+    fn test_stored_config_rate_limit_not_active() {
+        let token = WipeToken::generate();
+        let mut config = StoredWipeConfig::new(&token, "test");
+
+        // Set last attempt to far past
+        config.last_attempt = 0;
+        assert!(!config.is_rate_limited());
+    }
+
+    // ========================================================================
+    // Additional WipeResult Tests
+    // ========================================================================
+
+    #[test]
+    fn test_wipe_result_destroyed_debug() {
+        let result = WipeResult::Destroyed {
+            keyfiles_wiped: 5,
+            timestamp: 12345,
+        };
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("Destroyed"));
+        assert!(debug_str.contains("5"));
+    }
+
+    #[test]
+    fn test_wipe_result_locked_clone() {
+        let result = WipeResult::Locked { timestamp: 12345 };
+        let cloned = result.clone();
+        if let (WipeResult::Locked { timestamp: t1 }, WipeResult::Locked { timestamp: t2 }) =
+            (result, cloned)
+        {
+            assert_eq!(t1, t2);
+        } else {
+            panic!("Clone produced different variant");
+        }
+    }
+
+    #[test]
+    fn test_wipe_result_variants() {
+        let _ = WipeResult::CheckedIn { timestamp: 100 };
+        let _ = WipeResult::TokenRevoked { timestamp: 200 };
+
+        let token = WipeToken::generate();
+        let cmd = WipeCommand::new(&token, "vol", WipeCommandType::Lock);
+        let _ = WipeResult::ConfirmationRequired { command: cmd };
+    }
+
+    // ========================================================================
+    // Additional WipeError Tests
+    // ========================================================================
+
+    #[test]
+    fn test_wipe_error_display() {
+        let errors = [
+            WipeError::NotEnabled,
+            WipeError::InvalidToken,
+            WipeError::InvalidSignature,
+            WipeError::CommandExpired,
+            WipeError::VolumeMismatch,
+            WipeError::ReplayDetected,
+            WipeError::RateLimited,
+            WipeError::LockedOut,
+            WipeError::ConfirmationRequired,
+            WipeError::Crypto("test error".to_string()),
+        ];
+
+        for err in &errors {
+            let msg = err.to_string();
+            assert!(!msg.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_wipe_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let wipe_err: WipeError = io_err.into();
+        assert!(matches!(wipe_err, WipeError::Io(_)));
+    }
+
+    #[test]
+    fn test_wipe_error_debug() {
+        let err = WipeError::InvalidToken;
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("InvalidToken"));
+    }
+
+    // ========================================================================
+    // Additional RemoteWipeManager Tests
+    // ========================================================================
+
+    #[test]
+    fn test_manager_from_config() {
+        let token = WipeToken::generate();
+        let config = StoredWipeConfig::new(&token, "test-vol");
+        let manager = RemoteWipeManager::from_config(config);
+
+        assert!(manager.verify_token(&token));
+    }
+
+    #[test]
+    fn test_manager_set_enabled() {
+        let (mut manager, _) = RemoteWipeManager::new("test");
+
+        manager.set_enabled(false);
+        assert!(!manager.config().enabled);
+
+        manager.set_enabled(true);
+        assert!(manager.config().enabled);
+    }
+
+    #[test]
+    fn test_manager_add_duplicate_keyfile() {
+        let (mut manager, _) = RemoteWipeManager::new("test");
+
+        manager.add_keyfile_path("/key1");
+        manager.add_keyfile_path("/key1"); // Duplicate
+        manager.add_keyfile_path("/key2");
+
+        // Should not add duplicates
+        assert_eq!(manager.config.keyfile_paths.len(), 2);
+    }
+
+    #[test]
+    fn test_manager_persist_no_path() {
+        let (manager, _) = RemoteWipeManager::new("test");
+        let result = manager.persist();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_manager_save_and_load() {
+        use tempfile::NamedTempFile;
+
+        let (manager, token) = RemoteWipeManager::new("test-vol");
+        let temp_file = NamedTempFile::new().unwrap();
+
+        // Save
+        manager.save(temp_file.path()).unwrap();
+
+        // Load
+        let loaded = RemoteWipeManager::load(temp_file.path()).unwrap();
+        assert!(loaded.verify_token(&token));
+        assert_eq!(loaded.config().volume_id, "test-vol");
+    }
+
+    #[test]
+    fn test_manager_load_invalid_file() {
+        use tempfile::NamedTempFile;
+        use std::io::Write;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(b"invalid json data").unwrap();
+
+        let result = RemoteWipeManager::load(temp_file.path());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_manager_not_enabled() {
+        let (mut manager, token) = RemoteWipeManager::new("test-vol");
+        manager.set_enabled(false);
+
+        let cmd = WipeCommand::new(&token, "test-vol", WipeCommandType::CheckIn);
+        let result = manager.verify_and_execute(&cmd, &token);
+
+        assert!(matches!(result, Err(WipeError::NotEnabled)));
+    }
+
+    #[test]
+    fn test_manager_replay_detection() {
+        let (mut manager, token) = RemoteWipeManager::new("test-vol");
+        manager.set_require_confirmation(false);
+
+        let cmd = WipeCommand::new(&token, "test-vol", WipeCommandType::CheckIn);
+
+        // First execution should succeed
+        let result1 = manager.verify_and_execute(&cmd, &token);
+        assert!(result1.is_ok());
+
+        // Wait for rate limit to pass
+        std::thread::sleep(std::time::Duration::from_secs(RATE_LIMIT_SECS + 1));
+
+        // Second execution with same nonce should fail with replay
+        let result2 = manager.verify_and_execute(&cmd, &token);
+        assert!(matches!(result2, Err(WipeError::ReplayDetected)));
+    }
+
+    #[test]
+    fn test_manager_command_expired_via_process() {
+        let (mut manager, _) = RemoteWipeManager::new("test-vol");
+
+        // Use process_command which doesn't verify signature
+        let token = WipeToken::generate();
+        let mut cmd = WipeCommand::new(&token, "test-vol", WipeCommandType::CheckIn);
+        cmd.data.timestamp = 0; // Very old (signature is invalid but process_command doesn't check)
+
+        let result = manager.process_command(&cmd);
+        assert!(matches!(result, Err(WipeError::CommandExpired)));
+    }
+
+    #[test]
+    fn test_manager_has_pending_confirmation() {
+        let (mut manager, token) = RemoteWipeManager::new("test-vol");
+        manager.set_require_confirmation(true);
+
+        assert!(!manager.has_pending_confirmation());
+
+        let cmd = WipeCommand::new(&token, "test-vol", WipeCommandType::DestroyKeys);
+        let _ = manager.verify_and_execute(&cmd, &token);
+
+        assert!(manager.has_pending_confirmation());
+    }
+
+    // ========================================================================
+    // Constant Tests
+    // ========================================================================
+
+    #[test]
+    fn test_constants() {
+        assert_eq!(WIPE_TOKEN_SIZE, 32);
+        assert_eq!(TOKEN_SALT_SIZE, 16);
+        assert_eq!(COMMAND_NONCE_SIZE, 16);
+        assert_eq!(MAX_COMMAND_AGE_SECS, 300);
+        assert_eq!(RATE_LIMIT_SECS, 5);
+        assert_eq!(MAX_FAILED_ATTEMPTS, 5);
+        assert_eq!(LOCKOUT_DURATION_SECS, 3600);
+    }
 }

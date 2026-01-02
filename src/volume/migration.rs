@@ -682,7 +682,10 @@ mod tests {
     #[test]
     fn test_error_chain_io_to_migration() {
         fn may_fail() -> Result<()> {
-            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"))?
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "file not found",
+            ))?
         }
 
         let result = may_fail();

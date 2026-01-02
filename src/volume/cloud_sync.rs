@@ -1712,7 +1712,11 @@ mod tests {
         let token = WipeToken::generate();
 
         commands.push(WipeCommand::new(&token, "vol1", WipeCommandType::Lock));
-        commands.push(WipeCommand::new(&token, "vol2", WipeCommandType::DestroyKeys));
+        commands.push(WipeCommand::new(
+            &token,
+            "vol2",
+            WipeCommandType::DestroyKeys,
+        ));
         commands.push(WipeCommand::new(&token, "vol3", WipeCommandType::CheckIn));
 
         assert_eq!(commands.commands.len(), 3);

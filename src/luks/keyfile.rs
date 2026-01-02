@@ -69,7 +69,7 @@ pub struct LuksFeatureFlags {
 }
 
 impl LuksFeatureFlags {
-    fn to_byte(&self) -> u8 {
+    fn to_byte(self) -> u8 {
         let mut flags = 0u8;
         if self.tpm_enabled {
             flags |= 0x01;

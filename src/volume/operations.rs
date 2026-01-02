@@ -670,6 +670,13 @@ mod tests {
         MasterKey::generate()
     }
 
+    fn init_fs() -> InMemoryFilesystem {
+        let mut fs = InMemoryFilesystem::new();
+        let key = test_key();
+        fs.init(&key, Path::new("/tmp/test.vol")).unwrap();
+        fs
+    }
+
     #[test]
     fn test_filesystem_init() {
         let mut fs = InMemoryFilesystem::new();
@@ -678,20 +685,33 @@ mod tests {
     }
 
     #[test]
-    fn test_root_exists() {
-        let mut fs = InMemoryFilesystem::new();
-        let key = test_key();
-        fs.init(&key, Path::new("/tmp/test.vol")).unwrap();
+    fn test_default_implementation() {
+        let fs = InMemoryFilesystem::default();
+        assert!(fs.master_key.is_none());
+        assert!(fs.inodes.contains_key(&ROOT_INODE));
+    }
 
+    #[test]
+    fn test_root_exists() {
+        let fs = init_fs();
         let attr = fs.getattr(Path::new("/")).unwrap();
         assert_eq!(attr.file_type, FileType::Directory);
     }
 
     #[test]
+    fn test_root_attributes() {
+        let fs = init_fs();
+        let attr = fs.getattr(Path::new("/")).unwrap();
+        assert_eq!(attr.file_type, FileType::Directory);
+        assert_eq!(attr.perm, 0o755);
+        assert_eq!(attr.nlink, 2);
+        assert_eq!(attr.uid, 1000);
+        assert_eq!(attr.gid, 1000);
+    }
+
+    #[test]
     fn test_create_and_read_file() {
-        let mut fs = InMemoryFilesystem::new();
-        let key = test_key();
-        fs.init(&key, Path::new("/tmp/test.vol")).unwrap();
+        let mut fs = init_fs();
 
         // Create file
         let path = Path::new("/test.txt");
@@ -708,10 +728,38 @@ mod tests {
     }
 
     #[test]
+    fn test_create_file_attributes() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        let attr = fs.create(path, 0o600).unwrap();
+
+        assert_eq!(attr.file_type, FileType::RegularFile);
+        assert_eq!(attr.perm, 0o600);
+        assert_eq!(attr.size, 0);
+        assert_eq!(attr.nlink, 1);
+    }
+
+    #[test]
+    fn test_create_file_already_exists() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let result = fs.create(path, 0o644);
+        assert!(matches!(result, Err(FilesystemError::AlreadyExists(_))));
+    }
+
+    #[test]
+    fn test_create_file_no_parent() {
+        let mut fs = init_fs();
+        let path = Path::new("/nonexistent/test.txt");
+        let result = fs.create(path, 0o644);
+        assert!(matches!(result, Err(FilesystemError::NotFound(_))));
+    }
+
+    #[test]
     fn test_mkdir_and_readdir() {
-        let mut fs = InMemoryFilesystem::new();
-        let key = test_key();
-        fs.init(&key, Path::new("/tmp/test.vol")).unwrap();
+        let mut fs = init_fs();
 
         // Create directory
         let dir = Path::new("/testdir");
@@ -723,14 +771,42 @@ mod tests {
 
         // Read directory
         let entries = fs.readdir(dir).unwrap();
+        assert!(entries.iter().any(|e| e.name == "."));
+        assert!(entries.iter().any(|e| e.name == ".."));
         assert!(entries.iter().any(|e| e.name == "file.txt"));
     }
 
     #[test]
+    fn test_mkdir_already_exists() {
+        let mut fs = init_fs();
+        let dir = Path::new("/testdir");
+        fs.mkdir(dir, 0o755).unwrap();
+
+        let result = fs.mkdir(dir, 0o755);
+        assert!(matches!(result, Err(FilesystemError::AlreadyExists(_))));
+    }
+
+    #[test]
+    fn test_mkdir_no_parent() {
+        let mut fs = init_fs();
+        let dir = Path::new("/nonexistent/testdir");
+        let result = fs.mkdir(dir, 0o755);
+        assert!(matches!(result, Err(FilesystemError::NotFound(_))));
+    }
+
+    #[test]
+    fn test_readdir_on_file_fails() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let result = fs.readdir(path);
+        assert!(matches!(result, Err(FilesystemError::NotADirectory(_))));
+    }
+
+    #[test]
     fn test_unlink() {
-        let mut fs = InMemoryFilesystem::new();
-        let key = test_key();
-        fs.init(&key, Path::new("/tmp/test.vol")).unwrap();
+        let mut fs = init_fs();
 
         let path = Path::new("/test.txt");
         fs.create(path, 0o644).unwrap();
@@ -740,10 +816,51 @@ mod tests {
     }
 
     #[test]
+    fn test_unlink_directory_fails() {
+        let mut fs = init_fs();
+        let dir = Path::new("/testdir");
+        fs.mkdir(dir, 0o755).unwrap();
+
+        let result = fs.unlink(dir);
+        assert!(matches!(result, Err(FilesystemError::IsADirectory(_))));
+    }
+
+    #[test]
+    fn test_rmdir() {
+        let mut fs = init_fs();
+        let dir = Path::new("/testdir");
+        fs.mkdir(dir, 0o755).unwrap();
+        fs.rmdir(dir).unwrap();
+
+        assert!(fs.getattr(dir).is_err());
+    }
+
+    #[test]
+    fn test_rmdir_not_empty() {
+        let mut fs = init_fs();
+        let dir = Path::new("/testdir");
+        fs.mkdir(dir, 0o755).unwrap();
+
+        let file = Path::new("/testdir/file.txt");
+        fs.create(file, 0o644).unwrap();
+
+        let result = fs.rmdir(dir);
+        assert!(matches!(result, Err(FilesystemError::DirectoryNotEmpty(_))));
+    }
+
+    #[test]
+    fn test_rmdir_on_file_fails() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let result = fs.rmdir(path);
+        assert!(matches!(result, Err(FilesystemError::NotADirectory(_))));
+    }
+
+    #[test]
     fn test_rename() {
-        let mut fs = InMemoryFilesystem::new();
-        let key = test_key();
-        fs.init(&key, Path::new("/tmp/test.vol")).unwrap();
+        let mut fs = init_fs();
 
         let from = Path::new("/old.txt");
         let to = Path::new("/new.txt");
@@ -756,10 +873,177 @@ mod tests {
     }
 
     #[test]
+    fn test_rename_to_different_directory() {
+        let mut fs = init_fs();
+
+        fs.mkdir(Path::new("/dir1"), 0o755).unwrap();
+        fs.mkdir(Path::new("/dir2"), 0o755).unwrap();
+
+        let from = Path::new("/dir1/file.txt");
+        let to = Path::new("/dir2/file.txt");
+
+        fs.create(from, 0o644).unwrap();
+        fs.rename(from, to).unwrap();
+
+        assert!(fs.getattr(from).is_err());
+        assert!(fs.getattr(to).is_ok());
+    }
+
+    #[test]
+    fn test_chmod() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        fs.chmod(path, 0o600).unwrap();
+
+        let attr = fs.getattr(path).unwrap();
+        assert_eq!(attr.perm, 0o600);
+    }
+
+    #[test]
+    fn test_chmod_not_found() {
+        let mut fs = init_fs();
+        let result = fs.chmod(Path::new("/nonexistent.txt"), 0o644);
+        assert!(matches!(result, Err(FilesystemError::NotFound(_))));
+    }
+
+    #[test]
+    fn test_chown() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        fs.chown(path, 500, 500).unwrap();
+
+        let attr = fs.getattr(path).unwrap();
+        assert_eq!(attr.uid, 500);
+        assert_eq!(attr.gid, 500);
+    }
+
+    #[test]
+    fn test_chown_not_found() {
+        let mut fs = init_fs();
+        let result = fs.chown(Path::new("/nonexistent.txt"), 500, 500);
+        assert!(matches!(result, Err(FilesystemError::NotFound(_))));
+    }
+
+    #[test]
+    fn test_truncate() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let data = b"Hello, World!";
+        fs.write(path, 0, data).unwrap();
+
+        fs.truncate(path, 5).unwrap();
+
+        let attr = fs.getattr(path).unwrap();
+        assert_eq!(attr.size, 5);
+
+        let read_data = fs.read(path, 0, 10).unwrap();
+        assert_eq!(&read_data, b"Hello");
+    }
+
+    #[test]
+    fn test_truncate_extend() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let data = b"Hi";
+        fs.write(path, 0, data).unwrap();
+
+        fs.truncate(path, 10).unwrap();
+
+        let attr = fs.getattr(path).unwrap();
+        assert_eq!(attr.size, 10);
+
+        let read_data = fs.read(path, 0, 10).unwrap();
+        assert_eq!(&read_data[0..2], b"Hi");
+        assert_eq!(&read_data[2..], &[0u8; 8]);
+    }
+
+    #[test]
+    fn test_truncate_directory_fails() {
+        let mut fs = init_fs();
+        let dir = Path::new("/testdir");
+        fs.mkdir(dir, 0o755).unwrap();
+
+        let result = fs.truncate(dir, 0);
+        assert!(matches!(result, Err(FilesystemError::IsADirectory(_))));
+    }
+
+    #[test]
+    fn test_utimens() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let new_time = SystemTime::UNIX_EPOCH;
+        fs.utimens(path, Some(new_time), Some(new_time)).unwrap();
+
+        let attr = fs.getattr(path).unwrap();
+        assert_eq!(attr.atime, new_time);
+        assert_eq!(attr.mtime, new_time);
+    }
+
+    #[test]
+    fn test_utimens_partial() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let original_attr = fs.getattr(path).unwrap();
+        let new_time = SystemTime::UNIX_EPOCH;
+
+        fs.utimens(path, Some(new_time), None).unwrap();
+
+        let attr = fs.getattr(path).unwrap();
+        assert_eq!(attr.atime, new_time);
+        assert_eq!(attr.mtime, original_attr.mtime);
+    }
+
+    #[test]
+    fn test_utimens_not_found() {
+        let mut fs = init_fs();
+        let result = fs.utimens(Path::new("/nonexistent.txt"), None, None);
+        assert!(matches!(result, Err(FilesystemError::NotFound(_))));
+    }
+
+    #[test]
+    fn test_flush() {
+        let mut fs = init_fs();
+        assert!(fs.flush().is_ok());
+    }
+
+    #[test]
+    fn test_statfs() {
+        let mut fs = init_fs();
+        let (total, free, avail) = fs.statfs().unwrap();
+
+        assert_eq!(total, 1024 * 1024 * 1024);
+        assert!(free <= total);
+        assert_eq!(free, avail);
+    }
+
+    #[test]
+    fn test_statfs_with_data() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let data = vec![0u8; 1024];
+        fs.write(path, 0, &data).unwrap();
+
+        let (total, free, _) = fs.statfs().unwrap();
+        assert!(free < total);
+    }
+
+    #[test]
     fn test_encryption_decryption() {
-        let mut fs = InMemoryFilesystem::new();
-        let key = test_key();
-        fs.init(&key, Path::new("/tmp/test.vol")).unwrap();
+        let mut fs = init_fs();
 
         let path = Path::new("/test.txt");
         fs.create(path, 0o644).unwrap();
@@ -775,5 +1059,344 @@ mod tests {
         // Verify decryption works
         let read_data = fs.read(path, 0, data.len() as u32).unwrap();
         assert_eq!(&read_data, data);
+    }
+
+    #[test]
+    fn test_decrypt_data_too_short() {
+        let fs = init_fs();
+        let short_data = vec![0u8; 5];
+        let result = fs.decrypt_data(&short_data);
+        assert!(matches!(result, Err(FilesystemError::CryptoError(_))));
+    }
+
+    #[test]
+    fn test_encrypt_without_key() {
+        let fs = InMemoryFilesystem::new();
+        let result = fs.encrypt_data(b"test");
+        assert!(matches!(result, Err(FilesystemError::Other(_))));
+    }
+
+    #[test]
+    fn test_decrypt_without_key() {
+        let fs = InMemoryFilesystem::new();
+        let result = fs.decrypt_data(&[0u8; 24]);
+        assert!(matches!(result, Err(FilesystemError::Other(_))));
+    }
+
+    #[test]
+    fn test_read_with_offset() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let data = b"Hello, World!";
+        fs.write(path, 0, data).unwrap();
+
+        let read_data = fs.read(path, 7, 5).unwrap();
+        assert_eq!(&read_data, b"World");
+    }
+
+    #[test]
+    fn test_read_beyond_end() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let data = b"Hello";
+        fs.write(path, 0, data).unwrap();
+
+        let read_data = fs.read(path, 3, 100).unwrap();
+        assert_eq!(&read_data, b"lo");
+    }
+
+    #[test]
+    fn test_read_empty_file() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let read_data = fs.read(path, 0, 100).unwrap();
+        assert!(read_data.is_empty());
+    }
+
+    #[test]
+    fn test_read_directory_fails() {
+        let mut fs = init_fs();
+        let dir = Path::new("/testdir");
+        fs.mkdir(dir, 0o755).unwrap();
+
+        let result = fs.read(dir, 0, 100);
+        assert!(matches!(result, Err(FilesystemError::IsADirectory(_))));
+    }
+
+    #[test]
+    fn test_write_with_offset() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        fs.write(path, 0, b"Hello").unwrap();
+        fs.write(path, 5, b" World").unwrap();
+
+        let read_data = fs.read(path, 0, 11).unwrap();
+        assert_eq!(&read_data, b"Hello World");
+    }
+
+    #[test]
+    fn test_write_with_gap() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        fs.write(path, 10, b"data").unwrap();
+
+        let attr = fs.getattr(path).unwrap();
+        assert_eq!(attr.size, 14);
+
+        let read_data = fs.read(path, 0, 14).unwrap();
+        assert_eq!(&read_data[0..10], &[0u8; 10]);
+        assert_eq!(&read_data[10..14], b"data");
+    }
+
+    #[test]
+    fn test_write_directory_fails() {
+        let mut fs = init_fs();
+        let dir = Path::new("/testdir");
+        fs.mkdir(dir, 0o755).unwrap();
+
+        let result = fs.write(dir, 0, b"data");
+        assert!(matches!(result, Err(FilesystemError::IsADirectory(_))));
+    }
+
+    #[test]
+    fn test_getattr_not_found() {
+        let fs = init_fs();
+        let result = fs.getattr(Path::new("/nonexistent.txt"));
+        assert!(matches!(result, Err(FilesystemError::NotFound(_))));
+    }
+
+    #[test]
+    fn test_nested_directories() {
+        let mut fs = init_fs();
+
+        fs.mkdir(Path::new("/a"), 0o755).unwrap();
+        fs.mkdir(Path::new("/a/b"), 0o755).unwrap();
+        fs.mkdir(Path::new("/a/b/c"), 0o755).unwrap();
+
+        let file = Path::new("/a/b/c/test.txt");
+        fs.create(file, 0o644).unwrap();
+        fs.write(file, 0, b"nested").unwrap();
+
+        let data = fs.read(file, 0, 6).unwrap();
+        assert_eq!(&data, b"nested");
+    }
+
+    #[test]
+    fn test_resolve_path_through_file_fails() {
+        let mut fs = init_fs();
+        let file = Path::new("/test.txt");
+        fs.create(file, 0o644).unwrap();
+
+        // Trying to traverse through a file should fail
+        let result = fs.resolve_path(Path::new("/test.txt/child"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_path_cache_updated_on_create() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        assert!(fs.path_cache.contains_key(path));
+    }
+
+    #[test]
+    fn test_path_cache_updated_on_unlink() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+        fs.unlink(path).unwrap();
+
+        assert!(!fs.path_cache.contains_key(path));
+    }
+
+    #[test]
+    fn test_path_cache_updated_on_rename() {
+        let mut fs = init_fs();
+        let from = Path::new("/old.txt");
+        let to = Path::new("/new.txt");
+
+        fs.create(from, 0o644).unwrap();
+        fs.rename(from, to).unwrap();
+
+        assert!(!fs.path_cache.contains_key(from));
+        assert!(fs.path_cache.contains_key(to));
+    }
+
+    #[test]
+    fn test_inode_allocation() {
+        let mut fs = init_fs();
+
+        let first_id = fs.alloc_inode();
+        let second_id = fs.alloc_inode();
+
+        assert!(second_id > first_id);
+    }
+
+    #[test]
+    fn test_parent_mtime_updated_on_create() {
+        let mut fs = init_fs();
+
+        let root_attr_before = fs.getattr(Path::new("/")).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        fs.create(Path::new("/test.txt"), 0o644).unwrap();
+
+        let root_attr_after = fs.getattr(Path::new("/")).unwrap();
+        assert!(root_attr_after.mtime >= root_attr_before.mtime);
+    }
+
+    #[test]
+    fn test_parent_mtime_updated_on_mkdir() {
+        let mut fs = init_fs();
+
+        let root_attr_before = fs.getattr(Path::new("/")).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        fs.mkdir(Path::new("/testdir"), 0o755).unwrap();
+
+        let root_attr_after = fs.getattr(Path::new("/")).unwrap();
+        assert!(root_attr_after.mtime >= root_attr_before.mtime);
+    }
+
+    #[test]
+    fn test_file_mtime_updated_on_write() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let attr_before = fs.getattr(path).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        fs.write(path, 0, b"data").unwrap();
+
+        let attr_after = fs.getattr(path).unwrap();
+        assert!(attr_after.mtime >= attr_before.mtime);
+    }
+
+    #[test]
+    fn test_ctime_updated_on_chmod() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let attr_before = fs.getattr(path).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        fs.chmod(path, 0o600).unwrap();
+
+        let attr_after = fs.getattr(path).unwrap();
+        assert!(attr_after.ctime >= attr_before.ctime);
+    }
+
+    #[test]
+    fn test_ctime_updated_on_chown() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        let attr_before = fs.getattr(path).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        fs.chown(path, 500, 500).unwrap();
+
+        let attr_after = fs.getattr(path).unwrap();
+        assert!(attr_after.ctime >= attr_before.ctime);
+    }
+
+    #[test]
+    fn test_nlink_updated_on_mkdir() {
+        let mut fs = init_fs();
+
+        let attr_before = fs.getattr(Path::new("/")).unwrap();
+
+        fs.mkdir(Path::new("/testdir"), 0o755).unwrap();
+
+        let attr_after = fs.getattr(Path::new("/")).unwrap();
+        assert_eq!(attr_after.nlink, attr_before.nlink + 1);
+    }
+
+    #[test]
+    fn test_nlink_updated_on_rmdir() {
+        let mut fs = init_fs();
+
+        fs.mkdir(Path::new("/testdir"), 0o755).unwrap();
+        let attr_before = fs.getattr(Path::new("/")).unwrap();
+
+        fs.rmdir(Path::new("/testdir")).unwrap();
+
+        let attr_after = fs.getattr(Path::new("/")).unwrap();
+        assert_eq!(attr_after.nlink, attr_before.nlink - 1);
+    }
+
+    #[test]
+    fn test_readdir_root() {
+        let mut fs = init_fs();
+
+        fs.create(Path::new("/file1.txt"), 0o644).unwrap();
+        fs.mkdir(Path::new("/dir1"), 0o755).unwrap();
+
+        let entries = fs.readdir(Path::new("/")).unwrap();
+
+        assert!(entries.iter().any(|e| e.name == "."));
+        assert!(entries.iter().any(|e| e.name == ".."));
+        assert!(entries
+            .iter()
+            .any(|e| e.name == "file1.txt" && e.file_type == FileType::RegularFile));
+        assert!(entries
+            .iter()
+            .any(|e| e.name == "dir1" && e.file_type == FileType::Directory));
+    }
+
+    #[test]
+    fn test_multiple_files_in_directory() {
+        let mut fs = init_fs();
+        let dir = Path::new("/testdir");
+        fs.mkdir(dir, 0o755).unwrap();
+
+        for i in 0..5 {
+            let path = PathBuf::from(format!("/testdir/file{}.txt", i));
+            fs.create(&path, 0o644).unwrap();
+        }
+
+        let entries = fs.readdir(dir).unwrap();
+        assert_eq!(entries.len(), 7); // 5 files + . + ..
+    }
+
+    #[test]
+    fn test_large_file_write_read() {
+        let mut fs = init_fs();
+        let path = Path::new("/large.bin");
+        fs.create(path, 0o644).unwrap();
+
+        let data: Vec<u8> = (0..10000).map(|i| (i % 256) as u8).collect();
+        fs.write(path, 0, &data).unwrap();
+
+        let read_data = fs.read(path, 0, 10000).unwrap();
+        assert_eq!(read_data, data);
+    }
+
+    #[test]
+    fn test_overwrite_file_data() {
+        let mut fs = init_fs();
+        let path = Path::new("/test.txt");
+        fs.create(path, 0o644).unwrap();
+
+        fs.write(path, 0, b"AAAAAAAAAA").unwrap();
+        fs.write(path, 3, b"BBB").unwrap();
+
+        let read_data = fs.read(path, 0, 10).unwrap();
+        assert_eq!(&read_data, b"AAABBBAAAA");
     }
 }

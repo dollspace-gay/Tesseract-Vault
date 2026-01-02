@@ -678,4 +678,253 @@ mod tests {
         let decrypted_data = std::fs::read(&output_path).unwrap();
         assert_eq!(decrypted_data, test_data);
     }
+
+    #[test]
+    fn test_decrypt_file_truncated() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let truncated_path = temp_dir.path().join("truncated.bin");
+        let output_path = temp_dir.path().join("output.txt");
+
+        // Write file shorter than magic bytes (8 bytes)
+        std::fs::write(&truncated_path, b"SHORT").unwrap();
+
+        let result = decrypt_file(&truncated_path, &output_path, "password123");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_encrypt_bytes_special_password() {
+        let plaintext = b"test data";
+        // Password with special characters
+        let password = "P@$$w0rd!#$%^&*()_+-=[]{}|;':\",./<>?`~";
+
+        let (salt, nonce, ciphertext) = encrypt_bytes(plaintext, password).unwrap();
+        let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, password).unwrap();
+
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn test_encrypt_bytes_unicode_password() {
+        let plaintext = b"test data";
+        let password = "пароль密码パスワード🔐";
+
+        let (salt, nonce, ciphertext) = encrypt_bytes(plaintext, password).unwrap();
+        let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, password).unwrap();
+
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn test_decrypt_bytes_wrong_nonce() {
+        let plaintext = b"secret data";
+        let password = "TestPassword123!";
+
+        let (salt, _, ciphertext) = encrypt_bytes(plaintext, password).unwrap();
+
+        // Use wrong nonce
+        let wrong_nonce = vec![0xFF; 12];
+        let result = decrypt_bytes(&salt, &wrong_nonce, &ciphertext, password);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_bytes_truncated_ciphertext() {
+        let plaintext = b"secret data";
+        let password = "TestPassword123!";
+
+        let (salt, nonce, ciphertext) = encrypt_bytes(plaintext, password).unwrap();
+
+        // Truncate ciphertext (remove auth tag)
+        let truncated: Vec<u8> = ciphertext.iter().take(5).cloned().collect();
+        let result = decrypt_bytes(&salt, &nonce, &truncated, password);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_encrypt_file_validated_strong_password() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let input_path = temp_dir.path().join("input.txt");
+        let encrypted_path = temp_dir.path().join("encrypted.bin");
+        let output_path = temp_dir.path().join("output.txt");
+
+        std::fs::write(&input_path, b"test data").unwrap();
+
+        // Strong password should pass validation and encrypt
+        encrypt_file_validated(&input_path, &encrypted_path, "VeryStr0ng!Pass#2024").unwrap();
+
+        // Verify it can be decrypted
+        decrypt_file(&encrypted_path, &output_path, "VeryStr0ng!Pass#2024").unwrap();
+        let decrypted = std::fs::read(&output_path).unwrap();
+        assert_eq!(decrypted, b"test data");
+    }
+
+    #[test]
+    fn test_encrypt_file_validated_various_weak_passwords() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let input_path = temp_dir.path().join("input.txt");
+        let encrypted_path = temp_dir.path().join("encrypted.bin");
+
+        std::fs::write(&input_path, b"test data").unwrap();
+
+        // Too short
+        assert!(encrypt_file_validated(&input_path, &encrypted_path, "Ab1!").is_err());
+
+        // No uppercase
+        assert!(encrypt_file_validated(&input_path, &encrypted_path, "password123!").is_err());
+
+        // No lowercase
+        assert!(encrypt_file_validated(&input_path, &encrypted_path, "PASSWORD123!").is_err());
+
+        // No digit
+        assert!(encrypt_file_validated(&input_path, &encrypted_path, "Password!!!").is_err());
+    }
+
+    #[test]
+    fn test_re_exports_available() {
+        // Verify key re-exports are accessible
+        let _ = MAGIC_BYTES;
+        let _ = NONCE_LEN;
+        let _ = MAGIC_BYTES_V3;
+
+        // Verify type re-exports work
+        let _encryptor = AesGcmEncryptor::new();
+        let _kdf = Argon2Kdf::default();
+        let _salt = generate_salt_string();
+    }
+
+    #[test]
+    fn test_stream_config_re_export() {
+        let config = StreamConfig::default();
+        assert!(config.chunk_size > 0);
+    }
+
+    #[test]
+    fn test_crypto_config_re_export() {
+        let config = CryptoConfig::default();
+        assert!(config.argon2_mem_cost_kib > 0);
+        assert!(config.argon2_time_cost > 0);
+    }
+
+    #[test]
+    fn test_scrub_functions_re_export() {
+        let mut data = vec![0xABu8; 32];
+        scrub_bytes(&mut data);
+        // After scrub, data should be zeroed
+        assert!(data.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_scrub_pattern_re_export() {
+        let mut data = vec![0xABu8; 32];
+        scrub_bytes_pattern(&mut data, ScrubPattern::Dod522022M);
+        // After scrub with DoD pattern, data should not be original
+        assert!(!data.iter().all(|&b| b == 0xAB));
+    }
+
+    #[test]
+    fn test_progress_format_helpers_re_export() {
+        let bytes_str = format_bytes(1024 * 1024);
+        assert!(bytes_str.contains("MiB") || bytes_str.contains("MB") || bytes_str.contains("1"));
+
+        let duration_str = format_duration(std::time::Duration::from_secs(65));
+        assert!(!duration_str.is_empty());
+    }
+
+    #[test]
+    fn test_validate_password_re_export() {
+        // Weak password should fail
+        assert!(validate_password("weak").is_err());
+
+        // Strong password should pass
+        assert!(validate_password("StrongP@ss123!").is_ok());
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_binary_content() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let input_path = temp_dir.path().join("binary.bin");
+        let encrypted_path = temp_dir.path().join("encrypted.bin");
+        let output_path = temp_dir.path().join("output.bin");
+
+        // Binary content with null bytes and all byte values
+        let test_data: Vec<u8> = (0u8..=255).collect();
+        std::fs::write(&input_path, &test_data).unwrap();
+
+        let password = "TestPassword123!";
+
+        encrypt_file(&input_path, &encrypted_path, password).unwrap();
+        decrypt_file(&encrypted_path, &output_path, password).unwrap();
+
+        let decrypted_data = std::fs::read(&output_path).unwrap();
+        assert_eq!(decrypted_data, test_data);
+    }
+
+    #[test]
+    fn test_encrypt_bytes_binary_content() {
+        // Binary content with null bytes
+        let plaintext: Vec<u8> = vec![0x00, 0x01, 0xFF, 0xFE, 0x00, 0x00, 0xAB, 0xCD];
+        let password = "TestPassword123!";
+
+        let (salt, nonce, ciphertext) = encrypt_bytes(&plaintext, password).unwrap();
+        let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, password).unwrap();
+
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn test_multiple_encryptions_different_salts() {
+        let plaintext = b"test data";
+        let password = "TestPassword123!";
+
+        let (salt1, _, _) = encrypt_bytes(plaintext, password).unwrap();
+        let (salt2, _, _) = encrypt_bytes(plaintext, password).unwrap();
+        let (salt3, _, _) = encrypt_bytes(plaintext, password).unwrap();
+
+        // Each encryption should use a different salt
+        assert_ne!(salt1, salt2);
+        assert_ne!(salt2, salt3);
+        assert_ne!(salt1, salt3);
+    }
+
+    #[test]
+    fn test_multiple_encryptions_different_nonces() {
+        let plaintext = b"test data";
+        let password = "TestPassword123!";
+
+        let (_, nonce1, _) = encrypt_bytes(plaintext, password).unwrap();
+        let (_, nonce2, _) = encrypt_bytes(plaintext, password).unwrap();
+        let (_, nonce3, _) = encrypt_bytes(plaintext, password).unwrap();
+
+        // Each encryption should use a different nonce
+        assert_ne!(nonce1, nonce2);
+        assert_ne!(nonce2, nonce3);
+        assert_ne!(nonce1, nonce3);
+    }
+
+    #[test]
+    fn test_ciphertext_different_for_same_plaintext() {
+        let plaintext = b"test data";
+        let password = "TestPassword123!";
+
+        let (_, _, ciphertext1) = encrypt_bytes(plaintext, password).unwrap();
+        let (_, _, ciphertext2) = encrypt_bytes(plaintext, password).unwrap();
+
+        // Same plaintext should produce different ciphertext due to random salt/nonce
+        assert_ne!(ciphertext1, ciphertext2);
+    }
+
+    #[test]
+    fn test_secure_allocator_re_export() {
+        let allocator = SecureAllocator::new();
+        let stats = allocator.stats();
+        assert_eq!(stats.allocation_count, 0);
+        assert_eq!(stats.bytes_allocated, 0);
+    }
+
+    #[test]
+    fn test_locked_memory_re_export() {
+        let locked = LockedMemory::new(vec![1, 2, 3, 4]).unwrap();
+        assert_eq!(locked.len(), 4);
+    }
 }

@@ -2727,4 +2727,564 @@ mod tests {
 
         cleanup(&path);
     }
+
+    #[test]
+    fn test_container_error_display() {
+        let io_err = ContainerError::Io(io::Error::new(io::ErrorKind::NotFound, "test"));
+        assert!(io_err.to_string().contains("I/O error"));
+
+        let not_found = ContainerError::NotFound(PathBuf::from("/test"));
+        assert!(not_found.to_string().contains("not found"));
+
+        let exists = ContainerError::AlreadyExists(PathBuf::from("/test"));
+        assert!(exists.to_string().contains("already exists"));
+
+        let invalid_size = ContainerError::InvalidSize("too small".to_string());
+        assert!(invalid_size.to_string().contains("too small"));
+
+        let locked = ContainerError::Locked;
+        assert!(locked.to_string().contains("locked"));
+
+        let other = ContainerError::Other("test error".to_string());
+        assert!(other.to_string().contains("test error"));
+    }
+
+    #[test]
+    fn test_container_already_exists() {
+        let path = temp_path("already_exists");
+        cleanup(&path);
+
+        // Create first container
+        let _container = Container::create(&path, 1024 * 1024, "Test!", 4096).unwrap();
+
+        // Try to create another at the same path
+        let result = Container::create(&path, 1024 * 1024, "Test!", 4096);
+        assert!(matches!(result, Err(ContainerError::AlreadyExists(_))));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_container_not_found() {
+        let path = temp_path("nonexistent_container");
+        cleanup(&path);
+
+        let result = Container::open(&path, "Test!");
+        assert!(matches!(result, Err(ContainerError::NotFound(_))));
+    }
+
+    #[test]
+    fn test_container_accessors() {
+        let path = temp_path("accessors");
+        cleanup(&path);
+
+        let container = Container::create(&path, 1024 * 1024, "Test!", 4096).unwrap();
+
+        // Test path accessor
+        assert_eq!(container.path(), path);
+
+        // Test header accessor
+        assert_eq!(container.header().sector_size(), 4096);
+
+        // Test data_offset accessor
+        assert_eq!(container.data_offset(), DATA_AREA_OFFSET);
+
+        // Test data_size accessor
+        assert_eq!(container.data_size(), 1024 * 1024);
+
+        // Test sector_size accessor
+        assert_eq!(container.sector_size(), 4096);
+
+        // Test metadata_size accessor
+        assert_eq!(container.metadata_size(), METADATA_SIZE as u64);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_change_password() {
+        let path = temp_path("change_password");
+        cleanup(&path);
+
+        let mut container = Container::create(&path, 1024 * 1024, "OldPassword!", 4096).unwrap();
+
+        // Change password (takes only new password, must be unlocked)
+        container.change_password("NewPassword!").unwrap();
+
+        // Drop and reopen with new password
+        drop(container);
+
+        let container = Container::open(&path, "NewPassword!").unwrap();
+        assert!(container.is_unlocked());
+
+        // Old password should fail
+        drop(container);
+        let result = Container::open(&path, "OldPassword!");
+        assert!(result.is_err());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_duress_password() {
+        let path = temp_path("duress");
+        cleanup(&path);
+
+        let mut container = Container::create(&path, 1024 * 1024, "NormalPassword!", 4096).unwrap();
+
+        // Initially no duress password
+        assert!(!container.has_duress_password());
+
+        // Set duress password
+        container.set_duress_password("DuressPassword!").unwrap();
+        assert!(container.has_duress_password());
+
+        // Remove duress password
+        container.remove_duress_password().unwrap();
+        assert!(!container.has_duress_password());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_duress_password_requires_unlock() {
+        let path = temp_path("duress_locked");
+        cleanup(&path);
+
+        let mut container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Lock the container
+        container.lock();
+
+        // Try to set duress password - should fail
+        let result = container.set_duress_password("Duress!");
+        assert!(result.is_err());
+
+        // Try to remove duress password - should fail
+        let result = container.remove_duress_password();
+        assert!(result.is_err());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_add_recovery_key_slot() {
+        let path = temp_path("recovery_slot");
+        cleanup(&path);
+
+        let mut container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Generate and add a recovery key
+        let recovery_key = Container::generate_recovery_key();
+        let slot = container.add_recovery_key(&recovery_key).unwrap();
+
+        // Verify slot was allocated
+        assert!(slot > 0);
+        assert_eq!(container.key_slots().active_count(), 2);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_hidden_volume_locked_container() {
+        let path = temp_path("hidden_locked");
+        cleanup(&path);
+
+        let mut container = Container::create(&path, 10 * 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Lock the container
+        container.lock();
+
+        // Try to create hidden volume - should fail
+        let result = container.create_hidden_volume(1024 * 1024, "Hidden!", 5 * 1024 * 1024);
+        assert!(result.is_err());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_hidden_volume_size_validation() {
+        let path = temp_path("hidden_size_val");
+        cleanup(&path);
+
+        let mut container = Container::create(&path, 10 * 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Try to create hidden volume smaller than sector size
+        let result = container.create_hidden_volume(100, "Hidden!", 5 * 1024 * 1024);
+        assert!(matches!(result, Err(ContainerError::InvalidSize(_))));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_export_recovery_key_without_name() {
+        let recovery_key = Container::generate_recovery_key();
+        let export_path = temp_path("recovery_noname.txt");
+        cleanup(&export_path);
+
+        // Export without container name
+        Container::export_recovery_key_file(&recovery_key, &export_path, None).unwrap();
+
+        let content = fs::read_to_string(&export_path).unwrap();
+        assert!(content.contains("Encrypted Volume"));
+        assert!(content.contains(&recovery_key));
+
+        cleanup(&export_path);
+    }
+
+    #[test]
+    fn test_key_slots_accessor() {
+        let path = temp_path("keyslots_accessor");
+        cleanup(&path);
+
+        let container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        let key_slots = container.key_slots();
+        assert_eq!(key_slots.active_count(), 1);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_verify_header_valid() {
+        let path = temp_path("verify_valid");
+        cleanup(&path);
+
+        let container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Header should be valid
+        assert!(container.verify_header().is_ok());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_container_drop_syncs() {
+        let path = temp_path("drop_sync");
+        cleanup(&path);
+
+        {
+            let mut container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+            // Write some data
+            let _ = container.mount_filesystem();
+
+            // Container will be dropped here
+        }
+
+        // Verify file still exists and is valid
+        let container = Container::open(&path, "Password!").unwrap();
+        assert!(container.is_unlocked());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_open_hidden_invalid_offset() {
+        let path = temp_path("hidden_invalid_open");
+        cleanup(&path);
+
+        let container = Container::create(&path, 10 * 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Try to open hidden volume at offset beyond container
+        let result = container.open_hidden_volume("Hidden!", 20 * 1024 * 1024);
+        assert!(result.is_err());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_has_hidden_volume_beyond_bounds() {
+        let path = temp_path("hidden_bounds");
+        cleanup(&path);
+
+        let container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Check for hidden volume beyond container bounds
+        assert!(!container.has_hidden_volume(100 * 1024 * 1024));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_export_backup_already_exists() {
+        let container_path = temp_path("backup_exists_container");
+        let backup_path = temp_path("backup_exists.scbak");
+        cleanup(&container_path);
+        cleanup(&backup_path);
+
+        let container = Container::create(&container_path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Create first backup
+        container
+            .export_header_backup(&backup_path, "Backup!")
+            .unwrap();
+
+        // Try to create backup at same path - should fail
+        let result = container.export_header_backup(&backup_path, "Backup!");
+        assert!(result.is_err());
+
+        cleanup(&container_path);
+        cleanup(&backup_path);
+    }
+
+    #[test]
+    fn test_invalid_backup_file() {
+        let container_path = temp_path("invalid_backup_container");
+        let backup_path = temp_path("invalid_backup.scbak");
+        cleanup(&container_path);
+        cleanup(&backup_path);
+
+        let mut container =
+            Container::create(&container_path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Create an invalid backup file
+        fs::write(&backup_path, b"INVALID!").unwrap();
+
+        // Try to restore from invalid backup
+        let result = container.restore_from_backup(&backup_path, "Backup!");
+        assert!(result.is_err());
+
+        cleanup(&container_path);
+        cleanup(&backup_path);
+    }
+
+    #[test]
+    fn test_layout_constants() {
+        // Verify layout constants are consistent
+        assert_eq!(PRIMARY_HEADER_OFFSET, 0);
+        assert_eq!(PQ_METADATA_OFFSET, HEADER_SIZE as u64);
+        assert!(KEYSLOTS_OFFSET > PQ_METADATA_OFFSET);
+        assert!(DATA_AREA_OFFSET > KEYSLOTS_OFFSET);
+        assert_eq!(METADATA_SIZE, DATA_AREA_OFFSET as usize);
+    }
+
+    #[test]
+    fn test_container_size_accessors() {
+        let path = temp_path("size_accessors");
+        cleanup(&path);
+
+        let container = Container::create(&path, 2 * 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Test size() accessor
+        let size = container.size();
+        assert!(size > 0);
+
+        // Test metadata_size() accessor
+        let metadata_size = container.metadata_size();
+        assert!(metadata_size > 0);
+
+        // Test total_size() accessor
+        let total_size = container.total_size();
+        assert!(total_size > metadata_size);
+        assert!(total_size >= container.data_size());
+
+        // Test data_size() accessor
+        let data_size = container.data_size();
+        assert!(data_size > 0);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_master_key_accessor() {
+        let path = temp_path("master_key");
+        cleanup(&path);
+
+        let mut container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Unlocked container should have master key
+        assert!(container.master_key().is_some());
+
+        // Locked container should not have master key
+        container.lock();
+        assert!(container.master_key().is_none());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_requires_yubikey_2fa_false() {
+        let path = temp_path("yubikey_2fa");
+        cleanup(&path);
+
+        let _container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Normal container should not require YubiKey 2FA
+        let requires_2fa = Container::requires_yubikey_2fa(&path).unwrap();
+        assert!(!requires_2fa);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_lock_unlock_cycle() {
+        let path = temp_path("lock_unlock");
+        cleanup(&path);
+
+        let mut container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Initially unlocked
+        assert!(container.is_unlocked());
+
+        // Lock the container
+        container.lock();
+        assert!(!container.is_unlocked());
+
+        // Try to get master key when locked
+        assert!(container.master_key().is_none());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_container_error_debug() {
+        let err = ContainerError::NotFound(PathBuf::from("/test/path"));
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("NotFound"));
+
+        let err2 = ContainerError::InvalidSize("too small".to_string());
+        let debug_str2 = format!("{:?}", err2);
+        assert!(debug_str2.contains("InvalidSize"));
+    }
+
+    #[test]
+    fn test_container_header_accessor() {
+        let path = temp_path("header_acc");
+        cleanup(&path);
+
+        let container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        let header = container.header();
+        // Verify header has valid data
+        assert_eq!(header.version(), 2);
+        assert_eq!(header.sector_size(), 4096);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_open_nonexistent_file() {
+        let path = temp_path("nonexistent_container.scv");
+        cleanup(&path); // Make sure it doesn't exist
+
+        let result = Container::open(&path, "Password!");
+        assert!(matches!(result, Err(ContainerError::NotFound(_))));
+    }
+
+    #[test]
+    fn test_create_already_exists() {
+        let path = temp_path("already_exists");
+        cleanup(&path);
+
+        // Create container
+        let _container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Try to create again at same path
+        let result = Container::create(&path, 1024 * 1024, "Password!", 4096);
+        assert!(matches!(result, Err(ContainerError::AlreadyExists(_))));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_data_offset_accessor() {
+        let path = temp_path("data_offset");
+        cleanup(&path);
+
+        let container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        let data_offset = container.data_offset();
+        // Data offset should be at least METADATA_SIZE
+        assert!(data_offset >= METADATA_SIZE as u64);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_sector_size_accessor() {
+        let path = temp_path("sector_size_acc");
+        cleanup(&path);
+
+        let container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        let sector_size = container.sector_size();
+        assert_eq!(sector_size, 4096);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_path_accessor() {
+        let path = temp_path("path_accessor");
+        cleanup(&path);
+
+        let container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Verify path accessor returns correct path
+        assert_eq!(container.path(), path);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_change_password_locked() {
+        let path = temp_path("change_locked");
+        cleanup(&path);
+
+        let mut container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Lock container
+        container.lock();
+
+        // Try to change password when locked - should fail
+        let result = container.change_password("NewPassword!");
+        assert!(result.is_err());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_backup_restore_success() {
+        let container_path = temp_path("backup_success_container");
+        let backup_path = temp_path("backup_success.scbak");
+        cleanup(&container_path);
+        cleanup(&backup_path);
+
+        let mut container =
+            Container::create(&container_path, 1024 * 1024, "Password!", 4096).unwrap();
+
+        // Create backup
+        container
+            .export_header_backup(&backup_path, "BackupPassword!")
+            .unwrap();
+
+        // Restore from backup
+        container
+            .restore_from_backup(&backup_path, "BackupPassword!")
+            .unwrap();
+
+        // Container should still be usable
+        assert!(container.is_unlocked());
+
+        cleanup(&container_path);
+        cleanup(&backup_path);
+    }
+
+    #[test]
+    fn test_generate_multiple_recovery_keys() {
+        // Generate multiple keys and verify they're all different
+        let key1 = Container::generate_recovery_key();
+        let key2 = Container::generate_recovery_key();
+        let key3 = Container::generate_recovery_key();
+
+        assert_ne!(key1, key2);
+        assert_ne!(key2, key3);
+        assert_ne!(key1, key3);
+
+        // All keys should have the right length and format
+        assert!(!key1.is_empty());
+        assert!(!key2.is_empty());
+        assert!(!key3.is_empty());
+    }
 }

@@ -859,4 +859,118 @@ mod tests {
         assert_eq!(deserialized.pq_algorithm, PqAlgorithm::None);
         assert!(!deserialized.has_pqc());
     }
+
+    #[test]
+    fn test_header_accessors() {
+        let salt = [11u8; 32];
+        let iv = [12u8; 12];
+        let header = VolumeHeader::new(2 * 1024 * 1024, 4096, salt, iv);
+
+        // Test accessor methods
+        assert_eq!(header.version(), VERSION);
+        assert_eq!(header.cipher(), CipherAlgorithm::Aes256Xts);
+        assert_eq!(header.volume_size(), 2 * 1024 * 1024);
+        assert_eq!(header.sector_size(), 4096);
+        assert_eq!(header.salt(), &salt);
+        assert_eq!(header.header_iv(), &iv);
+    }
+
+    #[test]
+    fn test_header_error_display() {
+        let err = HeaderError::InvalidMagic;
+        assert!(err.to_string().contains("magic"));
+
+        let err2 = HeaderError::UnsupportedVersion(99);
+        assert!(err2.to_string().contains("99"));
+
+        let io_err = HeaderError::Io(io::Error::new(io::ErrorKind::NotFound, "test"));
+        assert!(io_err.to_string().contains("I/O"));
+
+        let size_err = HeaderError::SizeMismatch {
+            expected: 100,
+            actual: 50,
+        };
+        assert!(size_err.to_string().contains("100"));
+        assert!(size_err.to_string().contains("50"));
+    }
+
+    #[test]
+    fn test_cipher_algorithm_values() {
+        // Ensure cipher algorithm enum values are correct
+        assert_eq!(CipherAlgorithm::Aes256Gcm as u8, 1);
+        assert_eq!(CipherAlgorithm::Aes256Xts as u8, 2);
+    }
+
+    #[test]
+    fn test_pq_algorithm_values() {
+        // Ensure PQ algorithm enum values are correct
+        assert_eq!(PqAlgorithm::None as u8, 0);
+        assert_eq!(PqAlgorithm::MlKem1024 as u8, 1);
+    }
+
+    #[test]
+    fn test_header_timestamps() {
+        let salt = [13u8; 32];
+        let iv = [14u8; 12];
+        let header = VolumeHeader::new(1024 * 1024, 4096, salt, iv);
+
+        // created_at and modified_at should be recent
+        let now = current_unix_timestamp();
+        assert!(header.created_at <= now);
+        assert!(header.modified_at <= now);
+        assert!(header.created_at > now - 60); // Within last minute
+    }
+
+    #[test]
+    fn test_pq_metadata_algorithm_none() {
+        let metadata = PqVolumeMetadata {
+            algorithm: PqAlgorithm::None,
+            encapsulation_key: [0u8; MLKEM1024_EK_SIZE],
+            ciphertext: [0u8; MLKEM1024_CT_SIZE],
+            encrypted_decapsulation_key: [0u8; ENCRYPTED_DK_SIZE],
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
+        };
+
+        assert_eq!(metadata.algorithm, PqAlgorithm::None);
+
+        // Should still serialize correctly
+        let bytes = metadata.to_bytes().unwrap();
+        assert_eq!(bytes.len(), PQ_METADATA_SIZE);
+    }
+
+    #[test]
+    fn test_header_size_constant() {
+        assert_eq!(HEADER_SIZE, 4096);
+    }
+
+    #[test]
+    fn test_version_constants() {
+        assert_eq!(VERSION_V1, 1);
+        assert_eq!(VERSION_V2, 2);
+        assert_eq!(VERSION, VERSION_V2);
+    }
+
+    #[test]
+    fn test_header_from_bytes_too_short() {
+        let short_bytes = vec![0u8; 10]; // Too short
+        let result = VolumeHeader::from_bytes(&short_bytes);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pq_metadata_clone() {
+        let metadata = PqVolumeMetadata {
+            algorithm: PqAlgorithm::MlKem1024,
+            encapsulation_key: [1u8; MLKEM1024_EK_SIZE],
+            ciphertext: [2u8; MLKEM1024_CT_SIZE],
+            encrypted_decapsulation_key: [3u8; ENCRYPTED_DK_SIZE],
+            reserved_padding: [0u8; PQC_PADDING_SIZE],
+        };
+
+        let cloned = metadata.clone();
+        assert_eq!(cloned.algorithm, metadata.algorithm);
+        assert_eq!(cloned.encapsulation_key[0], 1);
+        assert_eq!(cloned.ciphertext[0], 2);
+        assert_eq!(cloned.encrypted_decapsulation_key[0], 3);
+    }
 }

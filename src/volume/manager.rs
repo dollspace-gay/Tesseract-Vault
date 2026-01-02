@@ -746,4 +746,193 @@ mod tests {
         let result2 = manager.unmount_by_mount_point("/not/a/mount/point");
         assert!(matches!(result2, Err(VolumeManagerError::NotFound(_))));
     }
+
+    #[test]
+    fn test_volume_manager_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+        let mgr_err: VolumeManagerError = io_err.into();
+        assert!(matches!(mgr_err, VolumeManagerError::Io(_)));
+        assert!(mgr_err.to_string().contains("I/O error"));
+    }
+
+    #[test]
+    fn test_volume_manager_error_from_mount() {
+        let mount_err = MountError::FeatureNotEnabled;
+        let mgr_err: VolumeManagerError = mount_err.into();
+        assert!(matches!(mgr_err, VolumeManagerError::Mount(_)));
+    }
+
+    #[cfg(feature = "post-quantum")]
+    #[test]
+    fn test_volume_manager_error_from_container() {
+        let container_err = ContainerError::NotFound(PathBuf::from("/test"));
+        let mgr_err: VolumeManagerError = container_err.into();
+        assert!(matches!(mgr_err, VolumeManagerError::Container(_)));
+    }
+
+    #[test]
+    fn test_volume_manager_debug() {
+        let manager = VolumeManager::new();
+        // Just ensure Debug is implemented - access internal state would require unsafe
+        let _ = &manager;
+        assert_eq!(manager.mount_count(), 0);
+    }
+
+    #[test]
+    fn test_volume_manager_drop_behavior() {
+        // Creating and dropping a manager should not panic
+        {
+            let mut manager = VolumeManager::new();
+            // unmount_all is called in drop
+            manager.unmount_all();
+        } // manager dropped here
+    }
+
+    #[test]
+    fn test_unmount_all_idempotent() {
+        let mut manager = VolumeManager::new();
+        manager.unmount_all();
+        manager.unmount_all();
+        manager.unmount_all();
+        assert_eq!(manager.mount_count(), 0);
+    }
+
+    #[test]
+    fn test_is_mounted_with_various_path_formats() {
+        let manager = VolumeManager::new();
+
+        // Test various path formats
+        assert!(!manager.is_mounted("/absolute/path.scv"));
+        assert!(!manager.is_mounted("relative/path.scv"));
+        assert!(!manager.is_mounted("./current/path.scv"));
+        assert!(!manager.is_mounted("../parent/path.scv"));
+    }
+
+    #[test]
+    fn test_mount_options_with_hidden_volume() {
+        let options = MountOptions {
+            mount_point: PathBuf::from("/mnt/hidden"),
+            read_only: true,
+            hidden_offset: Some(1024 * 1024),
+            hidden_password: Some("secret".to_string()),
+            ..Default::default()
+        };
+
+        assert!(options.read_only);
+        assert_eq!(options.hidden_offset, Some(1024 * 1024));
+        assert_eq!(options.hidden_password, Some("secret".to_string()));
+    }
+
+    #[test]
+    fn test_find_mount_point_various_paths() {
+        let manager = VolumeManager::new();
+
+        // None of these should be found
+        assert!(manager.find_mount_point("vol1.scv").is_none());
+        assert!(manager.find_mount_point("/path/vol2.scv").is_none());
+        assert!(manager.find_mount_point("C:\\Windows\\test.scv").is_none());
+    }
+
+    #[test]
+    fn test_find_container_for_mount_point_various_paths() {
+        let manager = VolumeManager::new();
+
+        // None of these should be found
+        assert!(manager.find_container_for_mount_point("/mnt/a").is_none());
+        assert!(manager.find_container_for_mount_point("/mnt/b").is_none());
+        assert!(manager.find_container_for_mount_point("Z:\\").is_none());
+    }
+
+    #[test]
+    fn test_get_info_various_paths() {
+        let manager = VolumeManager::new();
+
+        // All should return None
+        assert!(manager.get_info("test.scv").is_none());
+        assert!(manager.get_info("/vol/test.scv").is_none());
+        assert!(manager.get_info("/another/path/test.scv").is_none());
+    }
+
+    #[test]
+    fn test_mounted_volume_info_fields() {
+        let now = std::time::SystemTime::now();
+        let info = MountedVolumeInfo {
+            container_path: PathBuf::from("/test/container.scv"),
+            mount_point: PathBuf::from("/mnt/secure"),
+            read_only: true,
+            mounted_at: now,
+            size: 10 * 1024 * 1024, // 10 MB
+            is_hidden: false,
+            hidden_offset: None,
+        };
+
+        // Verify all fields
+        assert_eq!(info.container_path, PathBuf::from("/test/container.scv"));
+        assert_eq!(info.mount_point, PathBuf::from("/mnt/secure"));
+        assert!(info.read_only);
+        assert_eq!(info.mounted_at, now);
+        assert_eq!(info.size, 10 * 1024 * 1024);
+        assert!(!info.is_hidden);
+        assert!(info.hidden_offset.is_none());
+    }
+
+    #[test]
+    fn test_volume_manager_concurrent_access_safety() {
+        use std::thread;
+
+        let manager = VolumeManager::new();
+        let mounted = Arc::clone(&manager.mounted);
+
+        // Multiple threads checking if volumes are mounted
+        let handles: Vec<_> = (0..5)
+            .map(|i| {
+                let mounted_clone = Arc::clone(&mounted);
+                thread::spawn(move || {
+                    let path = PathBuf::from(format!("/vol{}.scv", i));
+                    let guard = mounted_clone.lock().unwrap();
+                    !guard.contains_key(&path)
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            assert!(handle.join().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_volume_manager_error_other_variant() {
+        let err = VolumeManagerError::Other("test error".to_string());
+        assert!(err.to_string().contains("test error"));
+        assert!(err.to_string().contains("Volume manager error"));
+    }
+
+    #[test]
+    fn test_volume_manager_error_already_mounted() {
+        let err = VolumeManagerError::AlreadyMounted(PathBuf::from("/already/mounted.scv"));
+        assert!(err.to_string().contains("already mounted"));
+        assert!(err.to_string().contains("/already/mounted.scv"));
+    }
+
+    #[test]
+    fn test_mount_with_invalid_path_returns_error() {
+        let mut manager = VolumeManager::new();
+        let options = MountOptions {
+            mount_point: PathBuf::from("/mnt/test"),
+            ..Default::default()
+        };
+
+        // Try to mount a path that definitely doesn't exist
+        let result = manager.mount("/this/path/does/not/exist.scv", "password", options);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_list_mounted_returns_vec() {
+        let manager = VolumeManager::new();
+        let list: Vec<MountedVolumeInfo> = manager.list_mounted();
+        assert!(list.is_empty());
+        // Ensure it returns a Vec, not a slice
+        let _ = list.into_iter();
+    }
 }

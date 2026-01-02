@@ -353,4 +353,177 @@ mod tests {
             assert!(info.key_bits == 128 || info.key_bits == 256 || info.key_bits == 0);
         }
     }
+
+    #[test]
+    fn test_tme_error_display_cpuid_failed() {
+        let err = TmeError::CpuidFailed;
+        assert!(err.to_string().contains("CPUID"));
+        assert!(err.to_string().contains("not available"));
+    }
+
+    #[test]
+    fn test_tme_error_display_not_supported() {
+        let err = TmeError::NotSupported;
+        assert!(err.to_string().contains("not supported"));
+        assert!(err.to_string().contains("TME"));
+    }
+
+    #[test]
+    fn test_tme_error_display_not_enabled() {
+        let err = TmeError::NotEnabled;
+        assert!(err.to_string().contains("not enabled"));
+        assert!(err.to_string().contains("BIOS"));
+    }
+
+    #[test]
+    fn test_tme_error_debug() {
+        let err = TmeError::CpuidFailed;
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("CpuidFailed"));
+
+        let err2 = TmeError::NotSupported;
+        let debug_str2 = format!("{:?}", err2);
+        assert!(debug_str2.contains("NotSupported"));
+
+        let err3 = TmeError::NotEnabled;
+        let debug_str3 = format!("{:?}", err3);
+        assert!(debug_str3.contains("NotEnabled"));
+    }
+
+    #[test]
+    fn test_tme_info_clone() {
+        let info = TmeInfo {
+            version: 1,
+            algorithm: "AES-XTS".to_string(),
+            key_bits: 128,
+            enabled: true,
+        };
+
+        let cloned = info.clone();
+        assert_eq!(cloned.version, info.version);
+        assert_eq!(cloned.algorithm, info.algorithm);
+        assert_eq!(cloned.key_bits, info.key_bits);
+        assert_eq!(cloned.enabled, info.enabled);
+    }
+
+    #[test]
+    fn test_tme_info_debug() {
+        let info = TmeInfo {
+            version: 2,
+            algorithm: "AES-XTS".to_string(),
+            key_bits: 256,
+            enabled: false,
+        };
+
+        let debug_str = format!("{:?}", info);
+        assert!(debug_str.contains("TmeInfo"));
+        assert!(debug_str.contains("version"));
+        assert!(debug_str.contains("algorithm"));
+        assert!(debug_str.contains("key_bits"));
+        assert!(debug_str.contains("enabled"));
+    }
+
+    #[test]
+    fn test_tme_info_construct() {
+        // Test constructing TmeInfo directly
+        let info_enabled = TmeInfo {
+            version: 1,
+            algorithm: "AES-XTS".to_string(),
+            key_bits: 128,
+            enabled: true,
+        };
+        assert!(info_enabled.enabled);
+        assert_eq!(info_enabled.version, 1);
+        assert_eq!(info_enabled.key_bits, 128);
+
+        let info_disabled = TmeInfo {
+            version: 0,
+            algorithm: "AES-XTS".to_string(),
+            key_bits: 256,
+            enabled: false,
+        };
+        assert!(!info_disabled.enabled);
+        assert_eq!(info_disabled.version, 0);
+        assert_eq!(info_disabled.key_bits, 256);
+    }
+
+    #[test]
+    fn test_recommendation_content() {
+        let recommendation = get_tme_recommendation();
+
+        // Recommendation should mention one of these scenarios
+        let mentions_enabled = recommendation.contains("enabled");
+        let mentions_supported = recommendation.contains("supported");
+        let mentions_not_supported = recommendation.contains("not supported");
+
+        // At least one of these should be true
+        assert!(mentions_enabled || mentions_supported || mentions_not_supported);
+
+        // Should provide actionable guidance
+        let has_guidance = recommendation.contains("BIOS")
+            || recommendation.contains("application-level")
+            || recommendation.contains("protection");
+        assert!(has_guidance);
+    }
+
+    #[test]
+    fn test_tme_support_is_deterministic() {
+        // Multiple calls should return the same result
+        let result1 = is_tme_supported();
+        let result2 = is_tme_supported();
+        let result3 = is_tme_supported();
+        assert_eq!(result1, result2);
+        assert_eq!(result2, result3);
+    }
+
+    #[test]
+    fn test_tme_enabled_is_deterministic() {
+        // Multiple calls should return the same result
+        let result1 = is_tme_enabled();
+        let result2 = is_tme_enabled();
+        let result3 = is_tme_enabled();
+        assert_eq!(result1, result2);
+        assert_eq!(result2, result3);
+    }
+
+    #[test]
+    fn test_tme_info_detect_is_deterministic() {
+        // Multiple calls should return consistent results
+        let result1 = TmeInfo::detect();
+        let result2 = TmeInfo::detect();
+
+        match (&result1, &result2) {
+            (Some(info1), Some(info2)) => {
+                assert_eq!(info1.version, info2.version);
+                assert_eq!(info1.algorithm, info2.algorithm);
+                assert_eq!(info1.key_bits, info2.key_bits);
+                assert_eq!(info1.enabled, info2.enabled);
+            }
+            (None, None) => {}
+            _ => panic!("TmeInfo::detect() returned inconsistent results"),
+        }
+    }
+
+    #[test]
+    fn test_result_type_alias() {
+        // Test that Result type alias works correctly
+        let ok_result: Result<u32> = Ok(42);
+        assert!(ok_result.is_ok());
+        assert_eq!(ok_result.unwrap(), 42);
+
+        let err_result: Result<u32> = Err(TmeError::NotSupported);
+        assert!(err_result.is_err());
+    }
+
+    #[test]
+    fn test_tme_info_algorithm_field() {
+        // Test that we can set and read the algorithm field
+        let info = TmeInfo {
+            version: 1,
+            algorithm: "TEST-ALG".to_string(),
+            key_bits: 512,
+            enabled: true,
+        };
+        assert_eq!(info.algorithm, "TEST-ALG");
+    }
 }

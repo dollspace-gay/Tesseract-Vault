@@ -1034,7 +1034,10 @@ mod tests {
             "Emergency wipe initiated",
         );
 
-        assert_eq!(cmd.data.message, Some("Emergency wipe initiated".to_string()));
+        assert_eq!(
+            cmd.data.message,
+            Some("Emergency wipe initiated".to_string())
+        );
         assert!(cmd.verify(&token));
     }
 
@@ -1305,8 +1308,8 @@ mod tests {
 
     #[test]
     fn test_manager_load_invalid_file() {
-        use tempfile::NamedTempFile;
         use std::io::Write;
+        use tempfile::NamedTempFile;
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(b"invalid json data").unwrap();

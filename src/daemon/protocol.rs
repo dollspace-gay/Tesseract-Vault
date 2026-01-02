@@ -261,7 +261,10 @@ mod tests {
         let json = serde_json::to_string(&info).unwrap();
         let decoded: MountInfo = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(decoded.container_path, PathBuf::from("/test/container.crypt"));
+        assert_eq!(
+            decoded.container_path,
+            PathBuf::from("/test/container.crypt")
+        );
         assert_eq!(decoded.mount_point, PathBuf::from("/mnt/secure"));
         assert!(!decoded.read_only);
         assert!(decoded.is_hidden);
@@ -280,9 +283,7 @@ mod tests {
             pid: None,
         };
 
-        let resp = DaemonResponse::MountList {
-            mounts: vec![info],
-        };
+        let resp = DaemonResponse::MountList { mounts: vec![info] };
 
         let bytes = resp.to_bytes().unwrap();
         let decoded = DaemonResponse::from_bytes(&bytes).unwrap();

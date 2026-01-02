@@ -187,3 +187,77 @@ pub fn mount(
 ) -> Result<()> {
     Err(MountError::FeatureNotEnabled)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mount_options_default() {
+        let opts = MountOptions::default();
+        assert!(!opts.read_only);
+        assert!(!opts.allow_other);
+        assert!(opts.auto_unmount);
+        assert_eq!(opts.fs_name, Some("Tesseract".to_string()));
+        assert!(opts.hidden_offset.is_none());
+        assert!(opts.hidden_password.is_none());
+    }
+
+    #[test]
+    fn test_mount_options_clone() {
+        let opts = MountOptions {
+            mount_point: std::path::PathBuf::from("/mnt/test"),
+            read_only: true,
+            allow_other: true,
+            auto_unmount: false,
+            fs_name: Some("TestFS".to_string()),
+            hidden_offset: Some(1024),
+            hidden_password: Some("secret".to_string()),
+        };
+
+        let cloned = opts.clone();
+        assert_eq!(cloned.mount_point, std::path::PathBuf::from("/mnt/test"));
+        assert!(cloned.read_only);
+        assert!(cloned.allow_other);
+        assert!(!cloned.auto_unmount);
+        assert_eq!(cloned.fs_name, Some("TestFS".to_string()));
+        assert_eq!(cloned.hidden_offset, Some(1024));
+        assert_eq!(cloned.hidden_password, Some("secret".to_string()));
+    }
+
+    #[test]
+    fn test_mount_error_display() {
+        let err = MountError::FeatureNotEnabled;
+        assert!(err.to_string().contains("not enabled"));
+
+        let err = MountError::PlatformNotSupported;
+        assert!(err.to_string().contains("not supported"));
+
+        let err = MountError::Filesystem("test fs error".to_string());
+        assert!(err.to_string().contains("Filesystem error"));
+        assert!(err.to_string().contains("test fs error"));
+
+        let err = MountError::MountPoint("invalid path".to_string());
+        assert!(err.to_string().contains("Mount point error"));
+        assert!(err.to_string().contains("invalid path"));
+
+        let err = MountError::Other("custom error".to_string());
+        assert!(err.to_string().contains("Mount error"));
+        assert!(err.to_string().contains("custom error"));
+    }
+
+    #[test]
+    fn test_mount_error_io_from() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let mount_err: MountError = io_err.into();
+        assert!(matches!(mount_err, MountError::Io(_)));
+        assert!(mount_err.to_string().contains("I/O error"));
+    }
+
+    #[test]
+    #[cfg(not(feature = "encrypted-volumes"))]
+    fn test_mount_feature_disabled() {
+        let result = mount("/fake/path", "password", MountOptions::default());
+        assert!(matches!(result, Err(MountError::FeatureNotEnabled)));
+    }
+}

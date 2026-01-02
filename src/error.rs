@@ -95,4 +95,66 @@ mod tests {
         let err = CryptorError::Decryption;
         assert!(err.to_string().contains("Decryption failed"));
     }
+
+    #[test]
+    fn test_cryptography_error() {
+        let err = CryptorError::Cryptography("cipher failed".to_string());
+        assert!(err.to_string().contains("Cryptography error"));
+        assert!(err.to_string().contains("cipher failed"));
+    }
+
+    #[test]
+    fn test_password_hash_error() {
+        let err = CryptorError::PasswordHash("hash mismatch".to_string());
+        assert!(err.to_string().contains("Password hashing error"));
+        assert!(err.to_string().contains("hash mismatch"));
+    }
+
+    #[test]
+    fn test_argon2_error() {
+        let err = CryptorError::Argon2("memory limit exceeded".to_string());
+        assert!(err.to_string().contains("Argon2 error"));
+        assert!(err.to_string().contains("memory limit exceeded"));
+    }
+
+    #[test]
+    fn test_invalid_format_error() {
+        let err = CryptorError::InvalidFormat;
+        assert!(err.to_string().contains("Invalid file format"));
+    }
+
+    #[test]
+    fn test_invalid_output_path_error() {
+        let err = CryptorError::InvalidOutputPath;
+        assert!(err.to_string().contains("Output file path is invalid"));
+    }
+
+    #[test]
+    fn test_key_derivation_error() {
+        let err = CryptorError::KeyDerivation("salt too short".to_string());
+        assert!(err.to_string().contains("Key derivation error"));
+        assert!(err.to_string().contains("salt too short"));
+    }
+
+    #[test]
+    fn test_invalid_input_error() {
+        let err = CryptorError::InvalidInput("empty buffer".to_string());
+        assert!(err.to_string().contains("Invalid input"));
+        assert!(err.to_string().contains("empty buffer"));
+    }
+
+    #[test]
+    fn test_hardware_error() {
+        let err = CryptorError::HardwareError("TPM not found".to_string());
+        assert!(err.to_string().contains("Hardware security module error"));
+        assert!(err.to_string().contains("TPM not found"));
+    }
+
+    #[test]
+    fn test_argon2_from_impl() {
+        // Test the From<argon2::Error> implementation
+        let argon2_err = argon2::Error::AdTooLong;
+        let cryptor_err: CryptorError = argon2_err.into();
+        assert!(matches!(cryptor_err, CryptorError::Argon2(_)));
+    }
 }

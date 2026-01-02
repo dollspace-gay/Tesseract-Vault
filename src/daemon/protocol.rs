@@ -186,4 +186,113 @@ mod tests {
 
         matches!(decoded, DaemonResponse::Success);
     }
+
+    #[test]
+    fn test_command_unmount_serialization() {
+        let cmd = DaemonCommand::Unmount {
+            container_path: PathBuf::from("/path/to/container.crypt"),
+        };
+
+        let bytes = cmd.to_bytes().unwrap();
+        let decoded = DaemonCommand::from_bytes(&bytes).unwrap();
+
+        match decoded {
+            DaemonCommand::Unmount { container_path } => {
+                assert_eq!(container_path, PathBuf::from("/path/to/container.crypt"));
+            }
+            _ => panic!("Wrong command type"),
+        }
+    }
+
+    #[test]
+    fn test_command_list_serialization() {
+        let cmd = DaemonCommand::List;
+        let bytes = cmd.to_bytes().unwrap();
+        let decoded = DaemonCommand::from_bytes(&bytes).unwrap();
+        assert!(matches!(decoded, DaemonCommand::List));
+    }
+
+    #[test]
+    fn test_command_ping_serialization() {
+        let cmd = DaemonCommand::Ping;
+        let bytes = cmd.to_bytes().unwrap();
+        let decoded = DaemonCommand::from_bytes(&bytes).unwrap();
+        assert!(matches!(decoded, DaemonCommand::Ping));
+    }
+
+    #[test]
+    fn test_command_shutdown_serialization() {
+        let cmd = DaemonCommand::Shutdown;
+        let bytes = cmd.to_bytes().unwrap();
+        let decoded = DaemonCommand::from_bytes(&bytes).unwrap();
+        assert!(matches!(decoded, DaemonCommand::Shutdown));
+    }
+
+    #[test]
+    fn test_response_error_helper() {
+        let resp = DaemonResponse::error("test error message");
+        match resp {
+            DaemonResponse::Error { message } => {
+                assert_eq!(message, "test error message");
+            }
+            _ => panic!("Expected Error variant"),
+        }
+    }
+
+    #[test]
+    fn test_response_pong_serialization() {
+        let resp = DaemonResponse::Pong;
+        let bytes = resp.to_bytes().unwrap();
+        let decoded = DaemonResponse::from_bytes(&bytes).unwrap();
+        assert!(matches!(decoded, DaemonResponse::Pong));
+    }
+
+    #[test]
+    fn test_mount_info_serialization() {
+        let info = MountInfo {
+            container_path: PathBuf::from("/test/container.crypt"),
+            mount_point: PathBuf::from("/mnt/secure"),
+            read_only: false,
+            is_hidden: true,
+            mounted_at: 1234567890,
+            pid: Some(1234),
+        };
+
+        let json = serde_json::to_string(&info).unwrap();
+        let decoded: MountInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded.container_path, PathBuf::from("/test/container.crypt"));
+        assert_eq!(decoded.mount_point, PathBuf::from("/mnt/secure"));
+        assert!(!decoded.read_only);
+        assert!(decoded.is_hidden);
+        assert_eq!(decoded.mounted_at, 1234567890);
+        assert_eq!(decoded.pid, Some(1234));
+    }
+
+    #[test]
+    fn test_response_mount_list_serialization() {
+        let info = MountInfo {
+            container_path: PathBuf::from("/test"),
+            mount_point: PathBuf::from("/mnt"),
+            read_only: true,
+            is_hidden: false,
+            mounted_at: 12345,
+            pid: None,
+        };
+
+        let resp = DaemonResponse::MountList {
+            mounts: vec![info],
+        };
+
+        let bytes = resp.to_bytes().unwrap();
+        let decoded = DaemonResponse::from_bytes(&bytes).unwrap();
+
+        match decoded {
+            DaemonResponse::MountList { mounts } => {
+                assert_eq!(mounts.len(), 1);
+                assert!(mounts[0].read_only);
+            }
+            _ => panic!("Expected MountList variant"),
+        }
+    }
 }

@@ -93,3 +93,42 @@ impl Default for HsmConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hsm_config_default() {
+        let config = HsmConfig::default();
+        assert!(!config.require_device);
+        assert!(config.allow_backup);
+        assert_eq!(config.max_attempts, 3);
+        assert_eq!(config.timeout_ms, 5000);
+    }
+
+    #[test]
+    fn test_hsm_config_clone() {
+        let config = HsmConfig {
+            require_device: true,
+            allow_backup: false,
+            max_attempts: 5,
+            timeout_ms: 10000,
+        };
+
+        let cloned = config.clone();
+        assert!(cloned.require_device);
+        assert!(!cloned.allow_backup);
+        assert_eq!(cloned.max_attempts, 5);
+        assert_eq!(cloned.timeout_ms, 10000);
+    }
+
+    #[test]
+    fn test_hsm_config_debug() {
+        let config = HsmConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("HsmConfig"));
+        assert!(debug_str.contains("require_device"));
+        assert!(debug_str.contains("allow_backup"));
+    }
+}

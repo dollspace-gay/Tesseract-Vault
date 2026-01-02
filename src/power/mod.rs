@@ -161,3 +161,70 @@ impl Default for PowerMonitor {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_power_event_variants() {
+        // Test PartialEq
+        assert_eq!(PowerEvent::Suspend, PowerEvent::Suspend);
+        assert_eq!(PowerEvent::Hibernate, PowerEvent::Hibernate);
+        assert_eq!(PowerEvent::Shutdown, PowerEvent::Shutdown);
+        assert_eq!(PowerEvent::Resume, PowerEvent::Resume);
+
+        // Test inequality
+        assert_ne!(PowerEvent::Suspend, PowerEvent::Resume);
+        assert_ne!(PowerEvent::Hibernate, PowerEvent::Shutdown);
+    }
+
+    #[test]
+    fn test_power_event_clone() {
+        let event = PowerEvent::Suspend;
+        let cloned = event;
+        assert_eq!(event, cloned);
+    }
+
+    #[test]
+    fn test_power_event_debug() {
+        let event = PowerEvent::Suspend;
+        let debug_str = format!("{:?}", event);
+        assert!(debug_str.contains("Suspend"));
+    }
+
+    #[test]
+    fn test_power_monitor_error_display() {
+        let err = PowerMonitorError::PlatformNotSupported;
+        assert!(err.to_string().contains("not supported"));
+
+        let err = PowerMonitorError::RegistrationFailed("test failure".to_string());
+        assert!(err.to_string().contains("Failed to register"));
+        assert!(err.to_string().contains("test failure"));
+
+        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "io test");
+        let err = PowerMonitorError::Io(io_err);
+        assert!(err.to_string().contains("I/O error"));
+
+        let err = PowerMonitorError::Other("custom error".to_string());
+        assert!(err.to_string().contains("Power monitor error"));
+        assert!(err.to_string().contains("custom error"));
+    }
+
+    #[test]
+    fn test_power_monitor_new() {
+        let _monitor = PowerMonitor::new();
+    }
+
+    #[test]
+    fn test_power_monitor_default() {
+        let _monitor = PowerMonitor::default();
+    }
+
+    #[test]
+    fn test_power_monitor_io_error_from() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
+        let monitor_err: PowerMonitorError = io_err.into();
+        assert!(matches!(monitor_err, PowerMonitorError::Io(_)));
+    }
+}

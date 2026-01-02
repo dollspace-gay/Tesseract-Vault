@@ -359,7 +359,8 @@ mod tests {
 
             // Verify file size is correct
             let metadata = temp_file.as_file().metadata().unwrap();
-            let expected_size = MAGIC_BYTES.len() + 1 + salt.as_str().len() + NONCE_LEN + ciphertext.len();
+            let expected_size =
+                MAGIC_BYTES.len() + 1 + salt.as_str().len() + NONCE_LEN + ciphertext.len();
             assert_eq!(metadata.len() as usize, expected_size);
         }
     }

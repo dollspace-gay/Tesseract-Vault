@@ -422,8 +422,7 @@ mod tests {
         let unlock_failed = MigrationError::UnlockFailed;
         assert!(unlock_failed.to_string().contains("incorrect password"));
 
-        let verification_failed =
-            MigrationError::VerificationFailed("test failure".to_string());
+        let verification_failed = MigrationError::VerificationFailed("test failure".to_string());
         assert!(verification_failed.to_string().contains("test failure"));
 
         let serialization = MigrationError::Serialization("ser error".to_string());
@@ -448,7 +447,10 @@ mod tests {
         let migration = VolumeMigration::new("/nonexistent/path/volume.vol");
         let result = migration.read_v1_header();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), MigrationError::VolumeNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            MigrationError::VolumeNotFound(_)
+        ));
     }
 
     #[test]
@@ -463,7 +465,10 @@ mod tests {
         let migration = VolumeMigration::new("test.vol");
         let result = migration.rollback();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), MigrationError::BackupFailed(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            MigrationError::BackupFailed(_)
+        ));
     }
 
     #[test]

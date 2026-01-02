@@ -286,17 +286,17 @@ fn use_key(mut key: Zeroizing<[u8; 32]>) {
 
 | Module | Function | Kani | Prusti | Status |
 |--------|----------|------|--------|--------|
-| aes_gcm.rs | encrypt() | ✅ Length, no-panic | ✅ Contracts | Pending |
-| aes_gcm.rs | decrypt() | ✅ Round-trip | ✅ Contracts | Pending |
-| kdf.rs | derive_key() | ✅ Determinism | ✅ Zeroization | Pending |
-| kdf.rs | generate_salt() | ✅ Length | - | Pending |
+| aes_gcm.rs | encrypt() | ✅ Length, no-panic | ✅ Contracts | Implemented (9 harnesses) |
+| aes_gcm.rs | decrypt() | ✅ Round-trip | ✅ Contracts | Implemented (9 harnesses) |
+| kdf.rs | derive_key() | ✅ Determinism | ✅ Zeroization | Implemented (11 harnesses) |
+| kdf.rs | generate_salt() | ✅ Length | - | Implemented (11 harnesses) |
 
 ### Phase 2: Streaming & Advanced
 
 | Module | Function | Kani | Prusti | Status |
 |--------|----------|------|--------|--------|
-| streaming.rs | encrypt_sector() | ✅ In-place safety | ✅ Atomicity | Pending |
-| streaming.rs | decrypt_sector() | ✅ Round-trip | ✅ Atomicity | Pending |
+| streaming.rs | encrypt_sector() | ✅ In-place safety | ✅ Atomicity | Implemented (8 harnesses) |
+| streaming.rs | decrypt_sector() | ✅ Round-trip | ✅ Atomicity | Implemented (8 harnesses) |
 | pqc.rs | ML-KEM operations | ✅ No-panic | - | Pending |
 
 ### Phase 3: Volume Management

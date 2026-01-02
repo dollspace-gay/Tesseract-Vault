@@ -10,7 +10,7 @@ Tesseract Vault is a stable, security-focused encryption suite with:
 - AES-256-GCM and ChaCha20-Poly1305 encryption
 - Post-quantum cryptography (ML-KEM-1024, ML-DSA-87)
 - Encrypted volume containers with hidden volumes
-- Cross-platform support (Windows, Linux, macOS)
+- Cross-platform support (Windows, Linux)
 - Native GUI and CLI interfaces
 - Comprehensive security testing (fuzzing, formal verification, differential testing)
 

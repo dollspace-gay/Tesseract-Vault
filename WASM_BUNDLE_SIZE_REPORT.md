@@ -2,7 +2,7 @@
 
 ## Summary
 
-This document summarizes the WASM bundle size optimization work completed for Secure Cryptor.
+This document summarizes the WASM bundle size optimization work completed for Tesseract Vault.
 
 ## Baseline Measurement
 

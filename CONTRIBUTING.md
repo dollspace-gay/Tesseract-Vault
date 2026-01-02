@@ -81,7 +81,7 @@ cargo test --lib
 
 ### Cross-Platform Testing
 
-This project **must** work on Windows, Linux, and macOS. Before submitting a PR:
+This project **must** work on Windows and Linux. Before submitting a PR:
 
 **Windows:**
 ```bash

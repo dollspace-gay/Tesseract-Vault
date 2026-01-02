@@ -1,16 +1,184 @@
-# GitHub Pages Deployment Guide
+# Tesseract Vault Deployment Guide
 
-This guide explains how to deploy the Secure Cryptor WASM demo to GitHub Pages.
+This guide covers deployment options for Tesseract Vault across different environments.
 
-## Prerequisites
+## Table of Contents
 
-1. GitHub repository with this codebase
-2. WASM package built (`wasm-pack build --target web --out-dir pkg/web`)
-3. Git installed and configured
+- [Binary Installation](#binary-installation)
+- [System Service (Daemon)](#system-service-daemon)
+- [Volume Mounting in Production](#volume-mounting-in-production)
+- [WebAssembly Deployment](#webassembly-deployment)
+- [Enterprise Deployment](#enterprise-deployment)
 
-## Deployment Steps
+## Binary Installation
 
-### Option 1: GitHub Actions (Recommended)
+### From Source
+
+```bash
+# Install to ~/.cargo/bin (Linux) or %USERPROFILE%\.cargo\bin (Windows)
+cargo install --path .
+
+# With specific features
+cargo install --path . --no-default-features --features "post-quantum compression"
+
+# Install to custom location
+cargo install --path . --root /usr/local
+```
+
+### Manual Installation
+
+**Linux:**
+```bash
+cargo build --release
+sudo cp target/release/tesseract-vault /usr/local/bin/
+sudo cp target/release/tesseract-vault-gui /usr/local/bin/  # Optional
+sudo cp target/release/tesseract-luks /usr/local/bin/       # Optional, Linux FDE
+```
+
+**Windows:**
+```powershell
+cargo build --release
+copy target\release\tesseract-vault.exe C:\Program Files\TesseractVault\
+# Add to PATH or use full path
+```
+
+### Verification
+
+```bash
+tesseract-vault --version
+tesseract-vault encrypt --help
+```
+
+## System Service (Daemon)
+
+The Tesseract daemon provides background volume management, power state monitoring, and automatic unmounting.
+
+### Windows Service
+
+**Install and start:**
+```powershell
+# Requires Administrator privileges
+tesseract daemon install-service
+tesseract daemon start-service
+```
+
+**Check status:**
+```powershell
+tesseract daemon status
+sc query TesseractVault
+```
+
+**Uninstall:**
+```powershell
+tesseract daemon stop-service
+tesseract daemon uninstall-service
+```
+
+### Linux systemd Service
+
+**Install:**
+```bash
+sudo tesseract daemon install-service
+# Or manually copy the service file:
+# sudo cp docs/services/secure-cryptor-automount.service /etc/systemd/system/tesseract.service
+sudo systemctl daemon-reload
+```
+
+**Start and enable:**
+```bash
+sudo systemctl start tesseract
+sudo systemctl enable tesseract  # Start on boot
+```
+
+**Check status:**
+```bash
+sudo systemctl status tesseract
+journalctl -u tesseract -f  # View logs
+```
+
+**Uninstall:**
+```bash
+sudo systemctl stop tesseract
+sudo systemctl disable tesseract
+sudo rm /etc/systemd/system/tesseract.service
+sudo systemctl daemon-reload
+```
+
+### Daemon Features
+
+- Automatic volume unmounting on sleep/hibernate
+- Power state monitoring with callbacks
+- IPC socket for inter-process communication
+- Graceful shutdown on SIGTERM/SIGINT
+
+## Volume Mounting in Production
+
+### Prerequisites
+
+**Windows:**
+- [WinFsp](https://winfsp.dev/) installed
+
+**Linux:**
+- FUSE kernel driver and libraries (`fuse3`, `libfuse3-dev`)
+
+### Creating and Mounting Volumes
+
+```bash
+# Create a 10GB encrypted volume
+tesseract-vault volume create --container /data/secure.enc --size 10G
+
+# Mount the volume
+tesseract-vault volume mount --container /data/secure.enc --mount-point /mnt/secure
+
+# Verify mount
+tesseract-vault volume list
+
+# Unmount
+tesseract-vault volume unmount /mnt/secure
+```
+
+### Automount Configuration
+
+For automatic mounting at startup, use the daemon service with a configuration file:
+
+```bash
+# /etc/tesseract/config.toml (Linux)
+# C:\ProgramData\TesseractVault\config.toml (Windows)
+
+[automount]
+enabled = true
+
+[[volumes]]
+container = "/data/secure.enc"
+mount_point = "/mnt/secure"
+read_only = false
+```
+
+### Production Best Practices
+
+1. **Separate key storage**: Store passphrases/recovery keys in secure locations (HSM, vault)
+2. **Regular backups**: Back up volume headers and recovery keys
+3. **Monitoring**: Monitor daemon logs for unmount events
+4. **Access control**: Use filesystem permissions on mount points
+5. **Hidden volumes**: Consider for high-security scenarios
+
+## WebAssembly Deployment
+
+Tesseract Vault can be compiled to WebAssembly for browser-based encryption.
+
+### Building WASM
+
+```bash
+# Minimal build (~100KB)
+wasm-pack build --target web --release -- --no-default-features --features wasm-minimal
+
+# Full build with PQC
+wasm-pack build --target web --release -- --features wasm-full
+```
+
+### GitHub Pages Deployment
+
+**Using GitHub Actions** (recommended):
 
 Create `.github/workflows/deploy.yml`:
 
@@ -53,217 +221,109 @@ jobs:
           path: 'examples/wasm'
 
       - name: Deploy to GitHub Pages
-        id: deployment
         uses: actions/deploy-pages@v4
 ```
 
 **Enable GitHub Pages:**
-1. Go to repository Settings → Pages
+1. Go to repository Settings > Pages
 2. Source: GitHub Actions
-3. Wait for deployment to complete
-4. Visit: `https://yourusername.github.io/secure-cryptor/`
+3. Visit: `https://yourusername.github.io/tesseract-vault/`
 
-### Option 2: Manual gh-pages Branch
+### Security Headers
 
-```bash
-# 1. Build WASM package
-wasm-pack build --target web --out-dir pkg/web
-
-# 2. Create gh-pages branch
-git checkout --orphan gh-pages
-
-# 3. Remove all files except what we need
-git rm -rf .
-git clean -fxd
-
-# 4. Copy only necessary files
-git checkout main -- examples/wasm/
-git checkout main -- pkg/web/
-git checkout main -- .nojekyll
-
-# 5. Move files to root
-mv examples/wasm/* .
-rmdir examples/wasm
-rmdir examples
-
-# 6. Commit and push
-git add .
-git commit -m "Deploy to GitHub Pages"
-git push origin gh-pages
-
-# 7. Return to main branch
-git checkout main
-```
-
-**Enable GitHub Pages:**
-1. Go to repository Settings → Pages
-2. Source: Deploy from a branch
-3. Branch: gh-pages / (root)
-4. Visit: `https://yourusername.github.io/secure-cryptor/`
-
-### Option 3: Subtree Deploy
-
-```bash
-# 1. Build WASM
-wasm-pack build --target web --out-dir pkg/web
-
-# 2. Create deployment directory
-mkdir -p deploy
-cp -r examples/wasm/* deploy/
-cp -r pkg/web deploy/pkg/web
-cp .nojekyll deploy/
-
-# 3. Deploy subtree
-git subtree push --prefix deploy origin gh-pages
-
-# 4. Clean up
-rm -rf deploy
-```
-
-## Files Included in Deployment
-
-- `index.html` - Entry point (redirects to demo.html)
-- `demo.html` - Interactive demo application
-- `basic-example.html` - Simple example
-- `worker-example.html` - Web Worker example
-- `worker.js` - Web Worker implementation
-- `worker-pool.js` - Worker pool manager
-- `README.md` - Documentation
-- `pkg/web/` - WASM binaries and JavaScript bindings
-- `.nojekyll` - Prevents Jekyll processing
-
-## Security Considerations
-
-### Content Security Policy
-
-When deploying to production, add CSP headers. For GitHub Pages, you can't set HTTP headers, but you can use a meta tag in your HTML:
+Add Content Security Policy for production:
 
 ```html
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'self';">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'self';">
 ```
 
-### Subresource Integrity
-
-Generate SRI hashes for your WASM files:
+Generate Subresource Integrity hashes:
 
 ```bash
-# Generate SHA-384 hash
-openssl dgst -sha384 -binary pkg/web/secure_cryptor_bg.wasm | openssl base64 -A
+openssl dgst -sha384 -binary pkg/web/tesseract_bg.wasm | openssl base64 -A
 ```
 
-Add to your script tags:
-```html
-<script type="module"
-        src="pkg/web/secure_cryptor.js"
-        integrity="sha384-..."
-        crossorigin="anonymous">
-</script>
+## Enterprise Deployment
+
+### File Associations (Windows)
+
+Register `.enc` file associations for seamless integration:
+
+```powershell
+# Requires Administrator
+.\target\release\tesseract-vault-register.exe install
 ```
 
-### HTTPS
+This registers:
+- Double-click `.enc` files to open in Tesseract GUI
+- Right-click context menu for encryption/decryption
 
-GitHub Pages automatically serves over HTTPS. Ensure all resources are loaded via HTTPS.
-
-## Troubleshooting
-
-### WASM File Not Found
-
-Ensure paths in HTML files are correct:
-```javascript
-import init from './pkg/web/secure_cryptor.js';
-await init(); // Defaults to secure_cryptor_bg.wasm in same directory
-```
-
-### CORS Issues
-
-GitHub Pages sets appropriate CORS headers. If testing locally, use:
-```bash
-python -m http.server 8000
-# or
-npx serve
-```
-
-### Module Loading Errors
-
-Verify you're using:
-```html
-<script type="module">
-```
-
-### Worker Loading Fails
-
-Check worker paths are relative to the HTML file location.
-
-## Custom Domain
-
-To use a custom domain:
-
-1. Add `CNAME` file to deployment:
-```bash
-echo "crypto.yourdomain.com" > CNAME
-git add CNAME
-git commit -m "Add custom domain"
-git push origin gh-pages
-```
-
-2. Configure DNS:
-```
-Type: CNAME
-Name: crypto
-Value: yourusername.github.io
-```
-
-3. Enable HTTPS in GitHub Pages settings
-
-## Monitoring
-
-Monitor your deployment at:
-- GitHub Actions: `https://github.com/yourusername/secure-cryptor/actions`
-- GitHub Pages: Settings → Pages
-
-## Performance Optimization
-
-The WASM binary is currently 134KB. For optimization tips, see:
-- [Optimize WASM bundle size](#) (coming soon)
-- Run `wasm-opt` for size reduction
-- Enable gzip compression (automatic on GitHub Pages)
-
-## Example Live Deployments
-
-- Demo: `https://yourusername.github.io/secure-cryptor/demo.html`
-- Basic: `https://yourusername.github.io/secure-cryptor/basic-example.html`
-- Worker: `https://yourusername.github.io/secure-cryptor/worker-example.html`
-
-## Updating Deployment
-
-To update your deployment:
+### File Associations (Linux)
 
 ```bash
-# GitHub Actions: Just push to main
-git push origin main
-
-# Manual: Repeat deployment steps
-# Subtree: Run subtree push again
+./target/release/tesseract-vault-register install
 ```
 
-## Rolling Back
+Creates:
+- Desktop entry in `~/.local/share/applications/`
+- MIME type for `.enc` files
+- File associations in `~/.config/mimeapps.list`
 
-To rollback to a previous version:
+### LUKS Integration (Linux FDE)
+
+For full disk encryption with post-quantum security:
 
 ```bash
-git checkout gh-pages
-git reset --hard <commit-hash>
-git push --force origin gh-pages
+# Create Tesseract-protected LUKS keyfile
+tesseract-luks create /etc/tesseract/root.keyfile
+
+# Enroll TPM for passwordless boot
+tesseract-luks enroll-tpm /etc/tesseract/root.keyfile --pcrs 0,7
+
+# Integrate with initramfs (distribution-specific)
+# See docs/preboot-auth-design.md for details
 ```
+
+### Monitoring and Logging
+
+**Windows Event Log:**
+```powershell
+Get-EventLog -LogName Application -Source TesseractVault
+```
+
+**Linux journald:**
+```bash
+journalctl -u tesseract --since "1 hour ago"
+```
+
+### Uninstallation
+
+**Complete removal:**
+
+```bash
+# Stop and remove service
+tesseract daemon uninstall-service
+
+# Remove file associations
+tesseract-vault-register uninstall
+
+# Remove binaries (Linux)
+sudo rm /usr/local/bin/tesseract-vault*
+sudo rm /usr/local/bin/tesseract-luks
+
+# Remove binaries (Windows)
+del "C:\Program Files\TesseractVault\*"
+```
+
+**Config and data locations:**
+- Linux: `~/.config/tesseract/`, `/etc/tesseract/`
+- Windows: `%APPDATA%\TesseractVault\`, `C:\ProgramData\TesseractVault\`
 
 ## Support
 
-For issues:
-1. Check browser console for errors
-2. Verify WASM files are being served correctly
-3. Test locally before deploying
-4. Check GitHub Actions logs for build errors
-
-## License
-
-Deployed content follows the same license as the repository.
+For deployment issues:
+1. Check logs (`journalctl` or Event Viewer)
+2. Verify dependencies (WinFsp/FUSE installed)
+3. Test commands manually before automating
+4. See [README.md](README.md) for usage details

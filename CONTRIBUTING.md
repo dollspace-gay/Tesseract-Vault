@@ -6,6 +6,44 @@ Thank you for your interest in contributing to Tesseract Vault! This document pr
 
 By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Developer Certificate of Origin (DCO)
+
+This project uses the [Developer Certificate of Origin (DCO)](https://developercertificate.org/) to ensure that contributors have the legal right to submit their contributions.
+
+By making a contribution to this project, you certify that:
+
+1. The contribution was created in whole or in part by you and you have the right to submit it under the MIT license; or
+2. The contribution is based upon previous work that, to the best of your knowledge, is covered under an appropriate open source license and you have the right to submit that work with modifications; or
+3. The contribution was provided directly to you by some other person who certified (1) or (2) and you have not modified it.
+
+### How to Sign Off
+
+**All commits must be signed off** using the `-s` flag:
+
+```bash
+git commit -s -m "Your commit message"
+```
+
+This adds a `Signed-off-by` line to your commit message:
+
+```
+Your commit message
+
+Signed-off-by: Your Name <your.email@example.com>
+```
+
+If you forget to sign off, you can amend your last commit:
+
+```bash
+git commit --amend -s
+```
+
+Or sign off multiple commits:
+
+```bash
+git rebase --signoff HEAD~3  # Sign off last 3 commits
+```
+
 ## Security First
 
 Tesseract Vault handles encryption and sensitive data. All contributions must prioritize security:
@@ -106,6 +144,7 @@ Ensure:
 
 ### PR Requirements
 
+- **All commits must be signed off (DCO)**
 - All CI checks must pass
 - Tests must pass on all platforms
 - No decrease in code coverage

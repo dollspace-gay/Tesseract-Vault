@@ -1,0 +1,62 @@
+name: DCO Check
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dco-check:
+    name: DCO Sign-Off Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check DCO sign-off
+        run: |
+          # Get all commits in the PR
+          BASE_SHA=${{ github.event.pull_request.base.sha }}
+          HEAD_SHA=${{ github.event.pull_request.head.sha }}
+
+          echo "Checking commits from $BASE_SHA to $HEAD_SHA"
+
+          # Check each commit for Signed-off-by
+          FAILED=0
+          for COMMIT in $(git rev-list $BASE_SHA..$HEAD_SHA); do
+            MESSAGE=$(git log --format=%B -n 1 $COMMIT)
+            if ! echo "$MESSAGE" | grep -q "^Signed-off-by: "; then
+              echo "ERROR: Commit $COMMIT is missing DCO sign-off"
+              echo "Commit message:"
+              echo "$MESSAGE"
+              echo ""
+              FAILED=1
+            else
+              echo "OK: Commit $COMMIT has DCO sign-off"
+            fi
+          done
+
+          if [ $FAILED -eq 1 ]; then
+            echo ""
+            echo "============================================"
+            echo "DCO CHECK FAILED"
+            echo "============================================"
+            echo ""
+            echo "All commits must be signed off with:"
+            echo "  git commit -s -m 'Your message'"
+            echo ""
+            echo "To fix existing commits:"
+            echo "  git rebase --signoff HEAD~N  (where N is number of commits)"
+            echo ""
+            echo "See: https://developercertificate.org/"
+            exit 1
+          fi
+
+          echo ""
+          echo "All commits have valid DCO sign-off!"

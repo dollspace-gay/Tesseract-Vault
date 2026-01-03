@@ -17,8 +17,8 @@
 //! - FIPS 204: https://csrc.nist.gov/pubs/fips/204/final
 
 use tesseract_lib::crypto::pqc::{
-    encapsulate, encapsulate_validated, validate_encapsulation_key, MlKemKeyPair,
-    CIPHERTEXT_SIZE, PUBLIC_KEY_SIZE, SECRET_KEY_SIZE, SHARED_SECRET_SIZE,
+    encapsulate, encapsulate_validated, validate_encapsulation_key, MlKemKeyPair, CIPHERTEXT_SIZE,
+    PUBLIC_KEY_SIZE, SECRET_KEY_SIZE, SHARED_SECRET_SIZE,
 };
 use tesseract_lib::crypto::signatures::{verify, MlDsaKeyPair, SecurityLevel};
 
@@ -33,10 +33,22 @@ use tesseract_lib::crypto::signatures::{verify, MlDsaKeyPair, SecurityLevel};
 /// - Shared secret: 32 bytes
 #[test]
 fn test_mlkem_key_sizes_fips203() {
-    assert_eq!(PUBLIC_KEY_SIZE, 1568, "FIPS 203: ek size must be 1568 bytes");
-    assert_eq!(SECRET_KEY_SIZE, 3168, "FIPS 203: dk size must be 3168 bytes");
-    assert_eq!(CIPHERTEXT_SIZE, 1568, "FIPS 203: ciphertext size must be 1568 bytes");
-    assert_eq!(SHARED_SECRET_SIZE, 32, "FIPS 203: shared secret must be 32 bytes");
+    assert_eq!(
+        PUBLIC_KEY_SIZE, 1568,
+        "FIPS 203: ek size must be 1568 bytes"
+    );
+    assert_eq!(
+        SECRET_KEY_SIZE, 3168,
+        "FIPS 203: dk size must be 3168 bytes"
+    );
+    assert_eq!(
+        CIPHERTEXT_SIZE, 1568,
+        "FIPS 203: ciphertext size must be 1568 bytes"
+    );
+    assert_eq!(
+        SHARED_SECRET_SIZE, 32,
+        "FIPS 203: shared secret must be 32 bytes"
+    );
 }
 
 /// Test that generated keys have correct sizes per FIPS 203
@@ -106,9 +118,8 @@ fn test_mlkem_validated_roundtrip() {
         let keypair = MlKemKeyPair::generate();
 
         // Use validated encapsulation
-        let (ciphertext, shared_secret_enc) =
-            encapsulate_validated(keypair.encapsulation_key())
-                .expect("Validated encapsulation should succeed");
+        let (ciphertext, shared_secret_enc) = encapsulate_validated(keypair.encapsulation_key())
+            .expect("Validated encapsulation should succeed");
 
         let shared_secret_dec = keypair
             .decapsulate(&ciphertext)
@@ -263,10 +274,8 @@ fn test_mlkem_different_keys_different_secrets() {
     let keypair2 = MlKemKeyPair::generate();
 
     // Encapsulate to both keys
-    let (_, ss1) =
-        encapsulate(keypair1.encapsulation_key()).expect("Encapsulation should succeed");
-    let (_, ss2) =
-        encapsulate(keypair2.encapsulation_key()).expect("Encapsulation should succeed");
+    let (_, ss1) = encapsulate(keypair1.encapsulation_key()).expect("Encapsulation should succeed");
+    let (_, ss2) = encapsulate(keypair2.encapsulation_key()).expect("Encapsulation should succeed");
 
     // Shared secrets should be different (with extremely high probability)
     assert_ne!(
@@ -293,8 +302,15 @@ fn test_mldsa_keygen_all_levels() {
     for level in levels {
         let keypair = MlDsaKeyPair::generate(level);
         assert_eq!(keypair.security_level(), level);
-        assert!(!keypair.verifying_key().is_empty(), "Verifying key should not be empty");
-        assert_eq!(keypair.signing_key_seed().len(), 32, "Seed should be 32 bytes");
+        assert!(
+            !keypair.verifying_key().is_empty(),
+            "Verifying key should not be empty"
+        );
+        assert_eq!(
+            keypair.signing_key_seed().len(),
+            32,
+            "Seed should be 32 bytes"
+        );
     }
 }
 
@@ -361,15 +377,27 @@ fn test_mldsa_signature_sizes() {
 
     let keypair44 = MlDsaKeyPair::generate(SecurityLevel::Level44);
     let sig44 = keypair44.sign(message).unwrap();
-    assert_eq!(sig44.len(), 2420, "ML-DSA-44 signature should be 2420 bytes");
+    assert_eq!(
+        sig44.len(),
+        2420,
+        "ML-DSA-44 signature should be 2420 bytes"
+    );
 
     let keypair65 = MlDsaKeyPair::generate(SecurityLevel::Level65);
     let sig65 = keypair65.sign(message).unwrap();
-    assert_eq!(sig65.len(), 3309, "ML-DSA-65 signature should be 3309 bytes");
+    assert_eq!(
+        sig65.len(),
+        3309,
+        "ML-DSA-65 signature should be 3309 bytes"
+    );
 
     let keypair87 = MlDsaKeyPair::generate(SecurityLevel::Level87);
     let sig87 = keypair87.sign(message).unwrap();
-    assert_eq!(sig87.len(), 4627, "ML-DSA-87 signature should be 4627 bytes");
+    assert_eq!(
+        sig87.len(),
+        4627,
+        "ML-DSA-87 signature should be 4627 bytes"
+    );
 }
 
 /// Test ML-DSA verifying key sizes per FIPS 204
@@ -471,7 +499,9 @@ fn test_mldsa_empty_message() {
     let keypair = MlDsaKeyPair::generate(SecurityLevel::Level44);
     let message = b"";
 
-    let signature = keypair.sign(message).expect("Signing empty message should succeed");
+    let signature = keypair
+        .sign(message)
+        .expect("Signing empty message should succeed");
 
     verify(
         SecurityLevel::Level44,
@@ -488,7 +518,9 @@ fn test_mldsa_large_message() {
     let keypair = MlDsaKeyPair::generate(SecurityLevel::Level44);
     let message = vec![0xABu8; 1_000_000]; // 1 MB message
 
-    let signature = keypair.sign(&message).expect("Signing large message should succeed");
+    let signature = keypair
+        .sign(&message)
+        .expect("Signing large message should succeed");
 
     verify(
         SecurityLevel::Level44,
@@ -558,16 +590,16 @@ fn test_mlkem_known_answer() {
 
         // Validate the key
         validate_encapsulation_key(keypair.encapsulation_key())
-            .expect(&format!("KAT {}: key validation should pass", i));
+            .unwrap_or_else(|_| panic!("KAT {}: key validation should pass", i));
 
         // Encapsulate
         let (ct, ss1) = encapsulate(keypair.encapsulation_key())
-            .expect(&format!("KAT {}: encapsulation should succeed", i));
+            .unwrap_or_else(|_| panic!("KAT {}: encapsulation should succeed", i));
 
         // Decapsulate
         let ss2 = keypair
             .decapsulate(&ct)
-            .expect(&format!("KAT {}: decapsulation should succeed", i));
+            .unwrap_or_else(|_| panic!("KAT {}: decapsulation should succeed", i));
 
         // Verify shared secrets match
         assert_eq!(

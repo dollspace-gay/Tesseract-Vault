@@ -20,7 +20,7 @@ Tesseract Vault is a stable, security-focused encryption suite with:
 - [ ] Complete OpenSSF Silver badge certification
 - [ ] External security audit (seeking funding/sponsors)
 - [ ] Expand Wycheproof test vector coverage
-- [ ] Add NIST post-quantum test vectors when available
+- [x] Add NIST post-quantum test vectors (ML-KEM-1024, ML-DSA per FIPS 203/204)
 
 ### Stability & Quality
 - [ ] Achieve 90%+ code coverage

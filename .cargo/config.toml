@@ -23,6 +23,56 @@ rustflags = [
     "--cfg", "getrandom_backend=\"wasm_js\""
 ]
 
+# =============================================================================
+# Platform-specific hardening flags
+# =============================================================================
+
+# Linux x86_64 hardening
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+    # Path remapping for reproducibility
+    "--remap-path-prefix=/home/=~",
+    # Full RELRO - makes GOT read-only after relocation
+    "-C", "link-arg=-Wl,-z,relro",
+    # Immediate binding - resolve all symbols at load time
+    "-C", "link-arg=-Wl,-z,now",
+    # Non-executable stack
+    "-C", "link-arg=-Wl,-z,noexecstack",
+]
+
+# Linux aarch64 hardening
+[target.aarch64-unknown-linux-gnu]
+rustflags = [
+    "--remap-path-prefix=/home/=~",
+    "-C", "link-arg=-Wl,-z,relro",
+    "-C", "link-arg=-Wl,-z,now",
+    "-C", "link-arg=-Wl,-z,noexecstack",
+]
+
+# Windows MSVC hardening
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "--remap-path-prefix=C:\\Users\\=~",
+    "--remap-path-prefix=D:\\Users\\=~",
+    # Control Flow Guard - mitigates ROP/JOP attacks
+    "-C", "control-flow-guard=yes",
+]
+
+# macOS x86_64 hardening
+[target.x86_64-apple-darwin]
+rustflags = [
+    "--remap-path-prefix=/Users/=~",
+    # Position Independent Executable
+    "-C", "relocation-model=pic",
+]
+
+# macOS aarch64 (Apple Silicon) hardening
+[target.aarch64-apple-darwin]
+rustflags = [
+    "--remap-path-prefix=/Users/=~",
+    "-C", "relocation-model=pic",
+]
+
 [profile.release]
 # Ensure consistent debug info (required by OpenSSF Silver)
 debug = true

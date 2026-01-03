@@ -43,10 +43,11 @@ jobs:
       - name: Generate coverage report
         run: |
           # Skip GUI feature due to GTK dependencies on Linux CI
-          # Exclude external dependencies from coverage calculation
+          # Exclude external dependencies and binary entry points from coverage calculation
+          # Binaries (main.rs, daemon.rs, tray.rs) require runtime environment, can't be unit tested
           cargo llvm-cov --no-default-features --features "post-quantum compression ctrlc" \
             --workspace --lcov --output-path lcov.info \
-            --ignore-filename-regex '\.cargo/registry|\.rustup/toolchains'
+            --ignore-filename-regex '\.cargo/registry|\.rustup/toolchains|src/bin/|src/main\.rs'
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -60,7 +61,7 @@ jobs:
         run: |
           cargo llvm-cov --no-default-features --features "post-quantum compression ctrlc" \
             --workspace --html --output-dir coverage-html \
-            --ignore-filename-regex '\.cargo/registry|\.rustup/toolchains'
+            --ignore-filename-regex '\.cargo/registry|\.rustup/toolchains|src/bin/|src/main\.rs'
 
       - name: Upload HTML report artifact
         uses: actions/upload-artifact@v4

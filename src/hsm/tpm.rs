@@ -1543,4 +1543,342 @@ mod tests {
             }
         }
     }
+
+    // Additional tests for comprehensive coverage
+
+    #[test]
+    fn test_tpm_error_display_all_variants() {
+        // Test all TpmError variants display correctly
+        let errors = [
+            (TpmError::DeviceNotFound, "TPM device not found"),
+            (TpmError::DeviceDisabled, "TPM device is disabled"),
+            (TpmError::AccessDenied, "Access denied to TPM device"),
+            (
+                TpmError::CommandFailed("test error".to_string()),
+                "TPM command failed: test error",
+            ),
+            (
+                TpmError::PcrMismatch,
+                "PCR values do not match sealed policy",
+            ),
+            (TpmError::KeyNotFound, "Key not found in TPM"),
+            (TpmError::InvalidHandle, "Invalid TPM key handle"),
+            (TpmError::Lockout, "TPM is in lockout mode"),
+            (
+                TpmError::PlatformError("platform issue".to_string()),
+                "Platform error: platform issue",
+            ),
+        ];
+
+        for (error, expected) in errors {
+            assert_eq!(format!("{}", error), expected);
+        }
+    }
+
+    #[test]
+    fn test_tpm_error_is_error_trait() {
+        let error = TpmError::DeviceNotFound;
+        // Verify TpmError implements std::error::Error
+        let _: &dyn std::error::Error = &error;
+    }
+
+    #[test]
+    fn test_tpm_error_to_cryptor_error() {
+        let tpm_error = TpmError::DeviceNotFound;
+        let cryptor_error: CryptorError = tpm_error.into();
+
+        match cryptor_error {
+            CryptorError::HardwareError(msg) => {
+                assert!(msg.contains("TPM device not found"));
+            }
+            _ => panic!("Expected HardwareError variant"),
+        }
+    }
+
+    #[test]
+    fn test_tpm_key_policy_password_only() {
+        let password = b"my_secure_password";
+        let policy = TpmKeyPolicy::password_only(password);
+
+        assert!(policy.pcr_selection.is_empty());
+        assert!(!policy.pcr_policy);
+        assert!(policy.auth_value.is_some());
+        assert_eq!(policy.auth_value.as_ref().unwrap().as_slice(), password);
+    }
+
+    #[test]
+    fn test_tpm_key_policy_secure_boot() {
+        let policy = TpmKeyPolicy::secure_boot();
+
+        assert_eq!(policy.pcr_selection.len(), 1);
+        assert!(policy.pcr_selection.contains(&PcrIndex::Pcr7));
+        assert!(policy.pcr_policy);
+        assert!(policy.auth_value.is_none());
+    }
+
+    #[test]
+    fn test_tpm_key_policy_full_boot_chain() {
+        let policy = TpmKeyPolicy::full_boot_chain();
+
+        assert_eq!(policy.pcr_selection.len(), 8);
+        assert!(policy.pcr_selection.contains(&PcrIndex::Pcr0));
+        assert!(policy.pcr_selection.contains(&PcrIndex::Pcr1));
+        assert!(policy.pcr_selection.contains(&PcrIndex::Pcr2));
+        assert!(policy.pcr_selection.contains(&PcrIndex::Pcr3));
+        assert!(policy.pcr_selection.contains(&PcrIndex::Pcr4));
+        assert!(policy.pcr_selection.contains(&PcrIndex::Pcr5));
+        assert!(policy.pcr_selection.contains(&PcrIndex::Pcr6));
+        assert!(policy.pcr_selection.contains(&PcrIndex::Pcr7));
+        assert!(policy.pcr_policy);
+    }
+
+    #[test]
+    fn test_tpm_hash_algorithm_default() {
+        let alg = TpmHashAlgorithm::default();
+        assert_eq!(alg, TpmHashAlgorithm::Sha256);
+    }
+
+    #[test]
+    fn test_pcr_index_values() {
+        // Test PCR index enum values
+        assert_eq!(PcrIndex::Pcr0 as u8, 0);
+        assert_eq!(PcrIndex::Pcr7 as u8, 7);
+        assert_eq!(PcrIndex::Pcr15 as u8, 15);
+        assert_eq!(PcrIndex::Pcr23 as u8, 23);
+    }
+
+    #[test]
+    fn test_tpm_capabilities_default() {
+        let caps = TpmCapabilities::default();
+
+        assert!(caps.manufacturer.is_empty());
+        assert!(caps.firmware_version.is_empty());
+        assert!(caps.supported_algorithms.is_empty());
+        assert_eq!(caps.max_pcrs, 0);
+        assert!(!caps.supports_sealing);
+        assert!(!caps.supports_rng);
+        assert!(caps.spec_version.is_empty());
+    }
+
+    #[test]
+    fn test_sealed_blob_serialization_all_hash_algorithms() {
+        for (alg, expected_byte) in [
+            (TpmHashAlgorithm::Sha1, 0),
+            (TpmHashAlgorithm::Sha256, 1),
+            (TpmHashAlgorithm::Sha384, 2),
+            (TpmHashAlgorithm::Sha512, 3),
+        ] {
+            let blob = SealedKeyBlob {
+                data: vec![1, 2, 3],
+                policy_digest: vec![4, 5, 6],
+                pcr_values: vec![],
+                hash_algorithm: alg,
+            };
+
+            let bytes = blob.to_bytes();
+            assert_eq!(bytes[1], expected_byte); // Hash algorithm byte
+
+            let restored = SealedKeyBlob::from_bytes(&bytes).unwrap();
+            assert_eq!(restored.hash_algorithm, alg);
+        }
+    }
+
+    #[test]
+    fn test_sealed_blob_serialization_all_pcr_indices() {
+        // Test all 24 PCR indices can be serialized and deserialized
+        let all_pcrs = vec![
+            (PcrIndex::Pcr0, vec![0u8; 32]),
+            (PcrIndex::Pcr1, vec![1u8; 32]),
+            (PcrIndex::Pcr2, vec![2u8; 32]),
+            (PcrIndex::Pcr3, vec![3u8; 32]),
+            (PcrIndex::Pcr4, vec![4u8; 32]),
+            (PcrIndex::Pcr5, vec![5u8; 32]),
+            (PcrIndex::Pcr6, vec![6u8; 32]),
+            (PcrIndex::Pcr7, vec![7u8; 32]),
+            (PcrIndex::Pcr8, vec![8u8; 32]),
+            (PcrIndex::Pcr9, vec![9u8; 32]),
+            (PcrIndex::Pcr10, vec![10u8; 32]),
+            (PcrIndex::Pcr11, vec![11u8; 32]),
+            (PcrIndex::Pcr12, vec![12u8; 32]),
+            (PcrIndex::Pcr13, vec![13u8; 32]),
+            (PcrIndex::Pcr14, vec![14u8; 32]),
+            (PcrIndex::Pcr15, vec![15u8; 32]),
+            (PcrIndex::Pcr16, vec![16u8; 32]),
+            (PcrIndex::Pcr17, vec![17u8; 32]),
+            (PcrIndex::Pcr18, vec![18u8; 32]),
+            (PcrIndex::Pcr19, vec![19u8; 32]),
+            (PcrIndex::Pcr20, vec![20u8; 32]),
+            (PcrIndex::Pcr21, vec![21u8; 32]),
+            (PcrIndex::Pcr22, vec![22u8; 32]),
+            (PcrIndex::Pcr23, vec![23u8; 32]),
+        ];
+
+        let blob = SealedKeyBlob {
+            data: vec![1, 2, 3],
+            policy_digest: vec![4, 5, 6],
+            pcr_values: all_pcrs.clone(),
+            hash_algorithm: TpmHashAlgorithm::Sha256,
+        };
+
+        let bytes = blob.to_bytes();
+        let restored = SealedKeyBlob::from_bytes(&bytes).unwrap();
+
+        assert_eq!(restored.pcr_values.len(), 24);
+        for i in 0..24 {
+            assert_eq!(restored.pcr_values[i].0, all_pcrs[i].0);
+            assert_eq!(restored.pcr_values[i].1, all_pcrs[i].1);
+        }
+    }
+
+    #[test]
+    fn test_sealed_blob_invalid_version() {
+        let mut bytes = vec![0u8; 20]; // Minimum size
+        bytes[0] = 2; // Invalid version
+
+        let result = SealedKeyBlob::from_bytes(&bytes);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sealed_blob_invalid_hash_algorithm() {
+        let mut bytes = vec![0u8; 20];
+        bytes[0] = 1; // Valid version
+        bytes[1] = 99; // Invalid hash algorithm
+
+        let result = SealedKeyBlob::from_bytes(&bytes);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sealed_blob_too_short() {
+        let bytes = vec![1, 2, 3]; // Too short
+
+        let result = SealedKeyBlob::from_bytes(&bytes);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tpm_device_not_available_errors() {
+        let device = Tpm2Device::open().unwrap();
+
+        if device.is_ready() {
+            // Skip this test if TPM is actually available
+            println!("TPM is available, skipping unavailable device tests");
+            return;
+        }
+
+        // Test that operations fail gracefully when TPM is not available
+        let result = device.read_pcr(PcrIndex::Pcr0, TpmHashAlgorithm::Sha256);
+        assert!(result.is_err());
+
+        let result = device.get_random(32);
+        assert!(result.is_err());
+
+        let policy = TpmKeyPolicy::default();
+        let result = device.seal_key(b"test", &policy);
+        assert!(result.is_err());
+
+        let blob = SealedKeyBlob {
+            data: vec![0; 64],
+            policy_digest: vec![0; 32],
+            pcr_values: vec![],
+            hash_algorithm: TpmHashAlgorithm::Sha256,
+        };
+        let result = device.unseal_key(&blob);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tpm_device_capabilities() {
+        let device = Tpm2Device::open().unwrap();
+
+        if device.is_ready() {
+            // If TPM is ready, capabilities should be Some
+            let caps = device.capabilities();
+            assert!(caps.is_some());
+
+            let caps = caps.unwrap();
+            assert_eq!(caps.spec_version, "2.0");
+            assert!(caps.supports_sealing);
+            assert!(caps.supports_rng);
+        } else {
+            // If TPM is not ready, we may or may not have capabilities
+            println!(
+                "TPM not ready, capabilities: {:?}",
+                device.capabilities().is_some()
+            );
+        }
+    }
+
+    #[test]
+    fn test_tpm_hsm_trait_implementation() {
+        let device = Tpm2Device::open().unwrap();
+
+        // Test HardwareSecurityModule trait methods
+        assert_eq!(device.name(), "TPM 2.0");
+        assert_eq!(device.is_available(), device.is_ready());
+
+        if !device.is_ready() {
+            // Test that verify fails when not available
+            let result = device.verify();
+            assert!(result.is_err());
+
+            // Test derive_key fails when not available
+            let result = device.derive_key(b"password", b"salt", b"challenge");
+            assert!(result.is_err());
+        }
+    }
+
+    #[test]
+    fn test_sealed_blob_empty_pcr_values() {
+        let blob = SealedKeyBlob {
+            data: vec![1, 2, 3],
+            policy_digest: vec![4, 5, 6],
+            pcr_values: vec![],
+            hash_algorithm: TpmHashAlgorithm::Sha256,
+        };
+
+        let bytes = blob.to_bytes();
+        let restored = SealedKeyBlob::from_bytes(&bytes).unwrap();
+
+        assert!(restored.pcr_values.is_empty());
+    }
+
+    #[test]
+    fn test_tpm_key_policy_custom() {
+        let policy = TpmKeyPolicy {
+            pcr_selection: vec![PcrIndex::Pcr8, PcrIndex::Pcr9, PcrIndex::Pcr10],
+            hash_algorithm: TpmHashAlgorithm::Sha384,
+            auth_value: Some(Zeroizing::new(b"secret".to_vec())),
+            pcr_policy: true,
+        };
+
+        assert_eq!(policy.pcr_selection.len(), 3);
+        assert_eq!(policy.hash_algorithm, TpmHashAlgorithm::Sha384);
+        assert!(policy.auth_value.is_some());
+        assert!(policy.pcr_policy);
+    }
+
+    #[test]
+    fn test_read_pcrs_multiple() {
+        let device = Tpm2Device::open().unwrap();
+
+        if !device.is_ready() {
+            println!("TPM not available, skipping multi-PCR read test");
+            return;
+        }
+
+        let indices = &[PcrIndex::Pcr0, PcrIndex::Pcr7];
+        match device.read_pcrs(indices, TpmHashAlgorithm::Sha256) {
+            Ok(values) => {
+                assert_eq!(values.len(), 2);
+                for (idx, value) in &values {
+                    println!("PCR{}: {} bytes", *idx as u8, value.len());
+                }
+            }
+            Err(e) => {
+                println!("Multi-PCR read failed: {}", e);
+            }
+        }
+    }
 }

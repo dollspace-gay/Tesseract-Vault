@@ -1146,4 +1146,336 @@ mod tests {
         assert_eq!(format!("{}", SecurityLevel::Optimal), "Optimal");
         assert_eq!(format!("{}", ThroughputEstimate::High), "High (3-6 GB/s)");
     }
+
+    // Additional tests for comprehensive coverage
+
+    #[test]
+    fn test_cpu_vendor_display_all_variants() {
+        assert_eq!(format!("{}", CpuVendor::Intel), "Intel");
+        assert_eq!(format!("{}", CpuVendor::Amd), "AMD");
+        assert_eq!(format!("{}", CpuVendor::Arm), "ARM");
+        assert_eq!(format!("{}", CpuVendor::Apple), "Apple");
+        assert_eq!(format!("{}", CpuVendor::Unknown), "Unknown");
+    }
+
+    #[test]
+    fn test_security_level_display_all_variants() {
+        assert_eq!(format!("{}", SecurityLevel::Basic), "Basic");
+        assert_eq!(format!("{}", SecurityLevel::Good), "Good");
+        assert_eq!(format!("{}", SecurityLevel::Excellent), "Excellent");
+        assert_eq!(format!("{}", SecurityLevel::Optimal), "Optimal");
+    }
+
+    #[test]
+    fn test_throughput_estimate_display_all_variants() {
+        assert_eq!(format!("{}", ThroughputEstimate::Low), "Low (< 500 MB/s)");
+        assert_eq!(
+            format!("{}", ThroughputEstimate::Medium),
+            "Medium (1-3 GB/s)"
+        );
+        assert_eq!(format!("{}", ThroughputEstimate::High), "High (3-6 GB/s)");
+        assert_eq!(
+            format!("{}", ThroughputEstimate::VeryHigh),
+            "Very High (10+ GB/s)"
+        );
+    }
+
+    #[test]
+    fn test_capabilities_with_no_features() {
+        let caps = HardwareCapabilities::default();
+
+        // Test helper methods with default (all-false) capabilities
+        assert!(!caps.has_aes_ni());
+        assert!(!caps.has_gcm_acceleration());
+        assert!(!caps.has_sha_acceleration());
+        assert!(!caps.has_hardware_rng());
+        assert!(!caps.has_avx2());
+        assert!(!caps.has_avx512());
+        assert!(!caps.has_vaes());
+        assert!(!caps.has_neon());
+
+        // Available features should be empty
+        let features = caps.available_features();
+        assert!(features.is_empty());
+    }
+
+    #[test]
+    fn test_capabilities_with_x86_features() {
+        let mut caps = HardwareCapabilities::default();
+
+        // Simulate a typical Intel CPU with AES-NI and AVX2
+        caps.vendor = CpuVendor::Intel;
+        caps.cpu_brand = "Test CPU".to_string();
+        caps.aes_ni = true;
+        caps.pclmulqdq = true;
+        caps.sha_ext = true;
+        caps.avx = true;
+        caps.avx2 = true;
+        caps.rdrand = true;
+        caps.rdseed = true;
+        caps.sse2 = true;
+        caps.sse41 = true;
+        caps.sse42 = true;
+
+        assert!(caps.has_aes_ni());
+        assert!(caps.has_gcm_acceleration());
+        assert!(caps.has_sha_acceleration());
+        assert!(caps.has_hardware_rng());
+        assert!(caps.has_avx2());
+        assert!(!caps.has_avx512());
+        assert!(!caps.has_vaes());
+
+        let features = caps.available_features();
+        assert!(features.contains(&"AES-NI"));
+        assert!(features.contains(&"PCLMULQDQ (CLMUL)"));
+        assert!(features.contains(&"SHA Extensions"));
+        assert!(features.contains(&"AVX"));
+        assert!(features.contains(&"AVX2"));
+        assert!(features.contains(&"RDRAND"));
+        assert!(features.contains(&"RDSEED"));
+        assert!(features.contains(&"SSE2"));
+        assert!(features.contains(&"SSE4.1"));
+        assert!(features.contains(&"SSE4.2"));
+    }
+
+    #[test]
+    fn test_capabilities_with_arm_features() {
+        let mut caps = HardwareCapabilities::default();
+
+        // Simulate an ARM CPU
+        caps.vendor = CpuVendor::Arm;
+        caps.arm_aes = true;
+        caps.arm_sha1 = true;
+        caps.arm_sha2 = true;
+        caps.arm_sha3 = true;
+        caps.arm_pmull = true;
+        caps.arm_neon = true;
+        caps.arm_crc32 = true;
+
+        assert!(caps.has_aes_ni()); // ARM AES counts as AES acceleration
+        assert!(caps.has_gcm_acceleration()); // ARM AES + PMULL
+        assert!(caps.has_sha_acceleration()); // ARM SHA2
+        assert!(caps.has_neon());
+
+        let features = caps.available_features();
+        assert!(features.contains(&"ARM AES"));
+        assert!(features.contains(&"ARM SHA-1"));
+        assert!(features.contains(&"ARM SHA-2"));
+        assert!(features.contains(&"ARM SHA-3"));
+        assert!(features.contains(&"ARM PMULL"));
+        assert!(features.contains(&"ARM NEON"));
+        assert!(features.contains(&"ARM CRC32"));
+    }
+
+    #[test]
+    fn test_capabilities_with_avx512_vaes() {
+        let mut caps = HardwareCapabilities::default();
+
+        caps.aes_ni = true;
+        caps.pclmulqdq = true;
+        caps.avx = true;
+        caps.avx2 = true;
+        caps.avx512f = true;
+        caps.avx512vl = true;
+        caps.vaes = true;
+        caps.vpclmulqdq = true;
+        caps.bmi1 = true;
+        caps.bmi2 = true;
+        caps.adx = true;
+
+        assert!(caps.has_avx512());
+        assert!(caps.has_vaes());
+
+        let features = caps.available_features();
+        assert!(features.contains(&"AVX-512F"));
+        assert!(features.contains(&"AVX-512VL"));
+        assert!(features.contains(&"VAES"));
+        assert!(features.contains(&"VPCLMULQDQ"));
+        assert!(features.contains(&"BMI1"));
+        assert!(features.contains(&"BMI2"));
+        assert!(features.contains(&"ADX"));
+    }
+
+    #[test]
+    fn test_security_assessment_all_levels() {
+        // Test Basic level (score 0-30)
+        let mut caps = HardwareCapabilities::default();
+        let assessment = caps.security_assessment();
+        assert_eq!(assessment.level, SecurityLevel::Basic);
+        assert!(!assessment.recommendations.is_empty());
+
+        // Test Good level (score 31-60) - just AES-NI + CLMUL
+        caps.aes_ni = true;
+        caps.pclmulqdq = true;
+        let assessment = caps.security_assessment();
+        assert_eq!(assessment.level, SecurityLevel::Good);
+
+        // Test Excellent level (score 61-85) - add SHA and hardware RNG
+        caps.sha_ext = true;
+        caps.rdrand = true;
+        let assessment = caps.security_assessment();
+        assert_eq!(assessment.level, SecurityLevel::Excellent);
+
+        // Test Optimal level (score 86+) - add AVX2 and AVX-512
+        caps.avx2 = true;
+        caps.avx512f = true;
+        let assessment = caps.security_assessment();
+        assert_eq!(assessment.level, SecurityLevel::Optimal);
+    }
+
+    #[test]
+    fn test_throughput_estimates_all_scenarios() {
+        // Low: no hardware acceleration
+        let mut caps = HardwareCapabilities::default();
+        assert_eq!(caps.estimated_aes_gcm_throughput(), ThroughputEstimate::Low);
+
+        // Medium: basic AES-NI + CLMUL without AVX2
+        caps.aes_ni = true;
+        caps.pclmulqdq = true;
+        assert_eq!(
+            caps.estimated_aes_gcm_throughput(),
+            ThroughputEstimate::Medium
+        );
+
+        // High: AES-NI + CLMUL with AVX2
+        caps.avx2 = true;
+        assert_eq!(
+            caps.estimated_aes_gcm_throughput(),
+            ThroughputEstimate::High
+        );
+
+        // VeryHigh: VAES + VPCLMULQDQ with AVX-512
+        caps.avx512f = true;
+        caps.vaes = true;
+        caps.vpclmulqdq = true;
+        assert_eq!(
+            caps.estimated_aes_gcm_throughput(),
+            ThroughputEstimate::VeryHigh
+        );
+    }
+
+    #[test]
+    fn test_throughput_estimate_arm() {
+        let mut caps = HardwareCapabilities::default();
+        caps.arm_aes = true;
+        caps.arm_pmull = true;
+        assert_eq!(
+            caps.estimated_aes_gcm_throughput(),
+            ThroughputEstimate::Medium
+        );
+    }
+
+    #[test]
+    fn test_capabilities_display_format() {
+        let mut caps = HardwareCapabilities::default();
+        caps.vendor = CpuVendor::Intel;
+        caps.cpu_brand = "Test CPU".to_string();
+        caps.aes_ni = true;
+        caps.pclmulqdq = true;
+
+        let display = format!("{}", caps);
+
+        assert!(display.contains("Hardware Cryptographic Capabilities"));
+        assert!(display.contains("Intel"));
+        assert!(display.contains("Test CPU"));
+        assert!(display.contains("AES"));
+        assert!(display.contains("Hardware"));
+    }
+
+    #[test]
+    fn test_capabilities_display_empty_brand() {
+        let mut caps = HardwareCapabilities::default();
+        caps.vendor = CpuVendor::Unknown;
+        caps.cpu_brand = String::new();
+
+        let display = format!("{}", caps);
+
+        // Should not panic, should display Unknown vendor
+        assert!(display.contains("Unknown"));
+        assert!(display.contains("No hardware acceleration features detected"));
+    }
+
+    #[test]
+    fn test_benchmark_result_display() {
+        let result = BenchmarkResult {
+            name: "Test Benchmark".to_string(),
+            bytes_processed: 1024 * 1024,
+            duration_ns: 1_000_000,
+            throughput_mbps: 1024.0,
+            iterations: 10,
+        };
+
+        let display = format!("{}", result);
+        assert!(display.contains("Test Benchmark"));
+        assert!(display.contains("1024.00 MB/s"));
+        assert!(display.contains("10 iterations"));
+    }
+
+    #[test]
+    fn test_benchmark_aes_gcm_basic() {
+        // Small benchmark to ensure it doesn't panic
+        let result = benchmark_aes_gcm(1024, 1);
+        assert_eq!(result.name, "AES-256-GCM Encrypt");
+        assert_eq!(result.bytes_processed, 1024);
+        assert_eq!(result.iterations, 1);
+        assert!(result.throughput_mbps >= 0.0);
+    }
+
+    #[test]
+    fn test_benchmark_aes_gcm_decrypt_basic() {
+        let result = benchmark_aes_gcm_decrypt(1024, 1);
+        assert_eq!(result.name, "AES-256-GCM Decrypt");
+        assert_eq!(result.bytes_processed, 1024);
+    }
+
+    #[test]
+    fn test_benchmark_sha256_basic() {
+        let result = benchmark_sha256(1024, 1);
+        assert_eq!(result.name, "SHA-256");
+        assert_eq!(result.bytes_processed, 1024);
+    }
+
+    #[test]
+    fn test_benchmark_blake3_basic() {
+        let result = benchmark_blake3(1024, 1);
+        assert_eq!(result.name, "BLAKE3");
+        assert_eq!(result.bytes_processed, 1024);
+    }
+
+    #[test]
+    fn test_run_benchmark_suite() {
+        let results = run_benchmark_suite();
+        assert_eq!(results.len(), 4);
+        assert!(results.iter().any(|r| r.name.contains("Encrypt")));
+        assert!(results.iter().any(|r| r.name.contains("Decrypt")));
+        assert!(results.iter().any(|r| r.name.contains("SHA-256")));
+        assert!(results.iter().any(|r| r.name.contains("BLAKE3")));
+    }
+
+    #[test]
+    fn test_benchmark_zero_duration_edge_case() {
+        // This tests the throughput calculation doesn't divide by zero
+        // In practice, duration_ns should never be 0 for real benchmarks
+        let result = BenchmarkResult {
+            name: "Zero Duration".to_string(),
+            bytes_processed: 1024,
+            duration_ns: 0, // Edge case
+            throughput_mbps: 0.0,
+            iterations: 1,
+        };
+        // Should not panic when displaying
+        let _ = format!("{}", result);
+    }
+
+    #[test]
+    fn test_vaes_requires_avx512f() {
+        let mut caps = HardwareCapabilities::default();
+        caps.vaes = true;
+        caps.avx512f = false;
+        // VAES is only useful with AVX-512F
+        assert!(!caps.has_vaes());
+
+        caps.avx512f = true;
+        assert!(caps.has_vaes());
+    }
 }

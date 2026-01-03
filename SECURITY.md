@@ -35,6 +35,55 @@ Include the following information in your report:
 3. **Updates**: We will keep you informed of our progress
 4. **Credit**: With your permission, we will credit you in the security advisory
 
+## Secure Design Principles
+
+Tesseract Vault follows established secure design principles throughout its architecture:
+
+### Defense in Depth
+Multiple independent security layers ensure that compromise of one layer does not compromise the entire system:
+- **Cryptographic layer**: AES-256-GCM authenticated encryption with Argon2id key derivation
+- **Post-quantum layer**: ML-KEM-1024 hybrid encryption for quantum resistance
+- **Memory layer**: Locked pages, guard pages, multi-pass scrubbing
+- **Hardware layer**: Optional TPM 2.0 and YubiKey 2FA
+- **Verification layer**: Formal proofs, fuzz testing, constant-time analysis
+
+### Least Privilege
+- Library code requests only necessary permissions (memory locking, file access)
+- TPM operations use minimal PCR sets required for security policy
+- No network access required for core encryption operations
+
+### Fail-Safe Defaults
+- Security is enabled by default without requiring configuration
+- Memory scrubbing occurs automatically on deallocation
+- Keys are zeroized on drop regardless of code path
+- Failed authentication attempts do not leak information
+
+### Complete Mediation
+- Every decryption operation requires authentication
+- Volume access is gated through authenticated headers
+- No bypass mechanisms for convenience
+
+### Separation of Duties
+- Master keys never leave secure memory
+- Key derivation and encryption use separate cryptographic primitives
+- Duress passwords use isolated destruction paths
+
+### Minimal Attack Surface
+- No network-facing code in core library
+- No custom cryptographic algorithms (RustCrypto ecosystem only)
+- Minimal unsafe code with explicit justification
+- Dependencies audited via cargo-audit and cargo-deny
+
+### Economy of Mechanism
+- Simple 2-slot key management (primary + recovery)
+- Single cipher suite (AES-256-GCM) for consistency
+- Clear, auditable code paths
+
+### Open Design
+- All security mechanisms documented publicly
+- No security through obscurity
+- Verification tools and test vectors publicly available
+
 ## Security Practices
 
 Tesseract Vault employs multiple layers of security validation:

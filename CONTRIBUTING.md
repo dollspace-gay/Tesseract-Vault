@@ -151,7 +151,31 @@ Ensure:
 - Documentation for new public APIs
 - Changelog entry for user-facing changes
 
-## Testing
+## Testing Policy
+
+**Formal Requirement:** All new functionality MUST include corresponding tests in the automated test suite before it can be merged.
+
+This policy applies to:
+- New features and capabilities
+- New public APIs and functions
+- New cryptographic operations
+- Bug fixes (regression tests required)
+- Security-related changes (comprehensive test coverage required)
+
+### Test Requirements for New Functionality
+
+1. **Unit tests** - Test individual functions and modules in isolation
+2. **Integration tests** - Test feature interactions where applicable
+3. **Edge case coverage** - Test boundary conditions, error paths, and invalid inputs
+4. **Security tests** - For crypto code, include tests against known test vectors (Wycheproof, NIST CAVP)
+
+### Enforcement
+
+- Pull requests without tests for new functionality will not be merged
+- CI pipelines automatically verify test coverage does not decrease
+- Reviewers will verify appropriate test coverage before approval
+
+## Running Tests
 
 ### Unit Tests
 

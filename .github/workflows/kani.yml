@@ -101,3 +101,44 @@ jobs:
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_zero_index_valid
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_max_index_valid
           echo "::endgroup::"
+
+      # Memory protection verification (uses actual harness names from memory_kani.rs)
+      - name: Verify memory protection properties
+        run: |
+          echo "::group::Kani Verification - Memory Protection"
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_scrub_pattern_distinctness
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_custom_pattern_value
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_custom_pattern_uniqueness
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_pattern_pass_counts
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_entropy
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_key_length
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_allocation_size_bounds
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_pool_stats_no_overflow
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_security_level_ordering
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_zero_scrub_result
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_ones_scrub_result
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_chacha_length_preserving
+          echo "::endgroup::"
+
+      # Volume header verification
+      - name: Verify volume header properties
+        run: |
+          echo "::group::Kani Verification - Volume Header"
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_header_size_alignment
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_cipher_algorithm_values
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_pq_algorithm_values
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_pq_metadata_size_bounds
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_mlkem1024_key_sizes
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_yubikey_flag_operations
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_flag_is_single_bit
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_sector_size_bounds
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_volume_size_no_overflow
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_pq_metadata_offset
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_has_pqc_conditions
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_checksum_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_salt_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_header_iv_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_version_constants
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_encrypted_dk_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_sphincs_padding
+          echo "::endgroup::"

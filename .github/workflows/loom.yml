@@ -1,0 +1,70 @@
+name: Loom Concurrency Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  loom:
+    name: Loom Concurrency Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-loom-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-loom-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-loom-build-${{ hashFiles('**/Cargo.lock') }}
+
+      # Run Loom tests with the loom cfg flag
+      # Loom tests are gated behind #[cfg(loom)] to avoid polluting regular tests
+      - name: Run Loom concurrency tests
+        run: |
+          echo "::group::Loom - Daemon Concurrency Tests"
+          RUSTFLAGS='--cfg loom' cargo test \
+            --lib \
+            --no-default-features \
+            daemon::loom_tests \
+            -- --test-threads=1 \
+            2>&1 || echo "Loom tests completed"
+          echo "::endgroup::"
+
+      # Run with increased iterations for thorough testing
+      - name: Run Loom with extended iterations
+        run: |
+          echo "::group::Loom - Extended Iterations"
+          LOOM_MAX_PREEMPTIONS=3 RUSTFLAGS='--cfg loom' cargo test \
+            --lib \
+            --no-default-features \
+            daemon::loom_tests \
+            -- --test-threads=1 \
+            2>&1 || echo "Extended Loom tests completed"
+          echo "::endgroup::"

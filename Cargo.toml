@@ -31,6 +31,9 @@ yubikey = ["dep:yubikey-hmac-otp"]  # YubiKey HMAC-SHA1 challenge-response
 # GUI support (eframe, image, etc.) - disabled for Kani verification due to rav1e nightly conflicts
 gui = ["dep:eframe", "dep:rfd", "dep:notify-rust", "dep:tray-icon", "dep:image", "dep:qrcode"]
 
+# Loom concurrency testing (dev-only)
+loom = []
+
 [lib]
 name = "tesseract_lib"
 path = "src/lib.rs"
@@ -138,6 +141,7 @@ prusti-contracts = "0.2"
 serde_json = "1.0"
 hex = "0.4"
 dudect-bencher = "0.6"
+loom = "0.7"
 
 # Kani only works on Unix systems (Linux/macOS), not Windows
 [target.'cfg(unix)'.dev-dependencies]
@@ -177,5 +181,5 @@ lto = true
 codegen-units = 1
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(loom)'] }
 

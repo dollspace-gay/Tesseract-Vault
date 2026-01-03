@@ -9,6 +9,8 @@
 //! - Automatic cleanup on shutdown
 
 pub mod client;
+#[cfg(test)]
+mod loom_tests;
 pub mod protocol;
 pub mod server;
 

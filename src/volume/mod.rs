@@ -20,6 +20,8 @@ pub mod dropbox_client;
 pub mod filesystem;
 pub mod format;
 pub mod header;
+#[cfg(kani)]
+mod header_kani;
 pub mod io;
 pub mod keyslot;
 pub mod manager;
@@ -40,7 +42,7 @@ pub use container::{Container, KEYSLOTS_SIZE, METADATA_SIZE};
 pub use filesystem::{DirEntry, EncryptedFilesystem, FileAttr, FileType, FilesystemError};
 pub use header::{
     CipherAlgorithm, HeaderError, PqAlgorithm, PqVolumeMetadata, VolumeHeader, HEADER_SIZE,
-    PQ_METADATA_SIZE,
+    MAX_PQC_METADATA_SIZE, PQC_PADDING_SIZE, PQ_METADATA_SIZE,
 };
 pub use io::{
     AsyncMemoryBackend, AsyncResult, AsyncStorageBackend, BlockingAdapter, CacheStats, FileBackend,

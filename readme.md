@@ -11,6 +11,8 @@
 [![Differential Testing](https://github.com/dollspace-gay/Tesseract/actions/workflows/differential-testing.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/differential-testing.yml)
 [![Fuzzing](https://github.com/dollspace-gay/Tesseract/actions/workflows/fuzz.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/fuzz.yml)
 [![ClusterFuzzLite](https://github.com/dollspace-gay/Tesseract/actions/workflows/cflite_batch.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/cflite_batch.yml)
+[![Miri UB Detection](https://github.com/dollspace-gay/Tesseract/actions/workflows/miri.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/miri.yml)
+[![Loom Concurrency](https://github.com/dollspace-gay/Tesseract/actions/workflows/loom.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/loom.yml)
 [![Code Coverage](https://github.com/dollspace-gay/Tesseract/actions/workflows/coverage.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/coverage.yml)
 [![codecov](https://codecov.io/gh/dollspace-gay/Tesseract-Vault/branch/main/graph/badge.svg)](https://codecov.io/gh/dollspace-gay/Tesseract-Vault)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/11678/badge)](https://www.bestpractices.dev/projects/11678)

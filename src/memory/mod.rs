@@ -17,6 +17,8 @@ pub mod allocator;
 pub mod debugger;
 pub mod dump_protection;
 pub mod guard;
+#[cfg(kani)]
+mod memory_kani;
 #[cfg(feature = "post-quantum")]
 pub mod pool;
 pub mod scrub;

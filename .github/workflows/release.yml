@@ -86,7 +86,7 @@ jobs:
   sign:
     name: Sign artifacts with Sigstore
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -120,7 +120,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: sign
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

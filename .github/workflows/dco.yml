@@ -11,7 +11,7 @@ permissions:
 jobs:
   dco-check:
     name: DCO Sign-Off Check
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Checkout repository
@@ -21,13 +21,11 @@ jobs:
 
       - name: Check DCO sign-off
         run: |
-          # Get all commits in the PR
           BASE_SHA=${{ github.event.pull_request.base.sha }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
 
           echo "Checking commits from $BASE_SHA to $HEAD_SHA"
 
-          # Check each commit for Signed-off-by
           FAILED=0
           for COMMIT in $(git rev-list $BASE_SHA..$HEAD_SHA); do
             MESSAGE=$(git log --format=%B -n 1 $COMMIT)

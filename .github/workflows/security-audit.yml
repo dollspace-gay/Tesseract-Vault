@@ -15,7 +15,7 @@ permissions:
 jobs:
   security-audit:
     name: Supply Chain Security Audit
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 10
 
     steps:

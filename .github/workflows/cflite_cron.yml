@@ -12,7 +12,7 @@ permissions:
 jobs:
   corpus-pruning:
     name: Corpus Pruning
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Build Fuzzers
@@ -33,7 +33,7 @@ jobs:
 
   coverage:
     name: Coverage Report
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: corpus-pruning
 
     steps:

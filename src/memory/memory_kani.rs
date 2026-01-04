@@ -106,7 +106,7 @@ fn verify_nonce_entropy() {
 ///
 /// Property: 256-bit keys for ChaCha20
 #[kani::proof]
-fn verify_key_length() {
+fn verify_chacha_key_length() {
     const KEY_LEN: usize = 32; // 256 bits
 
     assert_eq!(KEY_LEN, 32);

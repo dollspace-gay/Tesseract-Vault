@@ -19,7 +19,7 @@ env:
 jobs:
   differential-tests:
     name: Differential Tests
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -58,7 +58,7 @@ jobs:
 
   differential-tests-windows:
     name: Differential Tests (Windows)
-    runs-on: self-hosted
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository

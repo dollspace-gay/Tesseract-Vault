@@ -19,7 +19,7 @@ env:
 jobs:
   dudect:
     name: DudeCT Timing Analysis
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -61,7 +61,7 @@ jobs:
 
   dudect-windows:
     name: DudeCT (Windows)
-    runs-on: self-hosted
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository

@@ -52,6 +52,16 @@ required-features = ["gui"]
 name = "tesseract-vault-register"
 path = "src/bin/register/mod.rs"
 
+[[bin]]
+name = "tesseract_luks"
+path = "src/bin/tesseract_luks.rs"
+required-features = ["post-quantum", "compression"]
+
+[[bin]]
+name = "tesseract-vault-daemon"
+path = "src/bin/daemon.rs"
+required-features = ["encrypted-volumes"]
+
 [dependencies]
 aes-gcm = "0.11.0-rc.2"
 xts-mode = "0.5"

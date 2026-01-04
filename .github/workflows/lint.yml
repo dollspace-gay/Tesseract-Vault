@@ -15,7 +15,7 @@ env:
 jobs:
   rustfmt:
     name: Format Check
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -31,7 +31,7 @@ jobs:
 
   clippy:
     name: Clippy Lint
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -60,7 +60,7 @@ jobs:
 
   clippy-windows:
     name: Clippy Lint (Windows)
-    runs-on: self-hosted
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository

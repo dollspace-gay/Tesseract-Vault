@@ -14,10 +14,11 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  kani-verify:
-    name: Kani Formal Verification
+  # Shared setup job that other jobs depend on
+  kani-config:
+    name: Config & Constants
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -64,35 +65,73 @@ jobs:
 
       # Note: Harnesses that call actual crypto operations (AES-GCM, Argon2) fail
       # because those libraries use inline assembly (cpuid) for CPU feature detection.
-      # See: https://github.com/model-checking/kani/issues/2
-      #
-      # These harnesses verify configuration bounds, constants, and API contracts
-      # without triggering inline assembly.
       - name: Verify configuration and constants
         run: |
-          echo "::group::Kani Verification - Configuration & Constants"
-          # Use --no-default-features to exclude GUI deps (eframe->image->rav1e) that conflict with Kani's nightly
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_len_constant
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_magic_bytes
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_salt_len_bound
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_argon2_defaults
-          echo "::endgroup::"
 
       - name: Verify CryptoConfig properties
         run: |
-          echo "::group::Kani Verification - CryptoConfig"
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_config_default_matches_constants
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_config_new_preserves_values
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_config_fast_is_faster
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_config_paranoid_is_stronger
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_no_parameter_overflow
-          echo "::endgroup::"
+
+  kani-nonce:
+    name: Nonce Safety (Critical)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libglib2.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libcairo2-dev libpango1.0-dev libxdo-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Kani installation
+        id: cache-kani
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-kani
+          key: ${{ runner.os }}-kani-${{ hashFiles('.github/workflows/kani.yml') }}
+
+      - name: Install Kani
+        if: steps.cache-kani.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked kani-verifier
+          cargo kani setup
+
+      - name: Run Kani setup (if cached)
+        if: steps.cache-kani.outputs.cache-hit == 'true'
+        run: cargo kani setup
 
       # CRITICAL: Nonce uniqueness verification for streaming encryption
       # Nonce reuse in AES-GCM is catastrophic - it breaks authentication and allows key recovery
       - name: Verify streaming nonce safety
         run: |
-          echo "::group::Kani Verification - Nonce Safety (CRITICAL)"
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_uniqueness_different_indices
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_counter_injection
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_structure
@@ -100,12 +139,57 @@ jobs:
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_sequential_nonce_uniqueness
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_zero_index_valid
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_max_index_valid
-          echo "::endgroup::"
 
-      # Memory protection verification (uses actual harness names from memory_kani.rs)
+  kani-memory:
+    name: Memory Protection
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libglib2.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libcairo2-dev libpango1.0-dev libxdo-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Kani installation
+        id: cache-kani
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-kani
+          key: ${{ runner.os }}-kani-${{ hashFiles('.github/workflows/kani.yml') }}
+
+      - name: Install Kani
+        if: steps.cache-kani.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked kani-verifier
+          cargo kani setup
+
+      - name: Run Kani setup (if cached)
+        if: steps.cache-kani.outputs.cache-hit == 'true'
+        run: cargo kani setup
+
       - name: Verify memory protection properties
         run: |
-          echo "::group::Kani Verification - Memory Protection"
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_scrub_pattern_distinctness
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_custom_pattern_value
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_custom_pattern_uniqueness
@@ -118,12 +202,57 @@ jobs:
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_zero_scrub_result
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_ones_scrub_result
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_chacha_length_preserving
-          echo "::endgroup::"
 
-      # Volume header verification
+  kani-volume:
+    name: Volume Header
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libglib2.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libcairo2-dev libpango1.0-dev libxdo-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Kani installation
+        id: cache-kani
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-kani
+          key: ${{ runner.os }}-kani-${{ hashFiles('.github/workflows/kani.yml') }}
+
+      - name: Install Kani
+        if: steps.cache-kani.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked kani-verifier
+          cargo kani setup
+
+      - name: Run Kani setup (if cached)
+        if: steps.cache-kani.outputs.cache-hit == 'true'
+        run: cargo kani setup
+
       - name: Verify volume header properties
         run: |
-          echo "::group::Kani Verification - Volume Header"
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_header_size_alignment
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_cipher_algorithm_values
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_pq_algorithm_values
@@ -141,4 +270,3 @@ jobs:
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_version_constants
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_encrypted_dk_size
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_sphincs_padding
-          echo "::endgroup::"

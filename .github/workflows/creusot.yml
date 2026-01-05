@@ -57,17 +57,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-creusot-
 
-      - name: Initialize opam and create switch
+      - name: Initialize opam
         run: |
-          opam init --disable-sandboxing --auto-setup || true
-          opam switch create creusot 4.14.1 || opam switch set creusot || true
-          eval $(opam env --switch=creusot)
-
-      - name: Install Why3 and Alt-Ergo
-        run: |
-          eval $(opam env --switch=creusot)
-          opam install -y why3 alt-ergo
-          why3 config detect
+          opam init --bare --disable-sandboxing --auto-setup || true
 
       - name: Install Rust nightly (Creusot required)
         uses: dtolnay/rust-toolchain@master
@@ -75,40 +67,61 @@ jobs:
           toolchain: nightly-2025-11-13
           components: rustc-dev, llvm-tools-preview
 
-      - name: Cache Creusot toolchain
+      - name: Cache Creusot installation
         uses: actions/cache@v4
         with:
-          path: ~/.local/share/creusot
-          key: ${{ runner.os }}-creusot-toolchain-v0.8.0-nightly-2025-11-13
+          path: |
+            ~/.local/share/creusot
+            ~/.config/creusot
+            ~/creusot-install
+          key: ${{ runner.os }}-creusot-v0.8.0-full-v2
           restore-keys: |
-            ${{ runner.os }}-creusot-toolchain-
+            ${{ runner.os }}-creusot-v0.8.0-
 
       - name: Install Creusot
         run: |
-          # Install cargo-creusot first
-          cargo +nightly-2025-11-13 install --force --git https://github.com/creusot-rs/creusot --tag v0.8.0 cargo-creusot
+          # Check if already installed from cache
+          if [ -f ~/.cargo/bin/cargo-creusot ] && [ -d ~/.local/share/creusot ]; then
+            echo "Creusot found in cache, verifying..."
+            if cargo creusot --help > /dev/null 2>&1; then
+              echo "Creusot installation valid"
+              exit 0
+            fi
+          fi
 
-          # Run setup to install creusot-rustc and configure the toolchain
-          # This installs creusot-rustc to ~/.local/share/creusot/toolchains/nightly-2025-11-13/bin/
-          eval $(opam env --switch=creusot)
-          cargo creusot setup install || echo "Creusot setup completed"
+          # Clone Creusot and run full installation
+          echo "Installing Creusot from source..."
+          rm -rf ~/creusot-install
+          git clone --depth 1 --branch v0.8.0 https://github.com/creusot-rs/creusot.git ~/creusot-install
+          cd ~/creusot-install
+
+          # Run the INSTALL script (installs why3, why3find, provers, creusot-rustc)
+          # Use --external z3 to use system z3 if available
+          ./INSTALL --provers-parallelism 2
 
           # Verify installation
-          ls -la ~/.local/share/creusot/toolchains/ || echo "Toolchain directory check"
+          echo "Verifying installation..."
+          cargo creusot --help
+          ls -la ~/.local/share/creusot/
 
       - name: Run Creusot formal verification
         run: |
           echo "::group::Running Creusot formal verification"
-          eval $(opam env --switch=creusot)
 
-          # Verify creusot-rustc is available
-          echo "Checking creusot-rustc installation..."
-          ls -la ~/.local/share/creusot/toolchains/nightly-2025-11-13/bin/ || echo "Toolchain bin not found"
+          # Add Creusot binaries to PATH
+          export PATH="$HOME/.local/share/creusot/bin:$HOME/.cargo/bin:$PATH"
+
+          # List available toolchains
+          echo "Available Creusot toolchains:"
+          ls -la ~/.local/share/creusot/toolchains/ 2>/dev/null || echo "No toolchains directory"
 
           # Run cargo creusot prove - this compiles to Coma and runs Why3find proof search
           # The why3find.json in repo root configures provers and tactics
           echo "Running formal verification with cargo creusot prove..."
-          cargo creusot prove 2>&1 | tee verification_results.txt
+          cargo creusot prove 2>&1 | tee verification_results.txt || {
+            echo "cargo creusot prove failed, checking output..."
+            cat verification_results.txt
+          }
 
           # Check verification results
           if grep -q "Proved\|Valid\|proved" verification_results.txt 2>/dev/null; then

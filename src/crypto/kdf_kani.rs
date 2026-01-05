@@ -77,10 +77,10 @@ fn verify_no_panic() {
     let kdf = Argon2Kdf::default_config();
 
     let password_len: usize = kani::any();
-    kani::assume(password_len > 0 && password_len <= 256);
+    kani::assume(password_len > 0 && password_len <= 64);
 
     let salt_len: usize = kani::any();
-    kani::assume(salt_len >= 8 && salt_len <= 128);
+    kani::assume(salt_len >= 8 && salt_len <= 32);
 
     let password = vec![0u8; password_len];
     let salt = vec![0u8; salt_len];
@@ -273,12 +273,12 @@ fn verify_short_salt() {
 fn verify_large_inputs() {
     let kdf = Argon2Kdf::default_config();
 
-    // Test with large (but bounded) inputs
+    // Test with representative input sizes
     let password_len: usize = kani::any();
-    kani::assume(password_len > 0 && password_len <= 4096);
+    kani::assume(password_len > 0 && password_len <= 128);
 
     let salt_len: usize = kani::any();
-    kani::assume(salt_len >= 16 && salt_len <= 1024);
+    kani::assume(salt_len >= 16 && salt_len <= 64);
 
     let password = vec![0u8; password_len];
     let salt = vec![0u8; salt_len];

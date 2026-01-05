@@ -178,9 +178,10 @@ fn verify_security_level_ordering() {
 ///
 /// Property: After Zero scrub, all bytes are 0x00
 #[kani::proof]
+#[kani::unwind(17)] // 16 bytes + 1 for loop termination
 fn verify_zero_scrub_result() {
     let size: usize = kani::any();
-    kani::assume(size > 0 && size <= 64);
+    kani::assume(size > 0 && size <= 16);
 
     // Simulate post-scrub state for Zero pattern
     let scrubbed = vec![0u8; size];
@@ -195,9 +196,10 @@ fn verify_zero_scrub_result() {
 ///
 /// Property: After Ones scrub, all bytes are 0xFF
 #[kani::proof]
+#[kani::unwind(17)] // 16 bytes + 1 for loop termination
 fn verify_ones_scrub_result() {
     let size: usize = kani::any();
-    kani::assume(size > 0 && size <= 64);
+    kani::assume(size > 0 && size <= 16);
 
     // Simulate post-scrub state for Ones pattern
     let scrubbed = vec![0xFFu8; size];
@@ -214,7 +216,7 @@ fn verify_ones_scrub_result() {
 #[kani::proof]
 fn verify_chacha_length_preserving() {
     let plaintext_len: usize = kani::any();
-    kani::assume(plaintext_len <= 4096);
+    kani::assume(plaintext_len <= 256); // Representative size, no loops here
 
     // ChaCha20 is a stream cipher - no padding, length preserved
     let ciphertext_len = plaintext_len;

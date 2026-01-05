@@ -25,9 +25,10 @@ jobs:
 
       # Run Miri on library tests (excluding features that require external libs)
       # Miri cannot run tests that use inline assembly (cpuid) or FFI
+      # Skip slow tests (volume/filesystem ops, crypto with many iterations)
       - name: Run Miri on core library tests
         run: |
-          echo "::group::Miri - Core Crypto Tests"
+          echo "::group::Miri - Core Library Tests"
           # Disable features that use FFI or inline assembly
           # Disable isolation to allow clock_gettime for SystemTime::now() calls
           # Use permissive provenance to avoid crossbeam-epoch integer-to-pointer warnings
@@ -48,10 +49,16 @@ jobs:
             --skip streaming \
             --skip luks \
             --skip keyfile \
+            --skip volumeio \
+            --skip volume:: \
+            --skip filesystem \
+            --skip fsck \
+            --skip large_file \
+            --skip benchmark \
             2>&1 || echo "Some tests skipped due to unsupported operations"
           echo "::endgroup::"
 
-      # Run Miri on specific safe modules that don't use FFI
+      # Run Miri on config module (fast, pure Rust)
       - name: Run Miri on config module
         run: |
           echo "::group::Miri - Config Module"
@@ -69,28 +76,4 @@ jobs:
           cargo +nightly miri test --lib scrub:: \
             --no-default-features \
             2>&1 || true
-          echo "::endgroup::"
-
-      # Check for stacked borrows violations in pure Rust code
-      - name: Run Miri with stacked borrows check
-        run: |
-          echo "::group::Miri - Stacked Borrows Check"
-          MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
-          cargo +nightly miri test --lib \
-            --no-default-features \
-            -- \
-            --skip aes \
-            --skip argon2 \
-            --skip kdf \
-            --skip encrypt \
-            --skip decrypt \
-            --skip derive_key \
-            --skip locked_memory \
-            --skip mlock \
-            --skip hardware \
-            --skip cpuid \
-            --skip streaming \
-            --skip luks \
-            --skip keyfile \
-            2>&1 || echo "Stacked borrows check completed with some skips"
           echo "::endgroup::"

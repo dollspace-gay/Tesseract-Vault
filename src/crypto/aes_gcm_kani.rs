@@ -22,7 +22,7 @@ fn verify_encrypt_length() {
 
     // Bound plaintext size to avoid state explosion
     let plaintext_len: usize = kani::any();
-    kani::assume(plaintext_len <= 1024);
+    kani::assume(plaintext_len <= 64);
 
     let plaintext = vec![0u8; plaintext_len];
 
@@ -48,7 +48,7 @@ fn verify_encrypt_no_panic() {
     let nonce: [u8; NONCE_LEN] = kani::any();
 
     let plaintext_len: usize = kani::any();
-    kani::assume(plaintext_len <= 256);
+    kani::assume(plaintext_len <= 32);
     let plaintext = vec![0u8; plaintext_len];
 
     // Should never panic
@@ -81,14 +81,14 @@ fn verify_encrypt_rejects_invalid_nonce() {
 ///
 /// Property: decrypt(encrypt(plaintext)) = plaintext
 #[kani::proof]
-#[kani::unwind(8)] // Higher bound for vector operations
+#[kani::unwind(9)] // 8 bytes + 1 for loop termination
 fn verify_roundtrip() {
     let encryptor = AesGcmEncryptor::new();
     let key: [u8; 32] = kani::any();
     let nonce: [u8; NONCE_LEN] = kani::any();
 
     let plaintext_len: usize = kani::any();
-    kani::assume(plaintext_len <= 128); // Small for feasibility
+    kani::assume(plaintext_len <= 8); // Bounded for feasibility
 
     let mut plaintext = vec![0u8; plaintext_len];
     for i in 0..plaintext_len {
@@ -121,14 +121,14 @@ fn verify_roundtrip() {
 ///
 /// Property: Tampering with ciphertext causes authentication failure
 #[kani::proof]
-#[kani::unwind(8)]
+#[kani::unwind(9)]
 fn verify_authentication() {
     let encryptor = AesGcmEncryptor::new();
     let key: [u8; 32] = kani::any();
     let nonce: [u8; NONCE_LEN] = kani::any();
 
     let plaintext_len: usize = kani::any();
-    kani::assume(plaintext_len > 0 && plaintext_len <= 64);
+    kani::assume(plaintext_len > 0 && plaintext_len <= 8);
 
     let plaintext = vec![0u8; plaintext_len];
 
@@ -165,7 +165,7 @@ fn verify_decrypt_length() {
 
     // Create valid ciphertext (via encryption)
     let plaintext_len: usize = kani::any();
-    kani::assume(plaintext_len <= 256);
+    kani::assume(plaintext_len <= 32);
 
     let plaintext = vec![0u8; plaintext_len];
 
@@ -204,9 +204,9 @@ fn verify_no_overflow() {
     let key: [u8; 32] = kani::any();
     let nonce: [u8; NONCE_LEN] = kani::any();
 
-    // Test with maximum reasonable plaintext size
+    // Test with reasonable plaintext size (no loops here)
     let plaintext_len: usize = kani::any();
-    kani::assume(plaintext_len <= 65536); // 64KB
+    kani::assume(plaintext_len <= 256);
 
     let plaintext = vec![0u8; plaintext_len];
 

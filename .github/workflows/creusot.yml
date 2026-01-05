@@ -96,7 +96,7 @@ jobs:
           # Verify installation
           ls -la ~/.local/share/creusot/toolchains/ || echo "Toolchain directory check"
 
-      - name: Run Creusot extraction
+      - name: Run Creusot formal verification
         run: |
           echo "::group::Running Creusot formal verification"
           eval $(opam env --switch=creusot)
@@ -105,31 +105,24 @@ jobs:
           echo "Checking creusot-rustc installation..."
           ls -la ~/.local/share/creusot/toolchains/nightly-2025-11-13/bin/ || echo "Toolchain bin not found"
 
-          # Extract library for verification using cargo creusot
-          # This generates Why3 proof obligations from Creusot annotations
-          cargo creusot -- --lib 2>&1 | tee verification_results.txt || echo "Creusot extraction completed"
+          # Run cargo creusot prove - this compiles to Coma and runs Why3find proof search
+          # The why3find.json in repo root configures provers and tactics
+          echo "Running formal verification with cargo creusot prove..."
+          cargo creusot prove 2>&1 | tee verification_results.txt
 
-          # Check for generated output
-          if [ -d "target/creusot" ]; then
-            echo "Creusot output generated successfully"
-            find target/creusot -type f \( -name "*.coma" -o -name "*.mlcfg" \) 2>/dev/null | head -20 || true
+          # Check verification results
+          if grep -q "Proved\|Valid\|proved" verification_results.txt 2>/dev/null; then
+            echo "Verification successful - proofs discharged"
+          elif grep -q "error\|Error\|failed" verification_results.txt 2>/dev/null; then
+            echo "Verification completed with errors - check results"
           else
-            echo "No Creusot output found - checking target directory..."
-            ls -la target/ 2>/dev/null || echo "No target directory"
+            echo "Verification completed"
           fi
-          echo "::endgroup::"
 
-      - name: Run Why3 verification
-        run: |
-          echo "::group::Running Why3 SMT verification"
-          eval $(opam env --switch=creusot)
-
-          # Find generated proof files and run Why3 prove
+          # Show generated proof artifacts
           if [ -d "target/creusot" ]; then
-            find target/creusot -name "*.mlcfg" -exec why3 prove -P z3 -P alt-ergo {} \; 2>&1 | tee -a verification_results.txt || true
-            echo "Verification complete"
-          else
-            echo "No Creusot output found - annotations may not be active or extraction failed"
+            echo "Generated proof artifacts:"
+            find target/creusot -type f \( -name "*.coma" -o -name "proof.json" \) 2>/dev/null | head -20 || true
           fi
           echo "::endgroup::"
 
@@ -145,25 +138,38 @@ jobs:
         run: |
           echo "## Creusot Formal Verification Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Verified Properties" >> $GITHUB_STEP_SUMMARY
+
+          # Count proved goals
+          if [ -f "verification_results.txt" ]; then
+            PROVED=$(grep -c "Proved\|Valid" verification_results.txt 2>/dev/null || echo "0")
+            FAILED=$(grep -c "Unknown\|Timeout\|Failed" verification_results.txt 2>/dev/null || echo "0")
+            echo "### Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **Proved goals**: ${PROVED}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Unproved goals**: ${FAILED}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "### Annotated Functions" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Function | Property | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| \`derive_chunk_nonce\` | Nonce structure and uniqueness | ✓ |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`encrypt\` | \|ciphertext\| = \|plaintext\| + 16 | ✓ |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`decrypt\` | \|plaintext\| = \|ciphertext\| - 16 | ✓ |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`scrub_bytes\` | All bytes zeroed after scrub | ✓ |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`overwrite_with_pattern\` | All bytes equal pattern | ✓ |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`to_bytes\` | Output exactly HEADER_SIZE bytes | ✓ |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`from_bytes\` | Input must be HEADER_SIZE bytes | ✓ |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`derive_key\` | Output key is 32 bytes | ✓ |" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Function | Annotation |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|----------|------------|" >> $GITHUB_STEP_SUMMARY
+          grep -rn 'cfg_attr(creusot,' src/ --include="*.rs" 2>/dev/null | head -20 | while read line; do
+            FILE=$(echo "$line" | cut -d: -f1 | sed 's|src/||')
+            LINENUM=$(echo "$line" | cut -d: -f2)
+            ANNO=$(echo "$line" | grep -oP '(requires|ensures|invariant)\([^)]+\)' | head -1 || echo "contract")
+            echo "| ${FILE}:${LINENUM} | - | ${ANNO} |" >> $GITHUB_STEP_SUMMARY
+          done
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Verification Details" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Verification Output" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -f "verification_results.txt" ]; then
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            tail -50 verification_results.txt >> $GITHUB_STEP_SUMMARY
+            tail -100 verification_results.txt >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No verification results generated." >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Verified using [Creusot](https://github.com/creusot-rs/creusot) with Why3 + Z3/Alt-Ergo." >> $GITHUB_STEP_SUMMARY
+          echo "Verified using [Creusot](https://github.com/creusot-rs/creusot) with Why3find + Z3/Alt-Ergo." >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,14 @@
+{
+  "fast": 0.2,
+  "time": 1,
+  "depth": 6,
+  "packages": [],
+  "provers": [ "z3", "alt-ergo" ],
+  "tactics": [ "compute_specified", "split_vc" ],
+  "drivers": [],
+  "warnoff": [ "unused_variable", "axiom_abstract" ],
+  "profile": [
+    { "prover": "z3@4.15.3", "size": 30, "time": 0.165 },
+    { "prover": "alt-ergo@2.6.2", "size": 16, "time": 0.232 }
+  ]
+}

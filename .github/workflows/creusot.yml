@@ -85,7 +85,8 @@ jobs:
           eval $(opam env --switch=creusot)
           # Extract specific modules with annotations for verification
           # Enable creusot feature to activate creusot-contracts and annotations
-          cargo +nightly-2025-11-13 creusot --features creusot -- --lib 2>&1 || echo "Creusot extraction completed"
+          # Note: cargo-creusot passes arguments after -- to the underlying cargo command
+          cargo +nightly-2025-11-13 creusot -- --features creusot --lib 2>&1 || echo "Creusot extraction completed"
           echo "::endgroup::"
 
       - name: Run Why3 verification

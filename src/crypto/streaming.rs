@@ -47,15 +47,15 @@
 
 use crate::config::NONCE_LEN;
 use crate::error::{CryptorError, Result};
+use ::std::fs::File;
+use ::std::io::{Read, Seek, SeekFrom, Write};
+use ::std::path::{Path, PathBuf};
 #[cfg(feature = "compression")]
 use flate2::read::{DeflateDecoder, DeflateEncoder};
 #[cfg(feature = "compression")]
 use flate2::Compression;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use ::std::fs::File;
-use ::std::io::{Read, Seek, SeekFrom, Write};
-use ::std::path::{Path, PathBuf};
 use zeroize::{Zeroize, Zeroizing};
 
 // Creusot formal verification (only active when compiled with creusot-rustc)
@@ -1781,9 +1781,9 @@ mod tests {
     #[test]
     fn test_chunked_encryptor_basic() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1822,9 +1822,9 @@ mod tests {
     #[test]
     fn test_chunked_encryptor_with_metadata() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1863,9 +1863,9 @@ mod tests {
     #[test]
     fn test_chunked_encryptor_multiple_chunks() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1904,9 +1904,9 @@ mod tests {
     #[test]
     fn test_chunked_encryptor_partial_last_chunk() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1980,9 +1980,9 @@ mod tests {
     #[test]
     fn test_chunked_encryptor_single_chunk() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2020,9 +2020,9 @@ mod tests {
     #[test]
     fn test_chunked_decryptor_basic() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2068,9 +2068,9 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt_roundtrip() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2115,9 +2115,9 @@ mod tests {
     #[test]
     fn test_decrypt_with_metadata() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2162,9 +2162,9 @@ mod tests {
     #[test]
     fn test_decrypt_wrong_key() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2250,9 +2250,9 @@ mod tests {
     #[test]
     fn test_decrypt_progress_tracking() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2299,9 +2299,9 @@ mod tests {
     #[test]
     fn test_parallel_encryption() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2337,9 +2337,9 @@ mod tests {
     #[test]
     fn test_parallel_decryption() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2385,9 +2385,9 @@ mod tests {
     #[test]
     fn test_parallel_roundtrip() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2482,9 +2482,9 @@ mod tests {
     #[test]
     fn test_compression_roundtrip() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2532,9 +2532,9 @@ mod tests {
     #[test]
     fn test_compression_reduces_size() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2594,9 +2594,9 @@ mod tests {
     #[test]
     fn test_compression_with_incompressible_data() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2643,9 +2643,9 @@ mod tests {
     #[test]
     fn test_compression_parallel_roundtrip() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
+        use ::std::io::Write;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 

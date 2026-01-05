@@ -5,9 +5,9 @@
 //! The header contains all metadata necessary to mount and decrypt an encrypted volume.
 //! It is stored at the beginning of the volume file.
 
+use ::std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
-use ::std::io::{self, Read, Write};
 use thiserror::Error;
 
 // Creusot formal verification (only active when compiled with creusot-rustc)

@@ -57,16 +57,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-creusot-
 
-      - name: Initialize opam
+      - name: Initialize opam and create switch
         run: |
-          opam init --disable-sandboxing --bare || true
-          eval $(opam env)
+          opam init --disable-sandboxing --auto-setup || true
+          opam switch create creusot 4.14.1 || opam switch set creusot || true
+          eval $(opam env --switch=creusot)
 
       - name: Install Why3 and Alt-Ergo
         run: |
-          eval $(opam env)
+          eval $(opam env --switch=creusot)
           opam install -y why3 alt-ergo
-          eval $(opam env)
           why3 config detect
 
       - name: Install Rust nightly (Creusot required)
@@ -82,7 +82,7 @@ jobs:
       - name: Generate Why3 proof obligations
         run: |
           echo "::group::Generating Why3 proof obligations"
-          eval $(opam env)
+          eval $(opam env --switch=creusot)
           # Extract specific modules with annotations for verification
           cargo creusot --features creusot -- --lib 2>&1 || echo "Creusot extraction completed"
           echo "::endgroup::"
@@ -90,7 +90,7 @@ jobs:
       - name: Run Why3 verification
         run: |
           echo "::group::Running Why3 SMT verification"
-          eval $(opam env)
+          eval $(opam env --switch=creusot)
           # Find generated mlcfg files and run Why3 prove
           if [ -d "target/creusot" ]; then
             find target/creusot -name "*.mlcfg" -exec why3 prove -P z3 -P alt-ergo {} \; 2>&1 | tee verification_results.txt || true

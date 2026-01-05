@@ -26,8 +26,8 @@
 //! scrub_bytes_pattern(&mut sensitive_data, ScrubPattern::Dod522022M);
 //! ```
 
-use std::ptr;
-use std::sync::atomic::{compiler_fence, Ordering};
+use ::std::ptr;
+use ::std::sync::atomic::{compiler_fence, Ordering};
 use zeroize::Zeroize;
 
 // Creusot formal verification (only active when compiled with creusot-rustc)
@@ -290,7 +290,7 @@ macro_rules! scrub_stack_variable {
     ($var:expr) => {{
         use zeroize::Zeroize;
         $var.zeroize();
-        std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+        ::std::sync::atomic::compiler_fence(::std::sync::atomic::Ordering::SeqCst);
     }};
 }
 
@@ -333,7 +333,7 @@ impl<T: Zeroize> ScrubGuard<T> {
         unsafe {
             let value = ptr::read(&self.value);
             // Prevent Drop from running
-            std::mem::forget(self);
+            ::std::mem::forget(self);
             value
         }
     }
@@ -346,7 +346,7 @@ impl<T: Zeroize> Drop for ScrubGuard<T> {
     }
 }
 
-impl<T: Zeroize> std::ops::Deref for ScrubGuard<T> {
+impl<T: Zeroize> ::std::ops::Deref for ScrubGuard<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -354,7 +354,7 @@ impl<T: Zeroize> std::ops::Deref for ScrubGuard<T> {
     }
 }
 
-impl<T: Zeroize> std::ops::DerefMut for ScrubGuard<T> {
+impl<T: Zeroize> ::std::ops::DerefMut for ScrubGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
     }

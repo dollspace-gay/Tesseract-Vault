@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
-use std::io::{self, Read, Write};
+use ::std::io::{self, Read, Write};
 use thiserror::Error;
 
 // Creusot formal verification (only active when compiled with creusot-rustc)
@@ -34,8 +34,8 @@ pub const HEADER_SIZE: usize = 4096;
 /// Returns the current Unix timestamp in seconds.
 #[inline]
 fn current_unix_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    ::std::time::SystemTime::now()
+        .duration_since(::std::time::UNIX_EPOCH)
         .expect("System time before Unix epoch")
         .as_secs()
 }

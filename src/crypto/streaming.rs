@@ -53,9 +53,9 @@ use flate2::read::{DeflateDecoder, DeflateEncoder};
 use flate2::Compression;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
+use ::std::fs::File;
+use ::std::io::{Read, Seek, SeekFrom, Write};
+use ::std::path::{Path, PathBuf};
 use zeroize::{Zeroize, Zeroizing};
 
 // Creusot formal verification (only active when compiled with creusot-rustc)
@@ -418,7 +418,7 @@ impl Checkpoint {
         original_size: u64,
         operation: CheckpointOperation,
     ) -> Self {
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use ::std::time::{SystemTime, UNIX_EPOCH};
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -450,7 +450,7 @@ impl Checkpoint {
     ///
     /// The checkpoint file is saved with a `.checkpoint` extension.
     pub fn save(&self, checkpoint_path: &Path) -> Result<()> {
-        use std::io::Write;
+        use ::std::io::Write;
 
         let mut file = File::create(checkpoint_path)?;
 
@@ -561,7 +561,7 @@ impl Checkpoint {
 
     /// Deletes the checkpoint file.
     pub fn delete(checkpoint_path: &Path) -> Result<()> {
-        std::fs::remove_file(checkpoint_path)?;
+        ::std::fs::remove_file(checkpoint_path)?;
         Ok(())
     }
 }
@@ -842,7 +842,7 @@ impl ChunkedReader {
         }
 
         let remaining = self.total_size - self.bytes_read;
-        let chunk_size = std::cmp::min(self.config.chunk_size, remaining as usize);
+        let chunk_size = ::std::cmp::min(self.config.chunk_size, remaining as usize);
 
         let mut buffer = vec![0u8; chunk_size];
         self.file.read_exact(&mut buffer)?;
@@ -1073,7 +1073,7 @@ impl ChunkedEncryptor {
     /// Compressed data.
     #[cfg(feature = "compression")]
     fn compress_data(data: &[u8]) -> Result<Vec<u8>> {
-        use std::io::Read as _;
+        use ::std::io::Read as _;
 
         let mut encoder = DeflateEncoder::new(data, Compression::default());
         let mut compressed = Vec::new();
@@ -1366,7 +1366,7 @@ impl<R: Read> ChunkedDecryptor<R> {
     /// Decompressed data.
     #[cfg(feature = "compression")]
     fn decompress_data(data: &[u8]) -> Result<Vec<u8>> {
-        use std::io::Read as _;
+        use ::std::io::Read as _;
 
         let mut decoder = DeflateDecoder::new(data);
         let mut decompressed = Vec::new();
@@ -1482,7 +1482,7 @@ impl<R: Read> ChunkedDecryptor<R> {
         // Process chunks in batches
         while self.current_chunk < self.header.total_chunks {
             let chunks_remaining = self.header.total_chunks - self.current_chunk;
-            let current_batch_size = std::cmp::min(batch_size as u64, chunks_remaining) as usize;
+            let current_batch_size = ::std::cmp::min(batch_size as u64, chunks_remaining) as usize;
 
             // Read batch of encrypted chunks
             let mut encrypted_chunks = Vec::with_capacity(current_batch_size);
@@ -1639,7 +1639,7 @@ mod tests {
 
     #[test]
     fn test_chunked_reader_basic() {
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
 
         // Create a test file with known content
@@ -1673,7 +1673,7 @@ mod tests {
 
     #[test]
     fn test_chunked_reader_partial_last_chunk() {
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
 
         // Create a file that doesn't divide evenly (10KB)
@@ -1708,7 +1708,7 @@ mod tests {
 
     #[test]
     fn test_chunked_reader_seek() {
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
 
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -1738,7 +1738,7 @@ mod tests {
 
     #[test]
     fn test_chunked_reader_iterator() {
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
 
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -1758,7 +1758,7 @@ mod tests {
 
     #[test]
     fn test_chunked_reader_progress() {
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
 
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -1783,7 +1783,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1824,7 +1824,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1865,7 +1865,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1906,7 +1906,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1982,7 +1982,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2022,7 +2022,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2070,7 +2070,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2117,7 +2117,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2164,7 +2164,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2252,7 +2252,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2301,7 +2301,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2339,7 +2339,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2387,7 +2387,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2432,7 +2432,7 @@ mod tests {
     fn test_parallel_vs_sequential_same_output() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
 
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2484,7 +2484,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2534,7 +2534,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2596,7 +2596,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2645,7 +2645,7 @@ mod tests {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use rand::rngs::OsRng;
         use rand_core::TryRngCore;
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2794,7 +2794,7 @@ mod tests {
 
     #[test]
     fn test_chunked_reader_resume_from_checkpoint() {
-        use std::io::Write;
+        use ::std::io::Write;
         use tempfile::NamedTempFile;
 
         // Create test file

@@ -97,7 +97,7 @@ pub struct ScrubStats {
 /// # Formal Verification (Creusot)
 ///
 /// Proves: After scrubbing, all bytes in the buffer are zero.
-#[cfg_attr(creusot, creusot_contracts::ensures(
+#[cfg_attr(creusot, creusot_contracts::prelude::ensures(
     // All bytes are zeroed after scrubbing
     forall<i: usize> i < data.len() ==> data[i] == 0u8
 ))]
@@ -234,7 +234,7 @@ pub fn scrub_and_verify(data: &mut [u8], pattern: ScrubPattern) -> ScrubStats {
 ///
 /// Proves: After overwriting, all bytes equal the specified pattern.
 #[inline(never)]
-#[cfg_attr(creusot, creusot_contracts::ensures(
+#[cfg_attr(creusot, creusot_contracts::prelude::ensures(
     // All bytes are set to the pattern value
     forall<i: usize> i < data.len() ==> data[i] == pattern
 ))]

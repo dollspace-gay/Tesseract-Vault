@@ -60,9 +60,9 @@ impl KeyDerivation for Argon2Kdf {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, output key is exactly 32 bytes.
-    #[cfg_attr(creusot, creusot_contracts::ensures(
+    #[cfg_attr(creusot, creusot_contracts::prelude::ensures(
         match &result {
-            Ok(key) => key.len() == 32,
+            Ok(key) => key.len() == 32usize,
             Err(_) => true
         }
     ))]

@@ -132,7 +132,8 @@ yubikey-hmac-otp = { version = "0.10", optional = true }
 
 # Creusot formal verification
 # This crate compiles with standard rustc but verification requires creusot-rustc
-creusot-contracts = "0.8"
+# Must use same version (v0.8.0) as Creusot tool installed in CI
+creusot-contracts = { git = "https://github.com/creusot-rs/creusot", tag = "v0.8.0", package = "creusot-contracts" }
 
 # Cross-platform optional dependencies
 ctrlc = { version = "3.4", optional = true }

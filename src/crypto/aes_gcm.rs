@@ -41,10 +41,10 @@ impl Encryptor for AesGcmEncryptor {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, |ciphertext| = |plaintext| + 16 (authentication tag size)
-    #[cfg_attr(creusot, creusot_contracts::ensures(
+    #[cfg_attr(creusot, creusot_contracts::prelude::ensures(
         // When encryption succeeds, output length equals input + 16-byte auth tag
         match &result {
-            Ok(ct) => ct.len() == plaintext.len() + 16,
+            Ok(ct) => ct.len() == plaintext.len() + 16usize,
             Err(_) => true  // Errors allowed for invalid nonce
         }
     ))]
@@ -73,11 +73,11 @@ impl Encryptor for AesGcmEncryptor {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, |plaintext| = |ciphertext| - 16 (authentication tag removed)
-    #[cfg_attr(creusot, creusot_contracts::requires(ciphertext.len() >= 16))]
-    #[cfg_attr(creusot, creusot_contracts::ensures(
+    #[cfg_attr(creusot, creusot_contracts::prelude::requires(ciphertext.len() >= 16usize))]
+    #[cfg_attr(creusot, creusot_contracts::prelude::ensures(
         // When decryption succeeds, output length equals input - 16-byte auth tag
         match &result {
-            Ok(pt) => pt.len() == ciphertext.len() - 16,
+            Ok(pt) => pt.len() == ciphertext.len() - 16usize,
             Err(_) => true  // Errors allowed for auth failure or invalid nonce
         }
     ))]

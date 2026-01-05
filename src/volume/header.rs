@@ -310,7 +310,7 @@ impl VolumeHeader {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, output is exactly HEADER_SIZE (4096) bytes.
-    #[cfg_attr(creusot, creusot_contracts::ensures(
+    #[cfg_attr(creusot, creusot_contracts::prelude::ensures(
         match &result {
             Ok(bytes) => bytes.len() == HEADER_SIZE,
             Err(_) => true
@@ -354,7 +354,7 @@ impl VolumeHeader {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: Input must be exactly HEADER_SIZE (4096) bytes for success.
-    #[cfg_attr(creusot, creusot_contracts::requires(bytes.len() == HEADER_SIZE))]
+    #[cfg_attr(creusot, creusot_contracts::prelude::requires(bytes.len() == HEADER_SIZE))]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, HeaderError> {
         if bytes.len() != HEADER_SIZE {
             return Err(HeaderError::SizeMismatch {

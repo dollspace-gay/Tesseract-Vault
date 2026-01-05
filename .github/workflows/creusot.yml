@@ -72,19 +72,20 @@ jobs:
       - name: Install Rust nightly (Creusot required)
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2024-10-07
+          toolchain: nightly-2025-11-13
           components: rustc-dev, llvm-tools-preview
 
       - name: Install Creusot
         run: |
-          cargo install --git https://github.com/creusot-rs/creusot --tag v0.8.0 creusot-rustc cargo-creusot
+          cargo +nightly-2025-11-13 install --git https://github.com/creusot-rs/creusot --tag v0.8.0 creusot-rustc cargo-creusot
 
       - name: Generate Why3 proof obligations
         run: |
           echo "::group::Generating Why3 proof obligations"
           eval $(opam env --switch=creusot)
           # Extract specific modules with annotations for verification
-          cargo creusot --features creusot -- --lib 2>&1 || echo "Creusot extraction completed"
+          # Note: creusot-rustc automatically sets cfg(creusot), no feature flag needed
+          cargo +nightly-2025-11-13 creusot -- --lib 2>&1 || echo "Creusot extraction completed"
           echo "::endgroup::"
 
       - name: Run Why3 verification

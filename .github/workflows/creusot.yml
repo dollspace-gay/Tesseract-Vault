@@ -77,7 +77,7 @@ jobs:
 
       - name: Install Creusot
         run: |
-          cargo +nightly-2025-11-13 install --git https://github.com/creusot-rs/creusot --tag v0.8.0 creusot-rustc cargo-creusot
+          cargo +nightly-2025-11-13 install --force --git https://github.com/creusot-rs/creusot --tag v0.8.0 creusot-rustc cargo-creusot
 
       - name: Generate Why3 proof obligations
         run: |

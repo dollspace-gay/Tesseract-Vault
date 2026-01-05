@@ -71,6 +71,10 @@ exceptions = [
     # This is acceptable as we only link dynamically at runtime on Windows
     { allow = ["GPL-3.0"], crate = "winfsp" },
     { allow = ["GPL-3.0"], crate = "winfsp-sys" },
+    # Creusot formal verification (optional feature, LGPL-2.1+ is copyleft but acceptable for dev tooling)
+    # These crates are only used during formal verification builds, not in production binaries
+    { allow = ["LGPL-2.1-or-later"], crate = "creusot-contracts" },
+    { allow = ["LGPL-2.1-or-later"], crate = "creusot-contracts-proc" },
 ]
 
 [licenses.private]

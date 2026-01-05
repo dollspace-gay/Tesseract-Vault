@@ -13,7 +13,7 @@ use thiserror::Error;
 // Creusot formal verification (only active when compiled with creusot-rustc)
 // See: https://github.com/creusot-rs/creusot
 #[cfg(creusot)]
-use creusot_contracts::{ensures, requires};
+use creusot_contracts::prelude::*;
 
 /// Magic bytes to identify Secure Cryptor volume files
 /// "SECVOL01" in ASCII

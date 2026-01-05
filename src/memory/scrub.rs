@@ -33,7 +33,7 @@ use zeroize::Zeroize;
 // Creusot formal verification (only active when compiled with creusot-rustc)
 // See: https://github.com/creusot-rs/creusot
 #[cfg(creusot)]
-use creusot_contracts::ensures;
+use creusot_contracts::prelude::*;
 
 /// Scrubbing patterns for multi-pass wiping.
 ///

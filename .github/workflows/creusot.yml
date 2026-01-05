@@ -112,6 +112,8 @@ jobs:
 
       - name: Run Creusot formal verification
         run: |
+          set -o pipefail  # Ensure pipe failures are propagated
+
           echo "::group::Running Creusot formal verification"
 
           # Add Creusot binaries to PATH
@@ -124,19 +126,8 @@ jobs:
           # Run cargo creusot prove - this compiles to Coma and runs Why3find proof search
           # The why3find.json in repo root configures provers and tactics
           echo "Running formal verification with cargo creusot prove..."
-          cargo creusot prove 2>&1 | tee verification_results.txt || {
-            echo "cargo creusot prove failed, checking output..."
-            cat verification_results.txt
-          }
-
-          # Check verification results
-          if grep -q "Proved\|Valid\|proved" verification_results.txt 2>/dev/null; then
-            echo "Verification successful - proofs discharged"
-          elif grep -q "error\|Error\|failed" verification_results.txt 2>/dev/null; then
-            echo "Verification completed with errors - check results"
-          else
-            echo "Verification completed"
-          fi
+          CREUSOT_EXIT_CODE=0
+          cargo creusot prove 2>&1 | tee verification_results.txt || CREUSOT_EXIT_CODE=$?
 
           # Show generated proof artifacts
           if [ -d "target/creusot" ]; then
@@ -144,6 +135,32 @@ jobs:
             find target/creusot -type f \( -name "*.coma" -o -name "proof.json" \) 2>/dev/null | head -20 || true
           fi
           echo "::endgroup::"
+
+          # Check verification results and fail appropriately
+          if [ $CREUSOT_EXIT_CODE -ne 0 ]; then
+            echo "::error::Creusot verification command failed with exit code $CREUSOT_EXIT_CODE"
+            cat verification_results.txt
+            exit $CREUSOT_EXIT_CODE
+          fi
+
+          # Check for errors in output even if exit code was 0
+          if grep -qE "^error\[|error:|Error:" verification_results.txt 2>/dev/null; then
+            echo "::error::Creusot verification found errors in output"
+            grep -E "^error\[|error:|Error:" verification_results.txt || true
+            exit 1
+          fi
+
+          # Check for unproved goals
+          if grep -qE "Unknown|Timeout|unproved" verification_results.txt 2>/dev/null; then
+            echo "::warning::Some proof goals could not be discharged"
+            grep -E "Unknown|Timeout|unproved" verification_results.txt || true
+          fi
+
+          if grep -qE "Proved|Valid|proved" verification_results.txt 2>/dev/null; then
+            echo "✅ Verification successful - proofs discharged"
+          else
+            echo "Verification completed (no proof goals found - check if annotations are present)"
+          fi
 
       - name: List annotated functions
         run: |

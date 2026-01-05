@@ -81,8 +81,10 @@ jobs:
 
       - name: Install Creusot
         run: |
-          # Check if already installed from cache
-          if [ -f ~/.cargo/bin/cargo-creusot ] && [ -d ~/.local/share/creusot ]; then
+          # Check if fully installed from cache (cargo-creusot + creusot-rustc + why3find)
+          if [ -f ~/.cargo/bin/cargo-creusot ] && \
+             [ -f ~/.local/share/creusot/bin/why3find ] && \
+             [ -d ~/.local/share/creusot/toolchains ]; then
             echo "Creusot found in cache, verifying..."
             if cargo creusot --help > /dev/null 2>&1; then
               echo "Creusot installation valid"
@@ -90,14 +92,17 @@ jobs:
             fi
           fi
 
+          # Clean up partial installations
+          echo "Cleaning up any partial installation..."
+          rm -f ~/.cargo/bin/cargo-creusot
+          rm -rf ~/creusot-install
+
           # Clone Creusot and run full installation
           echo "Installing Creusot from source..."
-          rm -rf ~/creusot-install
           git clone --depth 1 --branch v0.8.0 https://github.com/creusot-rs/creusot.git ~/creusot-install
           cd ~/creusot-install
 
           # Run the INSTALL script (installs why3, why3find, provers, creusot-rustc)
-          # Use --external z3 to use system z3 if available
           ./INSTALL --provers-parallelism 2
 
           # Verify installation

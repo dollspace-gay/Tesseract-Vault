@@ -8,11 +8,6 @@ use super::Encryptor;
 use crate::config::NONCE_LEN;
 use crate::error::{CryptorError, Result};
 
-// Creusot formal verification (only active when compiled with creusot-rustc)
-// See: https://github.com/creusot-rs/creusot
-#[cfg(creusot)]
-use creusot_contracts::prelude::*;
-
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
@@ -46,7 +41,7 @@ impl Encryptor for AesGcmEncryptor {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, |ciphertext| = |plaintext| + 16 (authentication tag size)
-    #[cfg_attr(creusot, ensures(
+    #[cfg_attr(creusot, creusot_contracts::ensures(
         // When encryption succeeds, output length equals input + 16-byte auth tag
         match &result {
             Ok(ct) => ct.len() == plaintext.len() + 16,
@@ -78,8 +73,8 @@ impl Encryptor for AesGcmEncryptor {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, |plaintext| = |ciphertext| - 16 (authentication tag removed)
-    #[cfg_attr(creusot, requires(ciphertext.len() >= 16))]
-    #[cfg_attr(creusot, ensures(
+    #[cfg_attr(creusot, creusot_contracts::requires(ciphertext.len() >= 16))]
+    #[cfg_attr(creusot, creusot_contracts::ensures(
         // When decryption succeeds, output length equals input - 16-byte auth tag
         match &result {
             Ok(pt) => pt.len() == ciphertext.len() - 16,

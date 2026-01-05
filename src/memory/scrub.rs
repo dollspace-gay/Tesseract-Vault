@@ -30,11 +30,6 @@ use ::std::ptr;
 use ::std::sync::atomic::{compiler_fence, Ordering};
 use zeroize::Zeroize;
 
-// Creusot formal verification (only active when compiled with creusot-rustc)
-// See: https://github.com/creusot-rs/creusot
-#[cfg(creusot)]
-use creusot_contracts::prelude::*;
-
 /// Scrubbing patterns for multi-pass wiping.
 ///
 /// Different standards and methods for securely overwriting memory.
@@ -102,7 +97,7 @@ pub struct ScrubStats {
 /// # Formal Verification (Creusot)
 ///
 /// Proves: After scrubbing, all bytes in the buffer are zero.
-#[cfg_attr(creusot, ensures(
+#[cfg_attr(creusot, creusot_contracts::ensures(
     // All bytes are zeroed after scrubbing
     forall<i: usize> i < data.len() ==> data[i] == 0u8
 ))]
@@ -239,7 +234,7 @@ pub fn scrub_and_verify(data: &mut [u8], pattern: ScrubPattern) -> ScrubStats {
 ///
 /// Proves: After overwriting, all bytes equal the specified pattern.
 #[inline(never)]
-#[cfg_attr(creusot, ensures(
+#[cfg_attr(creusot, creusot_contracts::ensures(
     // All bytes are set to the pattern value
     forall<i: usize> i < data.len() ==> data[i] == pattern
 ))]

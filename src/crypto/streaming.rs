@@ -61,7 +61,7 @@ use zeroize::{Zeroize, Zeroizing};
 // Creusot formal verification (only active when compiled with creusot-rustc)
 // See: https://github.com/creusot-rs/creusot
 #[cfg(creusot)]
-use creusot_contracts::*;
+use creusot_contracts::ensures;
 
 /// Default chunk size: 1 MB
 pub const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024;

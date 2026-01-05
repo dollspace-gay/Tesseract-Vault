@@ -11,7 +11,7 @@ use crate::error::{CryptorError, Result};
 // Creusot formal verification (only active when compiled with creusot-rustc)
 // See: https://github.com/creusot-rs/creusot
 #[cfg(creusot)]
-use creusot_contracts::*;
+use creusot_contracts::{ensures, requires};
 
 use aes_gcm::{
     aead::{Aead, KeyInit},

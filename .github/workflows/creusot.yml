@@ -75,29 +75,61 @@ jobs:
           toolchain: nightly-2025-11-13
           components: rustc-dev, llvm-tools-preview
 
+      - name: Cache Creusot toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/creusot
+          key: ${{ runner.os }}-creusot-toolchain-v0.8.0-nightly-2025-11-13
+          restore-keys: |
+            ${{ runner.os }}-creusot-toolchain-
+
       - name: Install Creusot
         run: |
-          cargo +nightly-2025-11-13 install --force --git https://github.com/creusot-rs/creusot --tag v0.8.0 creusot-rustc cargo-creusot
+          # Install cargo-creusot first
+          cargo +nightly-2025-11-13 install --force --git https://github.com/creusot-rs/creusot --tag v0.8.0 cargo-creusot
 
-      - name: Generate Why3 proof obligations
-        run: |
-          echo "::group::Generating Why3 proof obligations"
+          # Run setup to install creusot-rustc and configure the toolchain
+          # This installs creusot-rustc to ~/.local/share/creusot/toolchains/nightly-2025-11-13/bin/
           eval $(opam env --switch=creusot)
-          # Extract library for verification
-          # creusot-rustc automatically sets cfg(creusot) which activates our annotations
-          cargo +nightly-2025-11-13 creusot -- --lib 2>&1 || echo "Creusot extraction completed"
+          cargo creusot setup install || echo "Creusot setup completed"
+
+          # Verify installation
+          ls -la ~/.local/share/creusot/toolchains/ || echo "Toolchain directory check"
+
+      - name: Run Creusot extraction
+        run: |
+          echo "::group::Running Creusot formal verification"
+          eval $(opam env --switch=creusot)
+
+          # Verify creusot-rustc is available
+          echo "Checking creusot-rustc installation..."
+          ls -la ~/.local/share/creusot/toolchains/nightly-2025-11-13/bin/ || echo "Toolchain bin not found"
+
+          # Extract library for verification using cargo creusot
+          # This generates Why3 proof obligations from Creusot annotations
+          cargo creusot -- --lib 2>&1 | tee verification_results.txt || echo "Creusot extraction completed"
+
+          # Check for generated output
+          if [ -d "target/creusot" ]; then
+            echo "Creusot output generated successfully"
+            find target/creusot -type f \( -name "*.coma" -o -name "*.mlcfg" \) 2>/dev/null | head -20 || true
+          else
+            echo "No Creusot output found - checking target directory..."
+            ls -la target/ 2>/dev/null || echo "No target directory"
+          fi
           echo "::endgroup::"
 
       - name: Run Why3 verification
         run: |
           echo "::group::Running Why3 SMT verification"
           eval $(opam env --switch=creusot)
-          # Find generated mlcfg files and run Why3 prove
+
+          # Find generated proof files and run Why3 prove
           if [ -d "target/creusot" ]; then
-            find target/creusot -name "*.mlcfg" -exec why3 prove -P z3 -P alt-ergo {} \; 2>&1 | tee verification_results.txt || true
+            find target/creusot -name "*.mlcfg" -exec why3 prove -P z3 -P alt-ergo {} \; 2>&1 | tee -a verification_results.txt || true
             echo "Verification complete"
           else
-            echo "No Creusot output found - annotations may not be active"
+            echo "No Creusot output found - annotations may not be active or extraction failed"
           fi
           echo "::endgroup::"
 

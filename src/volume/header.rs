@@ -10,9 +10,9 @@ use serde_big_array::BigArray;
 use std::io::{self, Read, Write};
 use thiserror::Error;
 
-// Creusot formal verification: annotations activate under creusot-rustc
+// Creusot formal verification: annotations activate when building with creusot feature
 // See: https://github.com/creusot-rs/creusot
-#[cfg(creusot)]
+#[cfg(feature = "creusot")]
 use creusot_contracts::*;
 
 /// Magic bytes to identify Secure Cryptor volume files
@@ -315,7 +315,7 @@ impl VolumeHeader {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, output is exactly HEADER_SIZE (4096) bytes.
-    #[cfg_attr(creusot, ensures(
+    #[cfg_attr(feature = "creusot", ensures(
         match &result {
             Ok(bytes) => bytes.len() == HEADER_SIZE,
             Err(_) => true
@@ -359,7 +359,7 @@ impl VolumeHeader {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: Input must be exactly HEADER_SIZE (4096) bytes for success.
-    #[cfg_attr(creusot, requires(bytes.len() == HEADER_SIZE))]
+    #[cfg_attr(feature = "creusot", requires(bytes.len() == HEADER_SIZE))]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, HeaderError> {
         if bytes.len() != HEADER_SIZE {
             return Err(HeaderError::SizeMismatch {

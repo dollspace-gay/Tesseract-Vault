@@ -35,9 +35,9 @@ gui = ["dep:eframe", "dep:rfd", "dep:notify-rust", "dep:tray-icon", "dep:image",
 loom = []
 
 # Creusot formal verification (deductive proofs)
-# Note: creusot-contracts only works with creusot-rustc, not standard rustc
-# The annotations are embedded as cfg_attr and only activate under creusot-rustc
-creusot = []
+# Note: creusot-contracts only compiles with the specific nightly version creusot-rustc requires
+# Enable this feature ONLY when running cargo creusot with the matching nightly
+creusot = ["dep:creusot-contracts"]
 
 [lib]
 name = "tesseract_lib"
@@ -131,6 +131,9 @@ qrcode = { version = "0.14", optional = true }
 # Hardware Security Module support
 yubikey-hmac-otp = { version = "0.10", optional = true }
 
+# Creusot formal verification (only compiles with creusot's nightly)
+creusot-contracts = { version = "0.8", optional = true }
+
 # Cross-platform optional dependencies
 ctrlc = { version = "3.4", optional = true }
 
@@ -196,5 +199,5 @@ lto = true
 codegen-units = 1
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(loom)', 'cfg(creusot)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(loom)'] }
 

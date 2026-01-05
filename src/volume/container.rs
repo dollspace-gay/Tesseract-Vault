@@ -2964,7 +2964,7 @@ mod tests {
         cleanup(&path);
 
         {
-            let mut container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
+            let container = Container::create(&path, 1024 * 1024, "Password!", 4096).unwrap();
 
             // Write some data
             let _ = container.mount_filesystem();

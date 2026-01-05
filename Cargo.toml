@@ -34,6 +34,11 @@ gui = ["dep:eframe", "dep:rfd", "dep:notify-rust", "dep:tray-icon", "dep:image",
 # Loom concurrency testing (dev-only)
 loom = []
 
+# Creusot formal verification (deductive proofs)
+# Note: creusot-contracts only works with creusot-rustc, not standard rustc
+# The annotations are embedded as cfg_attr and only activate under creusot-rustc
+creusot = []
+
 [lib]
 name = "tesseract_lib"
 path = "src/lib.rs"
@@ -191,5 +196,5 @@ lto = true
 codegen-units = 1
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(loom)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(loom)', 'cfg(creusot)'] }
 

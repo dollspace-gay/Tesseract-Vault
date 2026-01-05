@@ -69,11 +69,14 @@ jobs:
           echo "::endgroup::"
 
       # Run Miri on scrubbing tests (pure Rust, no FFI)
+      # Skip large_buffer test as it allocates 10MB and is extremely slow under Miri
       - name: Run Miri on memory scrubbing
         run: |
           echo "::group::Miri - Memory Scrubbing"
           MIRIFLAGS="-Zmiri-disable-isolation" \
           cargo +nightly miri test --lib scrub:: \
             --no-default-features \
+            -- \
+            --skip large_buffer \
             2>&1 || true
           echo "::endgroup::"

@@ -7,6 +7,12 @@
 use super::KeyDerivation;
 use crate::config::CryptoConfig;
 use crate::error::{CryptorError, Result};
+
+// Creusot formal verification: annotations activate under creusot-rustc
+// See: https://github.com/creusot-rs/creusot
+#[cfg(creusot)]
+use creusot_contracts::*;
+
 use argon2::{
     password_hash::{Salt, SaltString},
     Argon2, Params,
@@ -54,6 +60,17 @@ impl Default for Argon2Kdf {
 }
 
 impl KeyDerivation for Argon2Kdf {
+    /// Derives a 32-byte encryption key from password and salt using Argon2id.
+    ///
+    /// # Formal Verification (Creusot)
+    ///
+    /// Proves: On success, output key is exactly 32 bytes.
+    #[cfg_attr(creusot, ensures(
+        match &result {
+            Ok(key) => key.len() == 32,
+            Err(_) => true
+        }
+    ))]
     fn derive_key(&self, password: &[u8], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
         let params = Params::new(
             self.config.argon2_mem_cost_kib,

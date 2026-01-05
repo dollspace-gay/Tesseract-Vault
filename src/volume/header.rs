@@ -10,6 +10,11 @@ use serde_big_array::BigArray;
 use std::io::{self, Read, Write};
 use thiserror::Error;
 
+// Creusot formal verification: annotations activate under creusot-rustc
+// See: https://github.com/creusot-rs/creusot
+#[cfg(creusot)]
+use creusot_contracts::*;
+
 /// Magic bytes to identify Secure Cryptor volume files
 /// "SECVOL01" in ASCII
 const MAGIC: [u8; 8] = [0x53, 0x45, 0x43, 0x56, 0x4F, 0x4C, 0x30, 0x31];
@@ -306,6 +311,16 @@ impl VolumeHeader {
     /// # Returns
     ///
     /// A byte vector of exactly HEADER_SIZE bytes
+    ///
+    /// # Formal Verification (Creusot)
+    ///
+    /// Proves: On success, output is exactly HEADER_SIZE (4096) bytes.
+    #[cfg_attr(creusot, ensures(
+        match &result {
+            Ok(bytes) => bytes.len() == HEADER_SIZE,
+            Err(_) => true
+        }
+    ))]
     pub fn to_bytes(&self) -> Result<Vec<u8>, HeaderError> {
         let mut serialized = bincode::serialize(self)?;
 
@@ -340,6 +355,11 @@ impl VolumeHeader {
     /// - The magic bytes are invalid
     /// - The version is unsupported
     /// - Deserialization fails
+    ///
+    /// # Formal Verification (Creusot)
+    ///
+    /// Proves: Input must be exactly HEADER_SIZE (4096) bytes for success.
+    #[cfg_attr(creusot, requires(bytes.len() == HEADER_SIZE))]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, HeaderError> {
         if bytes.len() != HEADER_SIZE {
             return Err(HeaderError::SizeMismatch {

@@ -1020,7 +1020,7 @@ mod tests {
 
     #[test]
     fn test_statfs() {
-        let mut fs = init_fs();
+        let fs = init_fs();
         let (total, free, avail) = fs.statfs().unwrap();
 
         assert_eq!(total, 1024 * 1024 * 1024);

@@ -83,10 +83,9 @@ jobs:
         run: |
           echo "::group::Generating Why3 proof obligations"
           eval $(opam env --switch=creusot)
-          # Extract specific modules with annotations for verification
-          # Enable creusot feature to activate creusot-contracts and annotations
-          # Note: cargo-creusot passes arguments after -- to the underlying cargo command
-          cargo +nightly-2025-11-13 creusot -- --features creusot --lib 2>&1 || echo "Creusot extraction completed"
+          # Extract library for verification
+          # creusot-rustc automatically sets cfg(creusot) which activates our annotations
+          cargo +nightly-2025-11-13 creusot -- --lib 2>&1 || echo "Creusot extraction completed"
           echo "::endgroup::"
 
       - name: Run Why3 verification
@@ -107,7 +106,7 @@ jobs:
           echo "::group::Annotated Functions"
           echo "Functions with Creusot formal verification annotations:"
           echo ""
-          grep -rn 'cfg_attr(feature = "creusot"' src/ --include="*.rs" || echo "No annotations found"
+          grep -rn 'cfg_attr(creusot,' src/ --include="*.rs" || echo "No annotations found"
           echo "::endgroup::"
 
       - name: Summary

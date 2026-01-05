@@ -58,9 +58,9 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use zeroize::{Zeroize, Zeroizing};
 
-// Creusot formal verification: annotations activate when building with creusot feature
+// Creusot formal verification (only active when compiled with creusot-rustc)
 // See: https://github.com/creusot-rs/creusot
-#[cfg(feature = "creusot")]
+#[cfg(creusot)]
 use creusot_contracts::*;
 
 /// Default chunk size: 1 MB
@@ -191,14 +191,14 @@ impl StreamConfig {
 /// - **Structure**: First 4 bytes equal base_nonce[0..4], last 8 bytes equal chunk_index (big-endian)
 /// - **Uniqueness**: For same base_nonce, different chunk_index implies different nonce
 /// - **Determinism**: Same inputs always produce same output
-#[cfg_attr(feature = "creusot", ensures(
+#[cfg_attr(creusot, ensures(
     // Structure: first 4 bytes from base_nonce
     result[0] == base_nonce[0] &&
     result[1] == base_nonce[1] &&
     result[2] == base_nonce[2] &&
     result[3] == base_nonce[3]
 ))]
-#[cfg_attr(feature = "creusot", ensures(
+#[cfg_attr(creusot, ensures(
     // Structure: last 8 bytes are chunk_index in big-endian
     // This proves nonce uniqueness: different chunk_index => different nonce
     result[4] == ((chunk_index >> 56) & 0xFF) as u8 &&

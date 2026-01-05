@@ -8,9 +8,9 @@ use super::KeyDerivation;
 use crate::config::CryptoConfig;
 use crate::error::{CryptorError, Result};
 
-// Creusot formal verification: annotations activate when building with creusot feature
+// Creusot formal verification (only active when compiled with creusot-rustc)
 // See: https://github.com/creusot-rs/creusot
-#[cfg(feature = "creusot")]
+#[cfg(creusot)]
 use creusot_contracts::*;
 
 use argon2::{
@@ -65,7 +65,7 @@ impl KeyDerivation for Argon2Kdf {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, output key is exactly 32 bytes.
-    #[cfg_attr(feature = "creusot", ensures(
+    #[cfg_attr(creusot, ensures(
         match &result {
             Ok(key) => key.len() == 32,
             Err(_) => true

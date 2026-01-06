@@ -65,6 +65,7 @@ pub mod luks;
 pub use config::{CryptoConfig, MAGIC_BYTES, NONCE_LEN};
 pub use crypto::aes_gcm::AesGcmEncryptor;
 pub use crypto::kdf::{generate_salt_string, Argon2Kdf};
+#[cfg(not(creusot))]
 pub use crypto::streaming::{
     ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig, StreamHeader, MAGIC_BYTES_V3,
 };

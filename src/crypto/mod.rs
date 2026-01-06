@@ -15,6 +15,9 @@ pub mod kdf;
 pub mod pqc;
 #[cfg(feature = "post-quantum")]
 pub mod signatures;
+// Streaming module excluded from Creusot verification due to unsupported patterns
+// (String fields in structs, int-to-float casts)
+#[cfg(not(creusot))]
 pub mod streaming;
 
 #[cfg(all(test, feature = "post-quantum"))]

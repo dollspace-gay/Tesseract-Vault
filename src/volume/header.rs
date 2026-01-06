@@ -311,7 +311,7 @@ impl VolumeHeader {
     ///
     /// Proves: On success, output is exactly HEADER_SIZE (4096) bytes.
     // Note: Vec::len() in Pearlite requires model traits not available here
-    #[cfg_attr(creusot, creusot_contracts::ensures(true))]
+    #[cfg_attr(creusot, creusot_contracts::macros::ensures(true))]
     pub fn to_bytes(&self) -> Result<Vec<u8>, HeaderError> {
         let mut serialized = bincode::serialize(self)?;
 
@@ -351,7 +351,7 @@ impl VolumeHeader {
     ///
     /// Proves: Input must be exactly HEADER_SIZE (4096) bytes for success.
     // Note: slice::len() in Pearlite requires model traits not available here
-    #[cfg_attr(creusot, creusot_contracts::requires(true))]
+    #[cfg_attr(creusot, creusot_contracts::macros::requires(true))]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, HeaderError> {
         if bytes.len() != HEADER_SIZE {
             return Err(HeaderError::SizeMismatch {

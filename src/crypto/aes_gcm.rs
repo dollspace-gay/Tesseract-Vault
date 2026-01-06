@@ -43,7 +43,7 @@ impl Encryptor for AesGcmEncryptor {
     ///
     /// Property: On success, |ciphertext| = |plaintext| + 16 (authentication tag size)
     // Note: Complex Result/Vec length proofs require Creusot model traits not available here
-    #[cfg_attr(creusot, creusot_contracts::ensures(true))]
+    #[cfg_attr(creusot, creusot_contracts::macros::ensures(true))]
     fn encrypt(&self, key: &[u8; 32], nonce_bytes: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
         if nonce_bytes.len() != NONCE_LEN {
             return Err(CryptorError::Cryptography(format!(
@@ -72,7 +72,7 @@ impl Encryptor for AesGcmEncryptor {
     /// Precondition: ciphertext.len() >= 16 (must contain at least the auth tag)
     // Note: Complex Result/Vec length proofs require Creusot model traits not available here
     // Precondition: ciphertext must contain at least the 16-byte auth tag
-    #[cfg_attr(creusot, creusot_contracts::ensures(true))]
+    #[cfg_attr(creusot, creusot_contracts::macros::ensures(true))]
     fn decrypt(
         &self,
         key: &[u8; 32],

@@ -354,6 +354,7 @@ impl<T: Zeroize> Drop for ScrubGuard<T> {
     }
 }
 
+#[cfg(not(creusot))]
 impl<T: Zeroize> ::std::ops::Deref for ScrubGuard<T> {
     type Target = T;
 
@@ -362,6 +363,7 @@ impl<T: Zeroize> ::std::ops::Deref for ScrubGuard<T> {
     }
 }
 
+#[cfg(not(creusot))]
 impl<T: Zeroize> ::std::ops::DerefMut for ScrubGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value

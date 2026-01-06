@@ -365,6 +365,28 @@ The loop terminates when:
 
 This methodology provides **empirical evidence of security exhaustion**—not just absence of known vulnerabilities, but demonstrated inability of adversarial AI to find more.
 
+### **10.6 Ongoing Security Maintenance**
+
+**Important:** Reaching a high confabulation threshold does not mean the codebase is permanently secure. The adversarial security loop must be re-run before each new release for several reasons:
+
+1. **New Code Introduction:** Any new features, refactoring, or dependency updates can introduce vulnerabilities that didn't exist during the previous audit cycle.
+
+2. **Scanner Evolution:** AI security scanners improve over time. A scanner that previously confabulated on certain patterns may develop genuine detection capabilities in newer versions.
+
+3. **Emerging Threat Classes:** New vulnerability classes and attack techniques are discovered continuously. What was considered secure practice yesterday may be vulnerable to attacks discovered today.
+
+4. **Dependency Vulnerabilities:** Upstream dependencies may receive security advisories that affect your codebase, even if your code hasn't changed.
+
+5. **Context Drift:** The security context of the application may change—new deployment environments, integration points, or threat models can expose previously-acceptable code as vulnerable.
+
+**Recommended Cadence:**
+- **Pre-release:** Full adversarial loop before any version bump
+- **Major features:** Loop after significant new functionality
+- **Quarterly:** Scheduled re-audit even without code changes (scanner/threat evolution)
+- **Post-incident:** Immediate loop after any security disclosure in dependencies
+
+The confabulation threshold from a previous audit provides a *baseline*, not a *guarantee*. Security is a continuous process, not a destination.
+
 ---
 
 ## **11. WebAssembly Support**

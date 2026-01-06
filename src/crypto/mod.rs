@@ -6,6 +6,9 @@
 //! allowing for pluggable implementations of different encryption algorithms.
 
 pub mod aes_gcm;
+// Hardware detection module excluded from Creusot verification due to unsupported patterns
+// (string pattern matching, CPUID intrinsics, int-to-float casts)
+#[cfg(not(creusot))]
 pub mod hardware;
 pub mod kdf;
 #[cfg(feature = "post-quantum")]

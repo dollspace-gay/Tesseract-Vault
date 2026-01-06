@@ -1,7 +1,6 @@
 # Tesseract Vault
 
 [![Kani Verification](https://github.com/dollspace-gay/Tesseract/actions/workflows/kani.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/kani.yml)
-[![Creusot Proofs](https://github.com/dollspace-gay/Tesseract/actions/workflows/creusot.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/creusot.yml)
 [![Wycheproof Tests](https://github.com/dollspace-gay/Tesseract/actions/workflows/wycheproof.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/wycheproof.yml)
 [![NIST CAVP Tests](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml)
 [![Security Audit](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml)

@@ -36,9 +36,9 @@ pub mod error;
 // Modules excluded from Creusot verification due to unsupported patterns
 // (Deref/DerefMut/AsRef traits, enumerate/zip tuples, indexing operations)
 #[cfg(not(creusot))]
-pub mod memory;
-#[cfg(not(creusot))]
 pub mod daemon;
+#[cfg(not(creusot))]
+pub mod memory;
 #[cfg(not(creusot))]
 pub mod metadata;
 #[cfg(not(creusot))]

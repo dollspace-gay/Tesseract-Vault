@@ -31,23 +31,33 @@ pub mod config;
 #[cfg(kani)]
 mod config_kani;
 pub mod crypto;
-pub mod daemon;
 pub mod error;
 pub mod memory;
+
+// Modules excluded from Creusot verification due to unsupported patterns
+// (enumerate/zip return tuples which Creusot v0.8.0 can't handle)
+#[cfg(not(creusot))]
+pub mod daemon;
+#[cfg(not(creusot))]
 pub mod metadata;
+#[cfg(not(creusot))]
 pub mod power;
+#[cfg(not(creusot))]
 pub mod progress;
+#[cfg(not(creusot))]
 pub mod storage;
+#[cfg(not(creusot))]
 pub mod validation;
+#[cfg(not(creusot))]
 pub mod volume;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", not(creusot)))]
 pub mod wasm;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), not(creusot)))]
 pub mod hsm;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(creusot)))]
 pub mod luks;
 
 // Re-export commonly used types
@@ -66,11 +76,13 @@ pub use memory::scrub::{
     scrub_and_verify, scrub_bytes, scrub_bytes_pattern, ScrubGuard, ScrubPattern, ScrubStats,
 };
 pub use memory::LockedMemory;
+#[cfg(not(creusot))]
 pub use progress::{
     format_bytes, format_duration, ProgressCallback, ProgressReporter, ProgressTracker,
 };
+#[cfg(not(creusot))]
 pub use validation::validate_password;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), not(creusot)))]
 pub use validation::{get_and_validate_password, get_password};
 
 use rand::rngs::OsRng;
@@ -117,6 +129,7 @@ use zeroize::Zeroizing;
 ///     "MyStrongPassword123!"
 /// ).unwrap();
 /// ```
+#[cfg(not(creusot))]
 pub fn encrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
     // Derive encryption key from password
     let salt = generate_salt_string();
@@ -172,6 +185,7 @@ pub fn encrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
 /// Returns an error if:
 /// - Password fails validation
 /// - Any error from `encrypt_file`
+#[cfg(not(creusot))]
 pub fn encrypt_file_validated(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
     validation::validate_password(password)?;
     encrypt_file(input_path, output_path, password)
@@ -197,7 +211,7 @@ pub fn encrypt_file_validated(input_path: &Path, output_path: &Path, password: &
 /// - Input file cannot be read
 /// - Encryption fails
 /// - Output file cannot be written
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), not(creusot)))]
 pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
     input_path: &Path,
     output_path: &Path,
@@ -270,7 +284,7 @@ pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
 /// - Input file cannot be read or has invalid format
 /// - Password is incorrect
 /// - Decryption or authentication fails
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), not(creusot)))]
 pub fn decrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
     input_path: &Path,
     output_path: &Path,
@@ -344,6 +358,7 @@ pub fn decrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
 ///     "MyStrongPassword123!"
 /// ).unwrap();
 /// ```
+#[cfg(not(creusot))]
 pub fn decrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
     use crate::config::MAGIC_BYTES;
 

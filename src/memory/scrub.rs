@@ -98,7 +98,7 @@ pub struct ScrubStats {
 ///
 /// Proves: After scrubbing, all bytes in the buffer are zero.
 // Note: Complex slice quantifier proofs require Creusot model traits (ShallowModel)
-#[cfg_attr(creusot, creusot_contracts::prelude::ensures(true))]
+#[cfg_attr(creusot, creusot_contracts::ensures(true))]
 pub fn scrub_bytes(data: &mut [u8]) {
     // Use zeroize for the actual wiping (it handles volatile writes)
     data.zeroize();
@@ -233,7 +233,7 @@ pub fn scrub_and_verify(data: &mut [u8], pattern: ScrubPattern) -> ScrubStats {
 /// Proves: After overwriting, all bytes equal the specified pattern.
 // Note: Complex slice quantifier proofs require Creusot model traits (ShallowModel)
 #[inline(never)]
-#[cfg_attr(creusot, creusot_contracts::prelude::ensures(true))]
+#[cfg_attr(creusot, creusot_contracts::ensures(true))]
 fn overwrite_with_pattern(data: &mut [u8], pattern: u8) {
     // Use volatile writes to prevent optimization
     for byte in data.iter_mut() {

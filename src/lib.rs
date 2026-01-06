@@ -384,6 +384,7 @@ pub fn decrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
 }
 
 /// Decrypts a v1 format file (legacy, in-memory).
+#[cfg(not(creusot))]
 fn decrypt_file_v1(mut file: File, output_path: &Path, password: &str) -> Result<()> {
     let header = storage::format::read_encrypted_header(&mut file)?;
 
@@ -402,6 +403,7 @@ fn decrypt_file_v1(mut file: File, output_path: &Path, password: &str) -> Result
 }
 
 /// Decrypts a v3 format file (streaming, memory-efficient, NIST-compliant).
+#[cfg(not(creusot))]
 fn decrypt_file_v3(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
     // First, read just the header to get the salt for key derivation
     let mut file = File::open(input_path)?;

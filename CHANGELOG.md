@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-01-06
+
+### Added
+- Creusot deductive formal verification with Why3find provers
+- Creusot annotations for cryptographic functions (ensures/requires contracts)
+
+### Changed
+- Updated Creusot annotation paths to use `creusot_contracts::macros::` namespace
+- Excluded modules with unsupported patterns from Creusot verification scope
+
 ### Security
 - **[CRITICAL]** Fixed DoS via memory exhaustion in streaming decryption - added chunk size validation before allocation (CWE-789)
 - **[CRITICAL]** Fixed static nonce reuse in migration - now generates random nonce per encryption (CWE-329)
@@ -111,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - NIST CAVP validation tests
 - Formal verification with Kani and Prusti
 
-[Unreleased]: https://github.com/dollspace-gay/Tesseract/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/dollspace-gay/Tesseract/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/dollspace-gay/Tesseract/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/dollspace-gay/Tesseract/compare/v0.1.0...v1.5.0
 [0.1.0]: https://github.com/dollspace-gay/Tesseract/releases/tag/v0.1.0

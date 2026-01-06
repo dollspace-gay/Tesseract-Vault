@@ -32,10 +32,11 @@ pub mod config;
 mod config_kani;
 pub mod crypto;
 pub mod error;
-pub mod memory;
 
 // Modules excluded from Creusot verification due to unsupported patterns
-// (enumerate/zip return tuples which Creusot v0.8.0 can't handle)
+// (Deref/DerefMut/AsRef traits, enumerate/zip tuples, indexing operations)
+#[cfg(not(creusot))]
+pub mod memory;
 #[cfg(not(creusot))]
 pub mod daemon;
 #[cfg(not(creusot))]
@@ -69,12 +70,15 @@ pub use crypto::streaming::{
 };
 pub use crypto::{Encryptor, KeyDerivation};
 pub use error::{CryptorError, Result};
+#[cfg(not(creusot))]
 pub use memory::allocator::{AllocatorStats, SecureAllocator};
-#[cfg(feature = "post-quantum")]
+#[cfg(all(feature = "post-quantum", not(creusot)))]
 pub use memory::pool::{EncryptedAllocation, EncryptedMemoryPool, SecurityLevel};
+#[cfg(not(creusot))]
 pub use memory::scrub::{
     scrub_and_verify, scrub_bytes, scrub_bytes_pattern, ScrubGuard, ScrubPattern, ScrubStats,
 };
+#[cfg(not(creusot))]
 pub use memory::LockedMemory;
 #[cfg(not(creusot))]
 pub use progress::{

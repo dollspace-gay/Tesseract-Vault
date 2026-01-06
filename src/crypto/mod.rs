@@ -11,9 +11,11 @@ pub mod aes_gcm;
 #[cfg(not(creusot))]
 pub mod hardware;
 pub mod kdf;
-#[cfg(feature = "post-quantum")]
+// Post-quantum modules excluded from Creusot verification due to unsupported patterns
+// (chunks_exact().enumerate() iterator, dyn Error types)
+#[cfg(all(feature = "post-quantum", not(creusot)))]
 pub mod pqc;
-#[cfg(feature = "post-quantum")]
+#[cfg(all(feature = "post-quantum", not(creusot)))]
 pub mod signatures;
 // Streaming module excluded from Creusot verification due to unsupported patterns
 // (String fields in structs, int-to-float casts)

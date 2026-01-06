@@ -293,22 +293,22 @@ CodeScanner is an AI-powered security analysis tool that performs deep semantic 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    ADVERSARIAL SECURITY LOOP                     │
+│                    ADVERSARIAL SECURITY LOOP                    │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
+│                                                                 │
 │   ┌──────────────┐         ┌──────────────┐                     │
 │   │  CodeScanner │ ──────► │ Vulnerability │                    │
 │   │  (Gemini 3)  │         │    Report     │                    │
 │   └──────────────┘         └───────┬───────┘                    │
-│          ▲                         │                             │
-│          │                         ▼                             │
+│          ▲                         │                            │
+│          │                         ▼                            │
 │   ┌──────┴───────┐         ┌──────────────┐                     │
 │   │   Codebase   │ ◄────── │ Claude Opus  │                     │
 │   │   (Rust)     │         │   (Fixes)    │                     │
 │   └──────────────┘         └──────────────┘                     │
-│                                                                  │
+│                                                                 │
 │   Loop terminates when: Scanner produces >75% false positives   │
-│                                                                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

@@ -17,8 +17,8 @@
 //! - FIPS 204: https://csrc.nist.gov/pubs/fips/204/final
 
 use tesseract_lib::crypto::pqc::{
-    encapsulate, validate_encapsulation_key, MlKemKeyPair, CIPHERTEXT_SIZE,
-    PUBLIC_KEY_SIZE, SECRET_KEY_SIZE, SHARED_SECRET_SIZE,
+    encapsulate, validate_encapsulation_key, MlKemKeyPair, CIPHERTEXT_SIZE, PUBLIC_KEY_SIZE,
+    SECRET_KEY_SIZE, SHARED_SECRET_SIZE,
 };
 use tesseract_lib::crypto::signatures::{verify, MlDsaKeyPair, SecurityLevel};
 

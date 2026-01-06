@@ -232,12 +232,14 @@ fn verify_custom_scrub_result() {
 ///
 /// Property: DoD 5220.22-M pattern performs 4 passes (3 patterns + final zero)
 #[kani::proof]
-#[kani::unwind(17)]
+#[kani::unwind(5)] // 4 bytes + 1 for loop termination
 fn verify_dod_scrub_passes() {
     use super::scrub::scrub_bytes_pattern;
 
+    // Use smaller buffer (4 bytes) to keep verification tractable
+    // DoD pattern has 4 passes × N bytes of symbolic exploration
     let size: usize = kani::any();
-    kani::assume(size > 0 && size <= 16);
+    kani::assume(size > 0 && size <= 4);
 
     // Create buffer with arbitrary content
     let mut data = vec![0u8; size];

@@ -80,7 +80,11 @@ pub fn filetime_to_unix(filetime: u64) -> u64 {
 /// assert_eq!(unix_to_filetime(1), 116_444_736_010_000_000);
 /// ```
 pub fn unix_to_filetime(unix_time: u64) -> u64 {
-    FILETIME_UNIX_DIFF + (unix_time * TICKS_PER_SECOND)
+    // Use saturating arithmetic to prevent overflow panics in debug builds
+    // and wrapping in release builds. For invalid timestamps, saturate to max.
+    unix_time
+        .saturating_mul(TICKS_PER_SECOND)
+        .saturating_add(FILETIME_UNIX_DIFF)
 }
 
 /// Convert `SystemTime` to Windows FILETIME.
@@ -117,6 +121,7 @@ pub fn systemtime_to_filetime(time: SystemTime) -> u64 {
 /// - Strips leading backslashes
 /// - Converts all backslashes to forward slashes
 /// - Ensures the path starts with a forward slash (root)
+/// - **Security**: Filters out `..` (parent directory) components to prevent path traversal attacks
 ///
 /// # Arguments
 ///
@@ -125,6 +130,12 @@ pub fn systemtime_to_filetime(time: SystemTime) -> u64 {
 /// # Returns
 ///
 /// A normalized `PathBuf` suitable for internal filesystem operations.
+///
+/// # Security
+///
+/// This function prevents path traversal attacks by ignoring `..` components.
+/// A path like `\foo\..\..\..\etc\passwd` will be normalized to `/foo/etc/passwd`,
+/// not allowing escape from the virtual filesystem root.
 ///
 /// # Examples
 ///
@@ -135,15 +146,37 @@ pub fn systemtime_to_filetime(time: SystemTime) -> u64 {
 /// assert_eq!(normalize_path(Path::new("\\foo\\bar")), Path::new("/foo/bar"));
 /// assert_eq!(normalize_path(Path::new("\\")), Path::new("/"));
 /// assert_eq!(normalize_path(Path::new("")), Path::new("/"));
+/// // Path traversal attempts are neutralized
+/// assert_eq!(normalize_path(Path::new("\\foo\\..\\bar")), Path::new("/foo/bar"));
 /// ```
 pub fn normalize_path(path: &Path) -> PathBuf {
+    // First convert backslashes to forward slashes for consistent parsing
     let path_str = path.to_string_lossy();
-    let normalized = path_str.trim_start_matches('\\').replace('\\', "/");
+    let normalized_str = path_str.replace('\\', "/");
 
-    if normalized.is_empty() {
+    // Build a clean path by filtering components manually
+    // We split on '/' to avoid platform-specific Path::components() behavior
+    let mut components: Vec<&str> = Vec::new();
+
+    for part in normalized_str.split('/') {
+        match part {
+            "" | "." => {
+                // Skip empty components and current directory markers
+            }
+            ".." => {
+                // Security: Ignore ".." to prevent path traversal attacks
+                // We do NOT pop from components - this prevents escaping the root
+            }
+            name => {
+                components.push(name);
+            }
+        }
+    }
+
+    if components.is_empty() {
         PathBuf::from("/")
     } else {
-        PathBuf::from(format!("/{}", normalized))
+        PathBuf::from(format!("/{}", components.join("/")))
     }
 }
 
@@ -238,9 +271,15 @@ pub fn is_directory(attributes: u32) -> bool {
 ///
 /// # Returns
 ///
-/// The allocation size (rounded up to block boundary).
+/// The allocation size (rounded up to block boundary). Uses saturating
+/// arithmetic to prevent integer overflow (CWE-190).
 pub fn calculate_allocation_size(file_size: u64, block_size: u64) -> u64 {
-    file_size.div_ceil(block_size) * block_size
+    // Guard against division by zero
+    if block_size == 0 {
+        return file_size;
+    }
+    // Use saturating_mul to prevent overflow when file_size is near u64::MAX
+    file_size.div_ceil(block_size).saturating_mul(block_size)
 }
 
 /// Extract the filename component from a path.
@@ -456,6 +495,70 @@ mod tests {
         assert_eq!(
             normalize_path(Path::new("\\foo-bar_baz.txt")),
             PathBuf::from("/foo-bar_baz.txt")
+        );
+    }
+
+    // ========================================
+    // Path Traversal Security Tests
+    // ========================================
+
+    #[test]
+    fn test_normalize_path_traversal_simple() {
+        // Basic path traversal attempt should be neutralized
+        assert_eq!(
+            normalize_path(Path::new("\\foo\\..\\bar")),
+            PathBuf::from("/foo/bar")
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_traversal_escape_root() {
+        // Attempt to escape root should be blocked
+        assert_eq!(
+            normalize_path(Path::new("\\..\\..\\..\\etc\\passwd")),
+            PathBuf::from("/etc/passwd")
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_traversal_mixed() {
+        // Mixed traversal attempts
+        assert_eq!(
+            normalize_path(Path::new("\\foo\\bar\\..\\..\\..\\secret")),
+            PathBuf::from("/foo/bar/secret")
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_traversal_dotdot_only() {
+        // Only ".." should result in root
+        assert_eq!(normalize_path(Path::new("\\..\\..")), PathBuf::from("/"));
+    }
+
+    #[test]
+    fn test_normalize_path_traversal_forward_slashes() {
+        // Forward slash traversal
+        assert_eq!(
+            normalize_path(Path::new("/foo/../bar")),
+            PathBuf::from("/foo/bar")
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_current_dir() {
+        // "." should be ignored
+        assert_eq!(
+            normalize_path(Path::new("\\.\\foo\\.\\bar")),
+            PathBuf::from("/foo/bar")
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_traversal_in_middle() {
+        // Traversal in the middle of path
+        assert_eq!(
+            normalize_path(Path::new("\\a\\b\\..\\c\\d")),
+            PathBuf::from("/a/b/c/d")
         );
     }
 

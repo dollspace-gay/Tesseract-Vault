@@ -19,6 +19,7 @@ pub mod winfsp_utils;
 
 use std::path::Path;
 use thiserror::Error;
+use zeroize::Zeroize;
 
 /// Errors that can occur during volume mounting
 #[derive(Debug, Error)]
@@ -93,6 +94,15 @@ impl Default for MountOptions {
             fs_name: Some("Tesseract".to_string()),
             hidden_offset: None,
             hidden_password: None,
+        }
+    }
+}
+
+impl Drop for MountOptions {
+    fn drop(&mut self) {
+        // Securely zeroize hidden_password from memory (CWE-316 mitigation)
+        if let Some(ref mut password) = self.hidden_password {
+            password.zeroize();
         }
     }
 }

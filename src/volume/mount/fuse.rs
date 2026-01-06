@@ -611,7 +611,12 @@ pub fn mount(
 
     // Build mount options
     let mut mount_opts = vec![
-        MountOption::FSName(options.fs_name.unwrap_or_else(|| "Tesseract".to_string())),
+        MountOption::FSName(
+            options
+                .fs_name
+                .clone()
+                .unwrap_or_else(|| "Tesseract".to_string()),
+        ),
         MountOption::NoAtime,
     ];
 
@@ -632,7 +637,7 @@ pub fn mount(
         .map_err(|e| MountError::Other(format!("FUSE mount failed: {}", e)))?;
 
     Ok(FuseMountHandle {
-        mount_point: options.mount_point,
+        mount_point: options.mount_point.clone(),
         session: Some(session),
     })
 }

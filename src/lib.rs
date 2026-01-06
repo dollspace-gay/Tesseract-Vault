@@ -78,6 +78,7 @@ use rand_core::TryRngCore;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use zeroize::Zeroizing;
 
 /// Encrypts a file with a password using streaming (chunked) encryption.
 ///
@@ -443,12 +444,16 @@ pub fn encrypt_bytes(plaintext: &[u8], password: &str) -> Result<(Vec<u8>, Vec<u
 /// * `nonce` - Nonce bytes (from encryption)
 /// * `ciphertext` - Encrypted data
 /// * `password` - Password for decryption
+///
+/// # Security
+///
+/// Returns plaintext in zeroizing memory that is automatically cleared when dropped.
 pub fn decrypt_bytes(
     salt: &[u8],
     nonce: &[u8],
     ciphertext: &[u8],
     password: &str,
-) -> Result<Vec<u8>> {
+) -> Result<Zeroizing<Vec<u8>>> {
     let salt_str = std::str::from_utf8(salt).map_err(|_| CryptorError::InvalidFormat)?;
     let salt_string = argon2::password_hash::SaltString::from_b64(salt_str)
         .map_err(|e| CryptorError::PasswordHash(e.to_string()))?;
@@ -507,7 +512,7 @@ mod tests {
         let (salt, nonce, ciphertext) = encrypt_bytes(plaintext, password).unwrap();
         let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, password).unwrap();
 
-        assert_eq!(decrypted, plaintext);
+        assert_eq!(decrypted.as_slice(), plaintext.as_slice());
     }
 
     #[test]
@@ -615,7 +620,7 @@ mod tests {
         let (salt, nonce, ciphertext) = encrypt_bytes(&plaintext, password).unwrap();
         let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, password).unwrap();
 
-        assert_eq!(decrypted, plaintext);
+        assert_eq!(decrypted.as_slice(), plaintext.as_slice());
     }
 
     #[test]
@@ -701,7 +706,7 @@ mod tests {
         let (salt, nonce, ciphertext) = encrypt_bytes(plaintext, password).unwrap();
         let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, password).unwrap();
 
-        assert_eq!(decrypted, plaintext);
+        assert_eq!(decrypted.as_slice(), plaintext.as_slice());
     }
 
     #[test]
@@ -712,7 +717,7 @@ mod tests {
         let (salt, nonce, ciphertext) = encrypt_bytes(plaintext, password).unwrap();
         let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, password).unwrap();
 
-        assert_eq!(decrypted, plaintext);
+        assert_eq!(decrypted.as_slice(), plaintext.as_slice());
     }
 
     #[test]
@@ -869,7 +874,7 @@ mod tests {
         let (salt, nonce, ciphertext) = encrypt_bytes(&plaintext, password).unwrap();
         let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, password).unwrap();
 
-        assert_eq!(decrypted, plaintext);
+        assert_eq!(decrypted.as_slice(), plaintext.as_slice());
     }
 
     #[test]

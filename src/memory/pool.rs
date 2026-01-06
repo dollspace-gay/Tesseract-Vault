@@ -280,32 +280,45 @@ impl EncryptedAllocation {
     /// allocation.write(b"sensitive data").unwrap();
     /// ```
     pub fn write(&mut self, plaintext: &[u8]) -> Result<()> {
-        if plaintext.len() > self.data.len() {
+        // Account for nonce prepended to ciphertext (CWE-329 mitigation)
+        const NONCE_SIZE: usize = 12;
+        let total_size = plaintext.len() + NONCE_SIZE;
+
+        if total_size > self.data.len() {
             return Err(CryptorError::Cryptography(format!(
-                "Data too large: {} bytes, allocation is {} bytes",
+                "Data too large: {} bytes (+ {} nonce), allocation is {} bytes",
                 plaintext.len(),
+                NONCE_SIZE,
                 self.data.len()
             )));
         }
 
-        // Create ChaCha20 cipher using allocation's own key
-        let mut cipher = ChaCha20::new((&*self.encryption_key).into(), (&self.nonce).into());
+        // Generate a fresh nonce for EVERY write to prevent nonce reuse (CWE-329)
+        // This is critical: reusing a nonce with ChaCha20 completely breaks security
+        let mut fresh_nonce = [0u8; NONCE_SIZE];
+        rand::rng().fill_bytes(&mut fresh_nonce);
+
+        // Create ChaCha20 cipher with fresh nonce
+        let mut cipher = ChaCha20::new((&*self.encryption_key).into(), (&fresh_nonce).into());
 
         // Encrypt the plaintext
         let mut ciphertext = plaintext.to_vec();
         cipher.apply_keystream(&mut ciphertext);
 
-        // Store encrypted data
+        // Store nonce + encrypted data (nonce is prepended for read() to extract)
         if let Some(ref mut locked) = self.locked {
-            // Write to locked memory
-            locked[..ciphertext.len()].copy_from_slice(&ciphertext);
+            // Write nonce then ciphertext to locked memory
+            locked[..NONCE_SIZE].copy_from_slice(&fresh_nonce);
+            locked[NONCE_SIZE..total_size].copy_from_slice(&ciphertext);
         } else {
-            // Write to regular memory
-            self.data[..ciphertext.len()].copy_from_slice(&ciphertext);
+            // Write nonce then ciphertext to regular memory
+            self.data[..NONCE_SIZE].copy_from_slice(&fresh_nonce);
+            self.data[NONCE_SIZE..total_size].copy_from_slice(&ciphertext);
         }
 
-        // Zero the temporary ciphertext
+        // Zero temporaries
         ciphertext.zeroize();
+        fresh_nonce.zeroize();
 
         Ok(())
     }
@@ -330,15 +343,31 @@ impl EncryptedAllocation {
     /// let data = allocation.read().unwrap();
     /// ```
     pub fn read(&self) -> Result<Zeroizing<Vec<u8>>> {
-        // Get encrypted data
-        let ciphertext = if let Some(ref locked) = self.locked {
+        const NONCE_SIZE: usize = 12;
+
+        // Get stored data (nonce + ciphertext)
+        let stored = if let Some(ref locked) = self.locked {
             locked.as_ref()
         } else {
             &self.data
         };
 
-        // Create ChaCha20 cipher (same key and nonce for decryption)
-        let mut cipher = ChaCha20::new((&*self.encryption_key).into(), (&self.nonce).into());
+        // Ensure we have at least the nonce
+        if stored.len() < NONCE_SIZE {
+            return Err(CryptorError::Cryptography(
+                "Allocation too small to contain nonce".to_string(),
+            ));
+        }
+
+        // Extract nonce from prepended bytes (CWE-329 mitigation)
+        let mut nonce = [0u8; NONCE_SIZE];
+        nonce.copy_from_slice(&stored[..NONCE_SIZE]);
+
+        // Get ciphertext (everything after nonce)
+        let ciphertext = &stored[NONCE_SIZE..];
+
+        // Create ChaCha20 cipher with extracted nonce
+        let mut cipher = ChaCha20::new((&*self.encryption_key).into(), (&nonce).into());
 
         // Decrypt the ciphertext
         let mut plaintext = Zeroizing::new(ciphertext.to_vec());

@@ -2,7 +2,12 @@
 // SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Daemon client implementation
 //!
-//! Provides a client interface for communicating with the daemon server
+//! Provides a client interface for communicating with the daemon server.
+//!
+//! # Authentication
+//!
+//! The client automatically loads the authentication token from the token file
+//! created by the daemon. All commands are wrapped in an authenticated request.
 
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -13,39 +18,117 @@ use std::os::unix::net::UnixStream;
 #[cfg(windows)]
 use std::net::TcpStream;
 
-use super::protocol::{DaemonCommand, DaemonResponse};
+use super::auth::AuthManager;
+use super::protocol::{AuthenticatedRequest, DaemonCommand, DaemonResponse};
+use zeroize::Zeroize;
+
+/// Maximum response size to prevent memory exhaustion DoS (16 MB)
+const MAX_RESPONSE_SIZE: usize = 16 * 1024 * 1024;
 
 /// Client for communicating with the daemon
+///
+/// # Security
+///
+/// The Drop implementation zeroizes the auth_token from memory (CWE-316 mitigation).
 pub struct DaemonClient {
     socket_path: PathBuf,
+    /// Authentication token (loaded from file)
+    auth_token: Option<String>,
+}
+
+impl Drop for DaemonClient {
+    fn drop(&mut self) {
+        // Securely zeroize the auth token from memory (CWE-316)
+        if let Some(ref mut token) = self.auth_token {
+            token.zeroize();
+        }
+    }
 }
 
 impl DaemonClient {
     /// Create a new daemon client
+    ///
+    /// This will attempt to load the authentication token from the token file.
+    /// If the token cannot be loaded (e.g., daemon not running), authentication
+    /// will not be available but the client can still send ping requests.
     pub fn new() -> Self {
+        // Try to load auth token
+        let auth_token = match AuthManager::load() {
+            Ok(auth) => Some(auth.token().to_string()),
+            Err(_) => None, // Token not available - daemon may not be running
+        };
+
         Self {
             socket_path: Self::default_socket_path(),
+            auth_token,
+        }
+    }
+
+    /// Create a client with a specific auth token (for testing)
+    #[cfg(test)]
+    pub fn with_token(token: String) -> Self {
+        Self {
+            socket_path: Self::default_socket_path(),
+            auth_token: Some(token),
         }
     }
 
     /// Get the default socket path for the platform
     #[cfg(unix)]
     fn default_socket_path() -> PathBuf {
+        // Use XDG_RUNTIME_DIR if available (preferred - per-session, auto-cleaned)
+        // Otherwise fall back to XDG_DATA_HOME or ~/.local/share/tesseract
+        // SECURITY: Never use /tmp to prevent symlink attacks (CWE-377)
         if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
-            PathBuf::from(runtime_dir).join("tesseract-daemon.sock")
+            PathBuf::from(runtime_dir).join("tesseract/daemon.sock")
+        } else if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
+            PathBuf::from(data_home).join("tesseract/daemon.sock")
+        } else if let Ok(home) = std::env::var("HOME") {
+            PathBuf::from(home).join(".local/share/tesseract/daemon.sock")
         } else {
-            PathBuf::from("/tmp/tesseract-daemon.sock")
+            // Use /var/run/user/{uid} as fallback (user-owned, not world-writable)
+            // This is more secure than /tmp which is world-writable
+            #[cfg(unix)]
+            {
+                let uid = unsafe { libc::getuid() };
+                PathBuf::from(format!("/var/run/user/{}/tesseract/daemon.sock", uid))
+            }
+            #[cfg(not(unix))]
+            {
+                // This branch shouldn't be reached on Unix, but provide a safe default
+                PathBuf::from("/var/tmp/tesseract-daemon.sock")
+            }
         }
     }
 
     #[cfg(windows)]
     fn default_socket_path() -> PathBuf {
-        PathBuf::from("127.0.0.1:37284")
+        // Port is configurable via TESSERACT_DAEMON_PORT environment variable
+        let port = std::env::var("TESSERACT_DAEMON_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(37284);
+        PathBuf::from(format!("127.0.0.1:{}", port))
     }
 
     /// Check if the daemon is running
     pub fn is_running(&self) -> bool {
         self.send_command(DaemonCommand::Ping).is_ok()
+    }
+
+    /// Reload the authentication token from disk
+    ///
+    /// Call this if the daemon was restarted and has a new token.
+    pub fn reload_token(&mut self) {
+        self.auth_token = match AuthManager::load() {
+            Ok(auth) => Some(auth.token().to_string()),
+            Err(_) => None,
+        };
+    }
+
+    /// Check if the client has an authentication token
+    pub fn has_token(&self) -> bool {
+        self.auth_token.is_some()
     }
 
     /// Send a command to the daemon
@@ -70,7 +153,7 @@ impl DaemonClient {
         command: DaemonCommand,
     ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
         let mut stream = UnixStream::connect(&self.socket_path)?;
-        Self::send_command_impl(&mut stream, command)
+        self.send_command_impl(&mut stream, command)
     }
 
     #[cfg(windows)]
@@ -80,27 +163,49 @@ impl DaemonClient {
     ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
         let addr = self.socket_path.to_string_lossy();
         let mut stream = TcpStream::connect(addr.as_ref())?;
-        Self::send_command_impl(&mut stream, command)
+        self.send_command_impl(&mut stream, command)
     }
 
     /// Implementation of command sending (generic over stream type)
     fn send_command_impl<S: Read + Write>(
+        &self,
         stream: &mut S,
-        command: DaemonCommand,
+        mut command: DaemonCommand,
     ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
-        // Serialize command
-        let command_bytes = command.to_bytes()?;
+        // Wrap command in authenticated request if we have a token
+        let request_bytes = if let Some(ref token) = self.auth_token {
+            let mut request = AuthenticatedRequest::new(token.clone(), command);
+            let bytes = request.to_bytes()?;
+            // Zeroize passwords after serialization (CWE-316 mitigation)
+            request.command.zeroize_secrets();
+            bytes
+        } else {
+            // Fall back to legacy unauthenticated command (only Ping will work)
+            let bytes = command.to_bytes()?;
+            // Zeroize passwords after serialization (CWE-316 mitigation)
+            command.zeroize_secrets();
+            bytes
+        };
 
-        // Send command with length prefix
-        let len_bytes = (command_bytes.len() as u32).to_be_bytes();
+        // Send request with length prefix
+        let len_bytes = (request_bytes.len() as u32).to_be_bytes();
         stream.write_all(&len_bytes)?;
-        stream.write_all(&command_bytes)?;
+        stream.write_all(&request_bytes)?;
         stream.flush()?;
 
         // Read response (prefixed with 4-byte length)
         let mut len_bytes = [0u8; 4];
         stream.read_exact(&mut len_bytes)?;
         let len = u32::from_be_bytes(len_bytes) as usize;
+
+        // Validate response size to prevent memory exhaustion DoS
+        if len > MAX_RESPONSE_SIZE {
+            return Err(format!(
+                "Response size {} exceeds maximum allowed size {}",
+                len, MAX_RESPONSE_SIZE
+            )
+            .into());
+        }
 
         let mut buffer = vec![0u8; len];
         stream.read_exact(&mut buffer)?;

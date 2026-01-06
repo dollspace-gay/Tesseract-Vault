@@ -31,7 +31,7 @@ use super::header::{
 };
 use super::keyslot::{KeySlotError, KeySlots, MasterKey};
 use crate::crypto::aes_gcm::AesGcmEncryptor;
-use crate::crypto::pqc::{encapsulate, MlKemKeyPair};
+use crate::crypto::pqc::{encapsulate_unchecked, MlKemKeyPair};
 use crate::crypto::Encryptor;
 
 /// Errors that can occur during volume migration
@@ -243,7 +243,8 @@ impl VolumeMigration {
         let encrypted_dk = self.encrypt_decapsulation_key(&master_key, &pqc_keypair)?;
 
         // 7. Perform encapsulation to create ciphertext
-        let (ciphertext, _shared_secret) = encapsulate(pqc_keypair.encapsulation_key())?;
+        // Using unchecked version since keypair was locally generated (safe)
+        let (ciphertext, _shared_secret) = encapsulate_unchecked(pqc_keypair.encapsulation_key())?;
 
         // 8. Create PQC metadata with raw byte arrays
         let mut ek_bytes = [0u8; 1568];
@@ -284,13 +285,20 @@ impl VolumeMigration {
     }
 
     /// Encrypt the PQC decapsulation key with the master key
+    ///
+    /// Uses a random nonce prepended to the ciphertext to avoid nonce reuse (CWE-329).
+    /// Output format: nonce (12 bytes) || ciphertext || auth_tag (16 bytes)
     fn encrypt_decapsulation_key(
         &self,
         master_key: &MasterKey,
         keypair: &MlKemKeyPair,
     ) -> Result<Vec<u8>> {
         let encryptor = AesGcmEncryptor;
-        let nonce = [0u8; 12]; // Use zero nonce for deterministic encryption
+
+        // Generate random nonce to prevent nonce reuse attack (CWE-329)
+        let mut nonce = [0u8; 12];
+        getrandom::fill(&mut nonce)
+            .map_err(|e| MigrationError::Encryption(format!("Failed to generate nonce: {}", e)))?;
 
         let (_, dk_bytes) = keypair.to_bytes();
 
@@ -300,11 +308,16 @@ impl VolumeMigration {
             .try_into()
             .map_err(|_| MigrationError::Encryption("Invalid master key size".to_string()))?;
 
-        let encrypted = encryptor
+        let ciphertext = encryptor
             .encrypt(key_array, &nonce, &dk_bytes)
             .map_err(|e| MigrationError::Encryption(e.to_string()))?;
 
-        Ok(encrypted)
+        // Prepend nonce to ciphertext for storage
+        let mut result = Vec::with_capacity(12 + ciphertext.len());
+        result.extend_from_slice(&nonce);
+        result.extend_from_slice(&ciphertext);
+
+        Ok(result)
     }
 
     /// Write V2 header and PQC metadata to volume

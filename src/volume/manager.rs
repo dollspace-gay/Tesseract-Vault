@@ -210,22 +210,24 @@ impl VolumeManager {
             .canonicalize()
             .unwrap_or_else(|_| container_path.as_ref().to_path_buf());
 
-        // Check if already mounted
-        {
-            let mounted = self.mounted.lock().unwrap();
-            if mounted.contains_key(&container_path) {
-                return Err(VolumeManagerError::AlreadyMounted(container_path));
-            }
+        // Hold the lock for the entire mount operation to prevent TOCTOU race conditions
+        // This ensures that between checking "is it mounted?" and "insert new mount",
+        // no other thread can mount the same container or use the same mount point.
+        let mut mounted = self.mounted.lock().unwrap();
 
-            // Check if mount point is already in use
-            if mounted
-                .values()
-                .any(|v| v.mount_point() == options.mount_point)
-            {
-                return Err(VolumeManagerError::MountPointInUse(
-                    options.mount_point.clone(),
-                ));
-            }
+        // Check if already mounted
+        if mounted.contains_key(&container_path) {
+            return Err(VolumeManagerError::AlreadyMounted(container_path));
+        }
+
+        // Check if mount point is already in use
+        if mounted
+            .values()
+            .any(|v| v.mount_point() == options.mount_point)
+        {
+            return Err(VolumeManagerError::MountPointInUse(
+                options.mount_point.clone(),
+            ));
         }
 
         // Get container info and determine password for mounting
@@ -249,7 +251,8 @@ impl VolumeManager {
                     container_path.clone(),
                     hidden_size,
                     true,
-                    password.to_string(),
+                    // SECURITY FIX (CWE-287): Use hidden volume password, not outer password
+                    hidden_pwd.to_string(),
                 )
             } else {
                 // Mount normal volume
@@ -274,13 +277,13 @@ impl VolumeManager {
             hidden_offset: options.hidden_offset,
         };
 
-        // Store in mounted map
+        // Store in mounted map (we already hold the lock)
         let managed = ManagedVolume {
             info: info.clone(),
             mount_handle: Arc::new(Mutex::new(Some(mount_handle))),
         };
 
-        self.mounted.lock().unwrap().insert(container_path, managed);
+        mounted.insert(container_path, managed);
 
         Ok(info)
     }
@@ -708,7 +711,11 @@ mod tests {
         let options = MountOptions {
             mount_point: PathBuf::from("/mnt/test"),
             read_only: false,
-            ..Default::default()
+            allow_other: false,
+            auto_unmount: true,
+            fs_name: Some("Tesseract".to_string()),
+            hidden_offset: None,
+            hidden_password: None,
         };
 
         // This will return an error when encrypted-volumes feature is disabled
@@ -813,9 +820,11 @@ mod tests {
         let options = MountOptions {
             mount_point: PathBuf::from("/mnt/hidden"),
             read_only: true,
+            allow_other: false,
+            auto_unmount: true,
+            fs_name: Some("Tesseract".to_string()),
             hidden_offset: Some(1024 * 1024),
             hidden_password: Some("secret".to_string()),
-            ..Default::default()
         };
 
         assert!(options.read_only);
@@ -919,7 +928,12 @@ mod tests {
         let mut manager = VolumeManager::new();
         let options = MountOptions {
             mount_point: PathBuf::from("/mnt/test"),
-            ..Default::default()
+            read_only: false,
+            allow_other: false,
+            auto_unmount: true,
+            fs_name: Some("Tesseract".to_string()),
+            hidden_offset: None,
+            hidden_password: None,
         };
 
         // Try to mount a path that definitely doesn't exist

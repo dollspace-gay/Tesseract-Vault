@@ -830,18 +830,44 @@ impl<B: super::io::AsyncStorageBackend> CloudWipeManager<B> {
 
     /// Checks for and returns pending wipe commands for this volume
     ///
-    /// Filters commands by volume_id to ensure we only process commands
-    /// intended for this volume.
+    /// Filters commands by volume_id and validates freshness to ensure we only
+    /// process commands intended for this volume that haven't expired.
+    ///
+    /// # Security Note (CWE-345)
+    ///
+    /// This function performs basic validation (volume ID, freshness, nonce replay)
+    /// but does NOT verify cryptographic signatures. Callers MUST pass returned
+    /// commands through `RemoteWipeManager::verify_and_execute()` before execution
+    /// to verify the HMAC signature with the secret wipe token.
     pub async fn poll_commands(&self) -> SyncResult<Vec<WipeCommand>> {
         let commands = self.load_commands().await?;
 
+        // Load wipe config for nonce replay protection (if available)
+        let config = self.load_config().await.ok().flatten();
+
         match commands {
             Some(cmds) => {
-                // Filter commands for this volume
+                // Filter commands with validation (CWE-345 mitigation)
                 let matching: Vec<WipeCommand> = cmds
                     .commands
                     .into_iter()
-                    .filter(|cmd| cmd.data.volume_id == self.volume_id)
+                    .filter(|cmd| {
+                        // Volume ID must match
+                        if cmd.data.volume_id != self.volume_id {
+                            return false;
+                        }
+                        // Command must be fresh (not expired)
+                        if !cmd.is_fresh() {
+                            return false;
+                        }
+                        // If we have config, check nonce replay
+                        if let Some(ref cfg) = config {
+                            if cfg.is_nonce_used(&cmd.data.nonce) {
+                                return false;
+                            }
+                        }
+                        true
+                    })
                     .collect();
                 Ok(matching)
             }
@@ -929,19 +955,46 @@ impl<B: super::io::AsyncStorageBackend> CloudSyncManager<B> {
     /// Polls for pending wipe commands during sync
     ///
     /// This should be called periodically or at the start of sync operations
-    /// to check for remote wipe commands.
+    /// to check for remote wipe commands. Commands are validated for freshness
+    /// and nonce replay before being returned.
+    ///
+    /// # Security Note (CWE-345)
+    ///
+    /// This function performs basic validation (volume ID, freshness, nonce replay)
+    /// but does NOT verify cryptographic signatures. Callers MUST pass returned
+    /// commands through `RemoteWipeManager::verify_and_execute()` before execution
+    /// to verify the HMAC signature with the secret wipe token.
     pub async fn check_for_wipe_commands(&self) -> SyncResult<Vec<WipeCommand>> {
         let volume_id = self.manifest().volume_id.clone();
+
+        // Load wipe config for nonce replay protection (if available)
+        let config = self.load_wipe_config().await.ok().flatten();
 
         // Load commands from cloud
         match self.backend.read_chunk(WIPE_COMMAND_CHUNK_INDEX, 0).await {
             Ok(Some(data)) => {
                 let commands = CloudWipeCommands::from_bytes(&data)?;
-                // Filter commands for this volume
+                // Filter commands with validation (CWE-345 mitigation)
                 let matching: Vec<WipeCommand> = commands
                     .commands
                     .into_iter()
-                    .filter(|cmd| cmd.data.volume_id == volume_id)
+                    .filter(|cmd| {
+                        // Volume ID must match
+                        if cmd.data.volume_id != volume_id {
+                            return false;
+                        }
+                        // Command must be fresh (not expired)
+                        if !cmd.is_fresh() {
+                            return false;
+                        }
+                        // If we have config, check nonce replay
+                        if let Some(ref cfg) = config {
+                            if cfg.is_nonce_used(&cmd.data.nonce) {
+                                return false;
+                            }
+                        }
+                        true
+                    })
                     .collect();
                 Ok(matching)
             }

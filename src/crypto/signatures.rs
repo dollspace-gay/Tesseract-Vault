@@ -187,7 +187,9 @@ impl MlDsaKeyPair {
     ///
     /// # Errors
     ///
-    /// Returns an error if the seed is not exactly 32 bytes.
+    /// Returns an error if:
+    /// - The seed is not exactly 32 bytes
+    /// - The verifying key doesn't match the key derived from the seed (CWE-502 mitigation)
     pub fn from_bytes(
         level: SecurityLevel,
         verifying_key: &[u8],
@@ -203,11 +205,36 @@ impl MlDsaKeyPair {
         let mut seed = [0u8; 32];
         seed.copy_from_slice(signing_key_seed);
 
-        Ok(Self {
-            security_level: level,
-            seed: Zeroizing::new(seed),
-            verifying_key_bytes: verifying_key.to_vec(),
-        })
+        // Verify the verifying key matches the seed (CWE-502 mitigation)
+        // This prevents accepting mismatched key pairs that could lead to security issues
+        let derived_vk_bytes: Vec<u8> = match level {
+            SecurityLevel::Level44 => {
+                let kp = MlDsa44::from_seed(&seed.into());
+                kp.verifying_key().encode()[..].to_vec()
+            }
+            SecurityLevel::Level65 => {
+                let kp = MlDsa65::from_seed(&seed.into());
+                kp.verifying_key().encode()[..].to_vec()
+            }
+            SecurityLevel::Level87 => {
+                let kp = MlDsa87::from_seed(&seed.into());
+                kp.verifying_key().encode()[..].to_vec()
+            }
+        };
+
+        // Use constant-time comparison to prevent timing attacks
+        use subtle::ConstantTimeEq;
+        if derived_vk_bytes.ct_eq(verifying_key).into() {
+            Ok(Self {
+                security_level: level,
+                seed: Zeroizing::new(seed),
+                verifying_key_bytes: verifying_key.to_vec(),
+            })
+        } else {
+            Err(CryptorError::Cryptography(
+                "Verifying key does not match the key derived from seed".to_string(),
+            ))
+        }
     }
 }
 

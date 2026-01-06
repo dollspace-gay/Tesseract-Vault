@@ -55,8 +55,13 @@ pub trait Encryptor: Send + Sync {
     ///
     /// # Returns
     ///
-    /// Decrypted plaintext if authentication succeeds.
-    fn decrypt(&self, key: &[u8; 32], nonce: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>>;
+    /// Decrypted plaintext in zeroizing memory if authentication succeeds.
+    fn decrypt(
+        &self,
+        key: &[u8; 32],
+        nonce: &[u8],
+        ciphertext: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>>;
 
     /// Returns the required nonce length for this encryptor.
     fn nonce_len(&self) -> usize;

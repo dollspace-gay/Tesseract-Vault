@@ -98,7 +98,9 @@ impl Default for YubiKeyConfig {
         Self {
             slot: YubiKeySlot::Slot2,
             timeout: Duration::from_secs(5),
-            allow_backup: true,
+            // Secure by default: backup disabled to prevent bypass of hardware 2FA (CWE-287)
+            // Enable only if you understand the security implications
+            allow_backup: false,
             serial: None,
         }
     }
@@ -337,7 +339,8 @@ mod tests {
         let config = YubiKeyConfig::default();
         assert_eq!(config.slot, YubiKeySlot::Slot2);
         assert_eq!(config.timeout, Duration::from_secs(5));
-        assert!(config.allow_backup);
+        // Secure by default: backup disabled to prevent bypass of hardware 2FA (CWE-287)
+        assert!(!config.allow_backup);
         assert_eq!(config.serial, None);
     }
 

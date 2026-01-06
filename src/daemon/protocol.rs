@@ -3,12 +3,84 @@
 //! IPC protocol for daemon communication
 //!
 //! Uses a simple JSON-based protocol over Unix domain sockets (or named pipes on Windows)
+//!
+//! # Security
+//!
+//! All commands (except Ping) require authentication via a token that is generated
+//! when the daemon starts. The token is stored in a file only readable by the user
+//! who started the daemon.
 
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::path::PathBuf;
+use zeroize::Zeroize;
+
+/// Authentication token length in bytes (256 bits)
+pub const AUTH_TOKEN_LENGTH: usize = 32;
+
+/// Authenticated request wrapper
+///
+/// All daemon commands must be wrapped in this type with a valid auth token.
+/// The auth token is generated when the daemon starts and stored in a file
+/// only readable by the current user.
+///
+/// # Security
+///
+/// The Drop implementation zeroizes the auth_token from memory (CWE-316 mitigation).
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AuthenticatedRequest {
+    /// Authentication token (hex-encoded)
+    pub auth_token: String,
+    /// The command to execute
+    pub command: DaemonCommand,
+}
+
+impl Drop for AuthenticatedRequest {
+    fn drop(&mut self) {
+        // Securely zeroize the auth token from memory (CWE-316)
+        self.auth_token.zeroize();
+    }
+}
+
+impl AuthenticatedRequest {
+    /// Create a new authenticated request
+    pub fn new(auth_token: String, command: DaemonCommand) -> Self {
+        Self {
+            auth_token,
+            command,
+        }
+    }
+
+    /// Serialize request to JSON bytes
+    pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
+        let json = serde_json::to_string(self)?;
+        Ok(json.into_bytes())
+    }
+
+    /// Deserialize request from JSON bytes
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, serde_json::Error> {
+        serde_json::from_slice(bytes)
+    }
+}
+
+impl fmt::Debug for AuthenticatedRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AuthenticatedRequest")
+            .field("auth_token", &"<REDACTED>")
+            .field("command", &self.command)
+            .finish()
+    }
+}
 
 /// Commands that can be sent to the daemon
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Note: Debug is implemented manually to redact sensitive password fields
+///
+/// # Security
+///
+/// This enum implements `Drop` to ensure passwords are securely
+/// erased from memory when the command is dropped (CWE-316 mitigation).
+#[derive(Clone, Serialize, Deserialize)]
 pub enum DaemonCommand {
     /// Mount a volume
     Mount {
@@ -57,6 +129,52 @@ pub enum DaemonCommand {
     Shutdown,
 }
 
+impl fmt::Debug for DaemonCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DaemonCommand::Mount {
+                container_path,
+                mount_point,
+                password: _,
+                read_only,
+                hidden_offset,
+                hidden_password,
+            } => f
+                .debug_struct("Mount")
+                .field("container_path", container_path)
+                .field("mount_point", mount_point)
+                .field("password", &"<REDACTED>")
+                .field("read_only", read_only)
+                .field("hidden_offset", hidden_offset)
+                .field(
+                    "hidden_password",
+                    &hidden_password.as_ref().map(|_| "<REDACTED>"),
+                )
+                .finish(),
+            DaemonCommand::Unmount { container_path } => f
+                .debug_struct("Unmount")
+                .field("container_path", container_path)
+                .finish(),
+            DaemonCommand::UnmountByMountPoint { mount_point } => f
+                .debug_struct("UnmountByMountPoint")
+                .field("mount_point", mount_point)
+                .finish(),
+            DaemonCommand::List => write!(f, "List"),
+            DaemonCommand::GetInfo { container_path } => f
+                .debug_struct("GetInfo")
+                .field("container_path", container_path)
+                .finish(),
+            DaemonCommand::UnmountAll => write!(f, "UnmountAll"),
+            DaemonCommand::Ping => write!(f, "Ping"),
+            DaemonCommand::Shutdown => write!(f, "Shutdown"),
+        }
+    }
+}
+
+// Note: DaemonCommand does not implement Drop because it needs to be destructured
+// in process_command(). Instead, password fields are manually zeroized via
+// zeroize_secrets() method after use (CWE-316 mitigation).
+
 /// Responses from the daemon
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DaemonResponse {
@@ -89,6 +207,12 @@ pub enum DaemonResponse {
 
     /// Pong response to ping
     Pong,
+
+    /// Authentication failed - invalid or missing token
+    Unauthorized {
+        /// Error message
+        message: String,
+    },
 
     /// Operation failed with error
     Error {
@@ -130,6 +254,24 @@ impl DaemonCommand {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, serde_json::Error> {
         serde_json::from_slice(bytes)
     }
+
+    /// Zeroize any sensitive fields (passwords) in the command.
+    ///
+    /// Call this after the command has been serialized/used to ensure
+    /// passwords are securely erased from memory (CWE-316 mitigation).
+    pub fn zeroize_secrets(&mut self) {
+        if let DaemonCommand::Mount {
+            password,
+            hidden_password,
+            ..
+        } = self
+        {
+            password.zeroize();
+            if let Some(ref mut hp) = hidden_password {
+                hp.zeroize();
+            }
+        }
+    }
 }
 
 impl DaemonResponse {
@@ -147,6 +289,13 @@ impl DaemonResponse {
     /// Create an error response
     pub fn error<S: Into<String>>(message: S) -> Self {
         DaemonResponse::Error {
+            message: message.into(),
+        }
+    }
+
+    /// Create an unauthorized response
+    pub fn unauthorized<S: Into<String>>(message: S) -> Self {
+        DaemonResponse::Unauthorized {
             message: message.into(),
         }
     }

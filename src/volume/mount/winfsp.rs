@@ -733,7 +733,10 @@ pub fn mount(
     volume_params.prefix(&mount_point_str);
 
     // Set filesystem name
-    let fs_name = options.fs_name.unwrap_or_else(|| "Tesseract".to_string());
+    let fs_name = options
+        .fs_name
+        .clone()
+        .unwrap_or_else(|| "Tesseract".to_string());
     volume_params.filesystem_name(&fs_name);
 
     // Set read-only if requested
@@ -751,7 +754,7 @@ pub fn mount(
         .map_err(|e| MountError::Other(format!("Failed to start WinFsp filesystem: {:?}", e)))?;
 
     Ok(WinFspMountHandle {
-        mount_point: options.mount_point,
+        mount_point: options.mount_point.clone(),
         filesystem: Some(filesystem),
     })
 }

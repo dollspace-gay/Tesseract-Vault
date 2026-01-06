@@ -295,6 +295,14 @@ pub fn parse_get_random_response(response: &[u8]) -> Result<Vec<u8>, &'static st
 ///
 /// This creates a deterministic digest that binds sealed data to specific PCR values.
 ///
+/// # Design Note
+///
+/// This function uses BLAKE3 for the digest computation. This is intentionally different
+/// from TPM 2.0's internal PolicyPCR which uses SHA-256. Tesseract does not rely on
+/// TPM's built-in policy enforcement; instead, it uses the TPM as an entropy source
+/// and PCR reader, then applies its own key derivation layer. BLAKE3 provides superior
+/// performance and security margins compared to SHA-256.
+///
 /// # Arguments
 ///
 /// * `pcr_values` - Slice of (PCR index, PCR value) pairs
@@ -343,21 +351,79 @@ pub fn derive_sealing_key(tpm_random: &[u8], policy_digest: &[u8]) -> [u8; 32] {
     *hasher.finalize().as_bytes()
 }
 
-/// XOR encrypt/decrypt data with a key (symmetric operation).
+/// Encrypt data with AES-256-GCM authenticated encryption.
 ///
 /// # Arguments
 ///
-/// * `data` - Data to encrypt/decrypt
+/// * `data` - Data to encrypt
 /// * `key` - 32-byte key
 ///
 /// # Returns
 ///
-/// Encrypted/decrypted data.
-pub fn xor_encrypt_decrypt(data: &[u8], key: &[u8; 32]) -> Vec<u8> {
-    data.iter()
-        .enumerate()
-        .map(|(i, &byte)| byte ^ key[i % 32])
-        .collect()
+/// Encrypted data with 12-byte nonce prepended and 16-byte auth tag appended.
+/// Returns None if encryption fails.
+///
+/// # Security
+///
+/// Uses AES-256-GCM which provides both confidentiality and integrity.
+/// A random nonce is generated for each encryption operation.
+pub fn aes_gcm_encrypt(data: &[u8], key: &[u8; 32]) -> Option<Vec<u8>> {
+    use aes_gcm::{
+        aead::{Aead, KeyInit},
+        Aes256Gcm, Nonce,
+    };
+
+    let cipher = Aes256Gcm::new(key.into());
+
+    // Generate random 12-byte nonce
+    let mut nonce_bytes = [0u8; 12];
+    getrandom::fill(&mut nonce_bytes).ok()?;
+    let nonce = Nonce::from(nonce_bytes);
+
+    // Encrypt
+    let ciphertext = cipher.encrypt(&nonce, data).ok()?;
+
+    // Prepend nonce to ciphertext
+    let mut result = Vec::with_capacity(12 + ciphertext.len());
+    result.extend_from_slice(&nonce_bytes);
+    result.extend_from_slice(&ciphertext);
+    Some(result)
+}
+
+/// Decrypt data with AES-256-GCM authenticated encryption.
+///
+/// # Arguments
+///
+/// * `data` - Encrypted data (12-byte nonce + ciphertext + 16-byte tag)
+/// * `key` - 32-byte key
+///
+/// # Returns
+///
+/// Decrypted plaintext, or None if decryption/authentication fails.
+///
+/// # Security
+///
+/// Verifies the authentication tag to detect tampering.
+pub fn aes_gcm_decrypt(data: &[u8], key: &[u8; 32]) -> Option<Vec<u8>> {
+    use aes_gcm::{
+        aead::{Aead, KeyInit},
+        Aes256Gcm, Nonce,
+    };
+
+    // Need at least nonce (12) + tag (16) bytes
+    if data.len() < 28 {
+        return None;
+    }
+
+    let cipher = Aes256Gcm::new(key.into());
+
+    // Extract nonce and ciphertext
+    let nonce_array: [u8; 12] = data[..12].try_into().ok()?;
+    let nonce = Nonce::from(nonce_array);
+    let ciphertext = &data[12..];
+
+    // Decrypt and verify
+    cipher.decrypt(&nonce, ciphertext).ok()
 }
 
 // ============================================================================
@@ -367,6 +433,7 @@ pub fn xor_encrypt_decrypt(data: &[u8], key: &[u8; 32]) -> Vec<u8> {
 /// Compare two byte slices in constant time.
 ///
 /// This prevents timing attacks when comparing secret values.
+/// Uses the `subtle` crate for compiler-resistant constant-time operations.
 ///
 /// # Arguments
 ///
@@ -376,17 +443,23 @@ pub fn xor_encrypt_decrypt(data: &[u8], key: &[u8; 32]) -> Vec<u8> {
 /// # Returns
 ///
 /// `true` if the slices are equal.
+///
+/// # Security
+///
+/// The length comparison is NOT constant-time, which may leak the length
+/// of secrets. For fixed-size secrets (like hashes or keys), this is acceptable.
+/// For variable-length secrets, consider padding to a fixed size first.
 pub fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
+    use subtle::ConstantTimeEq;
+
+    // Length check is not constant-time, but this is acceptable for
+    // fixed-size secrets like hashes and keys
     if a.len() != b.len() {
         return false;
     }
 
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-
-    diff == 0
+    // Use subtle crate for constant-time comparison
+    a.ct_eq(b).into()
 }
 
 #[cfg(test)]
@@ -742,37 +815,73 @@ mod tests {
     }
 
     // ========================================
-    // XOR Encryption Tests
+    // AES-GCM Encryption Tests
     // ========================================
 
     #[test]
-    fn test_xor_encrypt_decrypt_roundtrip() {
+    fn test_aes_gcm_encrypt_decrypt_roundtrip() {
         let key = [0x42u8; 32];
-        let plaintext = b"Hello, TPM!";
+        let plaintext = b"Hello, TPM! This is a test of AES-GCM encryption.";
 
-        let ciphertext = xor_encrypt_decrypt(plaintext, &key);
-        let decrypted = xor_encrypt_decrypt(&ciphertext, &key);
+        let ciphertext = aes_gcm_encrypt(plaintext, &key).expect("encryption should succeed");
 
+        // Ciphertext should be nonce (12) + plaintext + tag (16)
+        assert_eq!(ciphertext.len(), 12 + plaintext.len() + 16);
+
+        let decrypted = aes_gcm_decrypt(&ciphertext, &key).expect("decryption should succeed");
         assert_eq!(decrypted, plaintext);
     }
 
     #[test]
-    fn test_xor_encrypt_decrypt_different_keys() {
+    fn test_aes_gcm_decrypt_wrong_key() {
         let key1 = [0x42u8; 32];
         let key2 = [0x43u8; 32];
         let plaintext = b"Secret data";
 
-        let ciphertext = xor_encrypt_decrypt(plaintext, &key1);
-        let wrong_decrypt = xor_encrypt_decrypt(&ciphertext, &key2);
+        let ciphertext = aes_gcm_encrypt(plaintext, &key1).expect("encryption should succeed");
+        let result = aes_gcm_decrypt(&ciphertext, &key2);
 
-        assert_ne!(wrong_decrypt, plaintext.to_vec());
+        // Should fail authentication with wrong key
+        assert!(result.is_none());
     }
 
     #[test]
-    fn test_xor_encrypt_empty() {
+    fn test_aes_gcm_decrypt_tampered_ciphertext() {
         let key = [0x42u8; 32];
-        let result = xor_encrypt_decrypt(&[], &key);
-        assert!(result.is_empty());
+        let plaintext = b"Secret data";
+
+        let mut ciphertext = aes_gcm_encrypt(plaintext, &key).expect("encryption should succeed");
+
+        // Tamper with ciphertext
+        if let Some(byte) = ciphertext.get_mut(15) {
+            *byte ^= 0xFF;
+        }
+
+        let result = aes_gcm_decrypt(&ciphertext, &key);
+
+        // Should fail authentication
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_aes_gcm_decrypt_too_short() {
+        let key = [0x42u8; 32];
+        let short_data = [0u8; 20]; // Less than 28 bytes (12 nonce + 16 tag)
+
+        let result = aes_gcm_decrypt(&short_data, &key);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_aes_gcm_encrypt_empty() {
+        let key = [0x42u8; 32];
+        let ciphertext = aes_gcm_encrypt(&[], &key).expect("encryption should succeed");
+
+        // Even empty plaintext should have nonce + tag
+        assert_eq!(ciphertext.len(), 12 + 16);
+
+        let decrypted = aes_gcm_decrypt(&ciphertext, &key).expect("decryption should succeed");
+        assert!(decrypted.is_empty());
     }
 
     // ========================================

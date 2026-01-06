@@ -12,6 +12,10 @@ use std::path::Path;
 #[cfg(not(target_arch = "wasm32"))]
 use tempfile::Builder;
 
+/// Maximum file size for read_file to prevent memory exhaustion (1 GB)
+/// For larger files, use streaming APIs instead.
+const MAX_FILE_SIZE: u64 = 1024 * 1024 * 1024;
+
 // WASM stub implementations (file operations not supported in browsers)
 #[cfg(target_arch = "wasm32")]
 pub fn write_file_atomic(_path: &Path, _data: &[u8]) -> Result<()> {
@@ -40,10 +44,27 @@ where
 ///
 /// # Errors
 ///
-/// Returns an error if the file cannot be opened or read.
+/// Returns an error if the file cannot be opened, read, or exceeds MAX_FILE_SIZE.
+/// For files larger than 1 GB, use streaming APIs instead.
 pub fn read_file(path: &Path) -> Result<Vec<u8>> {
+    let file = File::open(path)?;
+
+    // Check file size before reading to prevent memory exhaustion
+    let metadata = file.metadata()?;
+    if metadata.len() > MAX_FILE_SIZE {
+        return Err(CryptorError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "File size {} exceeds maximum allowed size {} bytes. Use streaming API for large files.",
+                metadata.len(),
+                MAX_FILE_SIZE
+            ),
+        )));
+    }
+
     let mut data = Vec::new();
-    File::open(path)?.read_to_end(&mut data)?;
+    // Use take() as additional protection even after size check
+    file.take(MAX_FILE_SIZE).read_to_end(&mut data)?;
     Ok(data)
 }
 
@@ -133,6 +154,12 @@ pub mod format {
         ciphertext: &[u8],
     ) -> Result<()> {
         let salt_str = salt.as_str();
+
+        // Validate salt length fits in u8 to prevent truncation (CWE-197)
+        if salt_str.len() > MAX_SALT_LEN {
+            return Err(CryptorError::InvalidFormat);
+        }
+        // Safe cast: validated above that len <= 255
         let salt_len = salt_str.len() as u8;
 
         file.write_all(MAGIC_BYTES)?;

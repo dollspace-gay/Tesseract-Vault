@@ -117,7 +117,8 @@ impl Drop for LinuxPowerMonitor {
 
 /// Check if systemd is available on this system
 fn is_systemd_available() -> bool {
-    Command::new("systemctl")
+    // Use absolute path to prevent PATH injection attacks (CWE-78)
+    Command::new("/usr/bin/systemctl")
         .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -137,7 +138,8 @@ fn run_inhibitor_monitor(
 ) {
     // Use gdbus or busctl to monitor logind signals
     // busctl monitor org.freedesktop.login1 is more reliable
-    let mut monitor_cmd = if Command::new("busctl")
+    // Use absolute paths to prevent PATH injection attacks (CWE-78)
+    let mut monitor_cmd = if Command::new("/usr/bin/busctl")
         .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -146,7 +148,7 @@ fn run_inhibitor_monitor(
         .unwrap_or(false)
     {
         // Use busctl to monitor D-Bus signals
-        let mut cmd = Command::new("busctl");
+        let mut cmd = Command::new("/usr/bin/busctl");
         cmd.args([
             "monitor",
             "--system",
@@ -154,7 +156,7 @@ fn run_inhibitor_monitor(
             "--match", "type='signal',sender='org.freedesktop.login1',interface='org.freedesktop.login1.Manager',member='PrepareForShutdown'",
         ]);
         cmd
-    } else if Command::new("gdbus")
+    } else if Command::new("/usr/bin/gdbus")
         .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -163,7 +165,7 @@ fn run_inhibitor_monitor(
         .unwrap_or(false)
     {
         // Fall back to gdbus
-        let mut cmd = Command::new("gdbus");
+        let mut cmd = Command::new("/usr/bin/gdbus");
         cmd.args([
             "monitor",
             "--system",

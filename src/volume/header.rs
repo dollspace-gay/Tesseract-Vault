@@ -645,6 +645,14 @@ impl PqVolumeMetadata {
     ///
     /// Returns an error if reading or deserialization fails
     pub fn read_from<R: Read>(reader: &mut R, size: u32) -> Result<Self, HeaderError> {
+        // Validate size before allocation to prevent memory exhaustion DoS (CWE-770)
+        if size as usize > MAX_PQC_METADATA_SIZE {
+            return Err(HeaderError::SizeMismatch {
+                expected: MAX_PQC_METADATA_SIZE,
+                actual: size as usize,
+            });
+        }
+
         let mut bytes = vec![0u8; size as usize];
         reader.read_exact(&mut bytes)?;
         Self::from_bytes(&bytes)

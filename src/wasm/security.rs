@@ -109,20 +109,26 @@ pub fn generate_csp_header(
 ) -> String {
     let mut directives = vec!["default-src 'self'".to_string()];
 
-    // Script sources
-    let mut script_src = vec!["'self'"];
+    // Script sources - use owned Strings to avoid memory leaks
+    let mut script_src: Vec<String> = vec!["'self'".to_string()];
     if allow_inline_scripts {
-        script_src.push("'unsafe-inline'");
+        script_src.push("'unsafe-inline'".to_string());
     }
     if allow_eval {
-        script_src.push("'unsafe-eval'");
+        script_src.push("'unsafe-eval'".to_string());
     }
     // WASM requires wasm-unsafe-eval (or unsafe-eval in older browsers)
-    script_src.push("'wasm-unsafe-eval'");
+    script_src.push("'wasm-unsafe-eval'".to_string());
 
     if let Some(sources) = additional_sources {
         for source in sources {
-            script_src.push(Box::leak(source.into_boxed_str()));
+            // Validate source to prevent CSP injection (CWE-79)
+            // Block: semicolons (new directives), ALL whitespace (tabs, spaces, newlines)
+            // Using char::is_whitespace covers all Unicode whitespace including \t, \n, \r, space
+            if !source.contains(';') && !source.chars().any(char::is_whitespace) {
+                script_src.push(source);
+            }
+            // Invalid sources are silently ignored to prevent injection attacks
         }
     }
 
@@ -237,10 +243,9 @@ pub fn check_security_features() -> Result<String, JsValue> {
         is_secure
     ));
 
-    // Check for Worker support
-    let worker_available = js_sys::eval("typeof Worker !== 'undefined'")
-        .map(|v| v.is_truthy())
-        .unwrap_or(false);
+    // Check for Worker support (using Reflect.has instead of eval for security)
+    let worker_available =
+        js_sys::Reflect::has(&js_sys::global(), &"Worker".into()).unwrap_or(false);
     features.push(format!(
         "{{\"feature\": \"Web Workers\", \"available\": {}}}",
         worker_available

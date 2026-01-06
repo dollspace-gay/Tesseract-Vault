@@ -118,11 +118,24 @@ pub fn disable_core_dumps() -> Result<()> {
 ///
 /// disable_crash_dumps().expect("Failed to disable crash dumps");
 /// ```
+///
+/// # Platform Support
+///
+/// - **Unix**: Crash dumps are disabled via `disable_core_dumps()`
+/// - **Windows**: Not currently implemented (CWE-693). Use `disable_core_dumps()` on Unix.
+///   Windows Error Reporting requires elevated privileges and specific SDK versions.
 pub fn disable_crash_dumps() -> Result<()> {
-    // Note: Windows Error Reporting (WER) dump exclusion APIs require
-    // specific SDK versions and elevated privileges. Core dumps on Unix
-    // are handled via disable_core_dumps().
-    Ok(())
+    #[cfg(unix)]
+    {
+        // On Unix, delegate to disable_core_dumps
+        disable_core_dumps()
+    }
+
+    #[cfg(not(unix))]
+    {
+        // Windows: Not implemented - return error to be explicit (CWE-693)
+        Err(DumpProtectionError::NotSupported)
+    }
 }
 
 /// Check if core dumps are currently disabled
@@ -158,15 +171,37 @@ pub fn are_core_dumps_disabled() -> bool {
 /// This allows applications to register callbacks that are invoked before
 /// the system enters a sleep or hibernation state, giving them a chance to
 /// clear sensitive data from memory.
+///
+/// # ⚠️ Current Status: STUB IMPLEMENTATION
+///
+/// This struct is currently a **placeholder** that does NOT actually register
+/// for Windows power events. The callback will never be invoked automatically.
+///
+/// To properly implement power event monitoring, you would need to:
+/// 1. Register a window message handler for `WM_POWERBROADCAST`
+/// 2. Handle `PBT_APMSUSPEND` events
+/// 3. Or use `PowerRegisterSuspendResumeNotification` (requires linking to PowrProf.dll)
+///
+/// # Security Note (CWE-693)
+///
+/// Until properly implemented, applications should NOT rely on this for
+/// security-critical cleanup. Use `DumpProtectionGuard` and explicit cleanup
+/// in application shutdown paths instead.
 #[cfg(windows)]
 pub struct PowerStateMonitor {
     /// Callback to invoke before sleep/hibernation
+    /// NOTE: This callback is NOT automatically invoked - see struct documentation
     callback: Option<Box<dyn FnMut() + Send + 'static>>,
 }
 
 #[cfg(windows)]
 impl PowerStateMonitor {
     /// Create a new power state monitor
+    ///
+    /// # ⚠️ Warning
+    ///
+    /// This is a stub implementation. The monitor will NOT automatically
+    /// detect power events. See struct documentation for details.
     pub fn new() -> Self {
         Self { callback: None }
     }
@@ -176,6 +211,12 @@ impl PowerStateMonitor {
     /// # Arguments
     ///
     /// * `callback` - Function to call before system suspend
+    ///
+    /// # ⚠️ Warning
+    ///
+    /// This callback will NOT be automatically invoked. This is a stub
+    /// implementation. You must call `invoke_callback()` manually or
+    /// implement proper Windows power event handling.
     pub fn set_callback<F>(&mut self, callback: F)
     where
         F: FnMut() + Send + 'static,
@@ -183,9 +224,12 @@ impl PowerStateMonitor {
         self.callback = Some(Box::new(callback));
     }
 
-    /// Invoke the callback (called internally when power event detected)
-    #[allow(dead_code)]
-    fn invoke_callback(&mut self) {
+    /// Invoke the callback manually
+    ///
+    /// Since automatic power event detection is not implemented,
+    /// this method can be called manually when needed (e.g., during
+    /// application shutdown or when handling power events at a higher level).
+    pub fn invoke_callback(&mut self) {
         if let Some(ref mut cb) = self.callback {
             cb();
         }

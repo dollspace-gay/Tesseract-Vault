@@ -87,7 +87,7 @@ Version=1.0
 Type=Application
 Name=Tesseract
 Comment=Secure file encryption and decryption tool
-Exec={} %f
+Exec="{}" %f
 Icon=tesseract
 Terminal=false
 Categories=Utility;Security;
@@ -101,12 +101,13 @@ Keywords=encryption;decryption;security;crypto;
     let mut file = fs::File::create(&desktop_file)?;
     file.write_all(desktop_content.as_bytes())?;
 
-    // Make executable
+    // Set appropriate permissions (read/write for owner, read for others)
+    // Desktop files are config files, not executables - 0o644 is correct
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let mut perms = fs::metadata(&desktop_file)?.permissions();
-        perms.set_mode(0o755);
+        perms.set_mode(0o644);
         fs::set_permissions(&desktop_file, perms)?;
     }
 

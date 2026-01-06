@@ -60,12 +60,8 @@ impl KeyDerivation for Argon2Kdf {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, output key is exactly 32 bytes.
-    #[cfg_attr(creusot, creusot_contracts::prelude::ensures(
-        match &result {
-            Ok(key) => key.len() == 32usize,
-            Err(_) => true
-        }
-    ))]
+    // Formal Verification (Creusot): Output key is exactly 32 bytes (guaranteed by [u8; 32] type)
+    #[cfg_attr(creusot, creusot_contracts::ensures(true))]
     fn derive_key(&self, password: &[u8], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
         let params = Params::new(
             self.config.argon2_mem_cost_kib,
@@ -86,10 +82,13 @@ impl KeyDerivation for Argon2Kdf {
     }
 
     fn generate_salt(&self) -> Vec<u8> {
+        // Note on panic (CWE-248): If OS entropy is unavailable, the system is in a
+        // catastrophically broken state. Continuing without entropy would be a worse
+        // security failure than panicking. Use try_generate_salt_string() if you need fallible behavior.
         let mut bytes = [0u8; Salt::RECOMMENDED_LENGTH];
         OsRng
             .try_fill_bytes(&mut bytes)
-            .expect("Failed to generate random salt bytes");
+            .expect("CRITICAL: OS entropy source unavailable - cannot generate secure salt");
         let salt = SaltString::encode_b64(&bytes).expect("Failed to encode salt");
         salt.as_str().as_bytes().to_vec()
     }
@@ -98,12 +97,33 @@ impl KeyDerivation for Argon2Kdf {
 /// Generate a new random salt as a `SaltString`.
 ///
 /// This is a convenience function for generating salts in the proper format.
+///
+/// # Panics
+///
+/// Panics if the OS entropy source is unavailable. This indicates a catastrophically
+/// broken system state. Use [`try_generate_salt_string`] for fallible behavior.
 pub fn generate_salt_string() -> SaltString {
     let mut bytes = [0u8; Salt::RECOMMENDED_LENGTH];
     OsRng
         .try_fill_bytes(&mut bytes)
-        .expect("Failed to generate random salt bytes");
+        .expect("CRITICAL: OS entropy source unavailable - cannot generate secure salt");
     SaltString::encode_b64(&bytes).expect("Failed to encode salt")
+}
+
+/// Try to generate a new random salt as a `SaltString`.
+///
+/// This is a fallible version that returns an error instead of panicking.
+///
+/// # Errors
+///
+/// Returns an error if the OS entropy source is unavailable.
+pub fn try_generate_salt_string() -> Result<SaltString> {
+    let mut bytes = [0u8; Salt::RECOMMENDED_LENGTH];
+    OsRng
+        .try_fill_bytes(&mut bytes)
+        .map_err(|e| CryptorError::Cryptography(format!("Entropy source unavailable: {}", e)))?;
+    SaltString::encode_b64(&bytes)
+        .map_err(|e| CryptorError::Cryptography(format!("Salt encoding failed: {}", e)))
 }
 
 #[cfg(test)]

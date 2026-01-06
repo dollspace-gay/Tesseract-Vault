@@ -1349,16 +1349,16 @@ impl<R: Read> ChunkedDecryptor<R> {
     ///
     /// # Returns
     ///
-    /// Decompressed data.
+    /// Decompressed data in zeroizing memory.
     #[cfg(feature = "compression")]
-    fn decompress_data(data: &[u8]) -> Result<Vec<u8>> {
+    fn decompress_data(data: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
         use ::std::io::Read as _;
 
         let mut decoder = DeflateDecoder::new(data);
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
 
-        Ok(decompressed)
+        Ok(Zeroizing::new(decompressed))
     }
 
     /// Decrypts the entire file and writes it to the provided writer.
@@ -1394,6 +1394,16 @@ impl<R: Read> ChunkedDecryptor<R> {
 
             // Verify chunk index matches expected
             if chunk_index != self.current_chunk {
+                return Err(CryptorError::InvalidFormat);
+            }
+
+            // Validate chunk size to prevent DoS via memory exhaustion (CWE-789)
+            // Max allowed is the configured chunk_size + AEAD tag (16) + safety margin
+            const MAX_CIPHERTEXT_OVERHEAD: u32 = 1024;
+            let max_allowed = (self.header.chunk_size).saturating_add(MAX_CIPHERTEXT_OVERHEAD);
+            if chunk_size > max_allowed
+                || chunk_size as usize > MAX_CHUNK_SIZE + MAX_CIPHERTEXT_OVERHEAD as usize
+            {
                 return Err(CryptorError::InvalidFormat);
             }
 
@@ -1485,6 +1495,16 @@ impl<R: Read> ChunkedDecryptor<R> {
 
                 // Verify chunk index matches expected
                 if chunk_index != self.current_chunk {
+                    return Err(CryptorError::InvalidFormat);
+                }
+
+                // Validate chunk size to prevent DoS via memory exhaustion (CWE-789)
+                // Max allowed is the configured chunk_size + AEAD tag (16) + safety margin
+                const MAX_CIPHERTEXT_OVERHEAD: u32 = 1024;
+                let max_allowed = (self.header.chunk_size).saturating_add(MAX_CIPHERTEXT_OVERHEAD);
+                if chunk_size > max_allowed
+                    || chunk_size as usize > MAX_CHUNK_SIZE + MAX_CIPHERTEXT_OVERHEAD as usize
+                {
                     return Err(CryptorError::InvalidFormat);
                 }
 

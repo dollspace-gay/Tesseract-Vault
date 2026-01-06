@@ -777,8 +777,11 @@ pub fn benchmark_aes_gcm(data_size: usize, iterations: u32) -> BenchmarkResult {
     use std::time::Instant;
 
     // Generate test data and key
+    // NOTE: Benchmark uses static key/nonce for deterministic, reproducible measurements.
+    // This is acceptable in benchmarks but NEVER use static nonces in production code.
+    // Production code should always use random nonces (see AesGcmEncryptor::encrypt).
     let key = [0x42u8; 32];
-    let nonce_bytes = [0u8; 12];
+    let nonce_bytes = [0u8; 12]; // Static nonce OK for benchmark only (CWE-330 acknowledged)
     let nonce: &Nonce<U12> = (&nonce_bytes).into();
     let plaintext = vec![0xABu8; data_size];
 

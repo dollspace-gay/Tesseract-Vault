@@ -248,7 +248,8 @@ mod hybrid_mode_tests {
         // 1. Derive classical key from password
         let kdf = Argon2Kdf::default();
         let password = b"TestPassword123!";
-        let salt = [0u8; 32];
+        // Use random salt for tests - fixed zero salt is a bad practice (CWE-760)
+        let salt = kdf.generate_salt();
         let classical_key = Zeroizing::new(kdf.derive_key(password, &salt).unwrap());
 
         // 2. Generate PQ keypair

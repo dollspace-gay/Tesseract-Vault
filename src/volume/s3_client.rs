@@ -23,11 +23,16 @@
 use std::io;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use hmac::{Hmac, Mac, NewMac};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use super::io::{AsyncResult, AsyncStorageBackend};
+
+/// Type alias for HMAC-SHA256 (required by AWS Signature V4)
+type HmacSha256 = Hmac<Sha256>;
 
 /// S3 credentials for authentication
 #[derive(Clone)]
@@ -391,8 +396,8 @@ impl S3Client {
         let host = self.config.region.host(&self.config.bucket);
         let canonical_uri = format!("/{}", key);
 
-        // Calculate payload hash
-        let payload_hash = hex::encode(blake3::hash(payload).as_bytes());
+        // Calculate payload hash using SHA-256 (required by AWS SigV4, CWE-327 fix)
+        let payload_hash = hex::encode(Sha256::digest(payload));
 
         // Create canonical request
         let canonical_headers = format!(
@@ -410,8 +415,8 @@ impl S3Client {
         let algorithm = "AWS4-HMAC-SHA256";
         let credential_scope =
             format!("{}/{}/s3/aws4_request", date_stamp, self.config.region.name);
-        let canonical_request_hash =
-            hex::encode(blake3::hash(canonical_request.as_bytes()).as_bytes());
+        // Hash canonical request using SHA-256 (required by AWS SigV4, CWE-327 fix)
+        let canonical_request_hash = hex::encode(Sha256::digest(canonical_request.as_bytes()));
         let string_to_sign = format!(
             "{}\n{}\n{}\n{}",
             algorithm, amz_date, credential_scope, canonical_request_hash
@@ -450,18 +455,17 @@ impl S3Client {
         Ok(headers)
     }
 
-    /// Calculates the AWS Signature V4 signature
+    /// Calculates the AWS Signature V4 signature using proper HMAC-SHA256
     fn calculate_signature(&self, string_to_sign: &str, date_stamp: &str) -> io::Result<String> {
-        // Use Blake3 in keyed mode for HMAC-like behavior
-        // Note: This is a simplified version. Production should use proper HMAC-SHA256
+        // AWS SigV4 signing key derivation using HMAC-SHA256 (CWE-327 fix)
         let key_date = hmac_sha256(
             format!("AWS4{}", &*self.credentials.secret_access_key).as_bytes(),
             date_stamp.as_bytes(),
-        );
-        let key_region = hmac_sha256(&key_date, self.config.region.name.as_bytes());
-        let key_service = hmac_sha256(&key_region, b"s3");
-        let key_signing = hmac_sha256(&key_service, b"aws4_request");
-        let signature = hmac_sha256(&key_signing, string_to_sign.as_bytes());
+        )?;
+        let key_region = hmac_sha256(&key_date, self.config.region.name.as_bytes())?;
+        let key_service = hmac_sha256(&key_region, b"s3")?;
+        let key_signing = hmac_sha256(&key_service, b"aws4_request")?;
+        let signature = hmac_sha256(&key_signing, string_to_sign.as_bytes())?;
 
         Ok(hex::encode(signature))
     }
@@ -472,20 +476,17 @@ impl S3Client {
     }
 }
 
-/// Computes HMAC-SHA256 using blake3 in keyed mode
-/// This is used for AWS Signature V4 signing
-fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
-    // Derive a 32-byte key from the input key
-    let mut key_bytes = [0u8; 32];
-    if key.len() >= 32 {
-        key_bytes.copy_from_slice(&key[..32]);
-    } else {
-        key_bytes[..key.len()].copy_from_slice(key);
-    }
-
-    let mut hasher = blake3::Hasher::new_keyed(&key_bytes);
-    hasher.update(data);
-    *hasher.finalize().as_bytes()
+/// Computes HMAC-SHA256 using the hmac crate
+/// This is required for AWS Signature V4 signing (CWE-327 fix)
+fn hmac_sha256(key: &[u8], data: &[u8]) -> std::io::Result<[u8; 32]> {
+    let mut mac = HmacSha256::new_from_slice(key).map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid HMAC key length")
+    })?;
+    mac.update(data);
+    let result = mac.finalize();
+    let mut output = [0u8; 32];
+    output.copy_from_slice(&result.into_bytes());
+    Ok(output)
 }
 
 /// Formats a Unix timestamp as AWS date format (YYYYMMDD'T'HHMMSS'Z')
@@ -646,14 +647,14 @@ mod tests {
         let key = b"test-key";
         let data = b"test-data";
 
-        let result1 = hmac_sha256(key, data);
-        let result2 = hmac_sha256(key, data);
+        let result1 = hmac_sha256(key, data).unwrap();
+        let result2 = hmac_sha256(key, data).unwrap();
 
         // Same inputs should produce same output
         assert_eq!(result1, result2);
 
         // Different data should produce different output
-        let result3 = hmac_sha256(key, b"different-data");
+        let result3 = hmac_sha256(key, b"different-data").unwrap();
         assert_ne!(result1, result3);
     }
 }

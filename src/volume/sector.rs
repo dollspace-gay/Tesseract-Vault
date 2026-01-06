@@ -125,33 +125,27 @@ impl SectorCipher {
         })
     }
 
-    /// Derives a 64-byte XTS key from the master key using HKDF
+    /// Derives a 64-byte XTS key from the master key using HKDF-SHA256
+    ///
+    /// Uses HKDF (RFC 5869) instead of Argon2id because:
+    /// - Master key is already cryptographically strong random material
+    /// - HKDF is designed for deriving keys from strong keying material
+    /// - Argon2id's memory-hardness is unnecessary (no password stretching needed)
+    /// - HKDF is faster and equally secure for this use case
     fn derive_xts_key(master_key: &MasterKey) -> Result<Zeroizing<[u8; 64]>> {
-        use crate::config::CryptoConfig;
-        use crate::crypto::kdf::Argon2Kdf;
-        use crate::crypto::KeyDerivation;
+        use hkdf::Hkdf;
+        use sha2::Sha256;
 
-        // Use a fixed salt for XTS key derivation
-        // This is safe because the master key is already randomly generated
+        // Use HKDF to derive 64 bytes for XTS-AES-256 (two 32-byte keys)
+        // Salt is fixed but this is safe because input key material is already random
         let salt = b"secure-cryptor-xts-v1-2025-salt-";
+        let info = b"xts-aes-256-key-derivation";
 
-        let kdf = Argon2Kdf::new(CryptoConfig::default());
-        let derived = kdf
-            .derive_key(master_key.as_bytes(), salt)
-            .map_err(|_| SectorError::InvalidKeySize)?;
+        let hk = Hkdf::<Sha256>::new(Some(salt), master_key.as_bytes());
 
-        // Extend to 64 bytes using a second derivation if needed
         let mut xts_key = Zeroizing::new([0u8; 64]);
-
-        // First 32 bytes
-        xts_key[0..32].copy_from_slice(&derived[..]);
-
-        // Second 32 bytes (derived with different salt)
-        let salt2 = b"secure-cryptor-xts-v1-2025-slt2-";
-        let derived2 = kdf
-            .derive_key(master_key.as_bytes(), salt2)
+        hk.expand(info, &mut *xts_key)
             .map_err(|_| SectorError::InvalidKeySize)?;
-        xts_key[32..64].copy_from_slice(&derived2[..]);
 
         Ok(xts_key)
     }

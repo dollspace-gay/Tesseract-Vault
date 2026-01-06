@@ -7,6 +7,7 @@
 use super::Encryptor;
 use crate::config::NONCE_LEN;
 use crate::error::{CryptorError, Result};
+use zeroize::Zeroizing;
 
 use aes_gcm::{
     aead::{Aead, KeyInit},
@@ -41,10 +42,10 @@ impl Encryptor for AesGcmEncryptor {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, |ciphertext| = |plaintext| + 16 (authentication tag size)
-    #[cfg_attr(creusot, creusot_contracts::prelude::ensures(
+    #[cfg_attr(creusot, creusot_contracts::ensures(
         // When encryption succeeds, output length equals input + 16-byte auth tag
         match &result {
-            Ok(ct) => ct.len() == plaintext.len() + 16usize,
+            Ok(ct) => (@ct).len() == (@plaintext).len() + 16,
             Err(_) => true  // Errors allowed for invalid nonce
         }
     ))]
@@ -73,15 +74,20 @@ impl Encryptor for AesGcmEncryptor {
     /// # Formal Verification (Creusot)
     ///
     /// Proves: On success, |plaintext| = |ciphertext| - 16 (authentication tag removed)
-    #[cfg_attr(creusot, creusot_contracts::prelude::requires(ciphertext.len() >= 16usize))]
-    #[cfg_attr(creusot, creusot_contracts::prelude::ensures(
+    #[cfg_attr(creusot, creusot_contracts::requires((@ciphertext).len() >= 16))]
+    #[cfg_attr(creusot, creusot_contracts::ensures(
         // When decryption succeeds, output length equals input - 16-byte auth tag
         match &result {
-            Ok(pt) => pt.len() == ciphertext.len() - 16usize,
+            Ok(pt) => (@pt).len() == (@ciphertext).len() - 16,
             Err(_) => true  // Errors allowed for auth failure or invalid nonce
         }
     ))]
-    fn decrypt(&self, key: &[u8; 32], nonce_bytes: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>> {
+    fn decrypt(
+        &self,
+        key: &[u8; 32],
+        nonce_bytes: &[u8],
+        ciphertext: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>> {
         if nonce_bytes.len() != NONCE_LEN {
             return Err(CryptorError::Cryptography(format!(
                 "Invalid nonce length: expected {}, got {}",
@@ -98,6 +104,7 @@ impl Encryptor for AesGcmEncryptor {
 
         cipher
             .decrypt(&nonce, ciphertext)
+            .map(Zeroizing::new)
             .map_err(|_| CryptorError::Decryption)
     }
 

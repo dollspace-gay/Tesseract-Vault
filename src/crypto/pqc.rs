@@ -110,10 +110,11 @@ pub fn validate_encapsulation_key(encapsulation_key: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// Encapsulate a shared secret with key validation.
+/// Encapsulate a shared secret using an ML-KEM-1024 public key.
 ///
-/// This is a secure version of [`encapsulate`] that first validates the
-/// encapsulation key for ModulusOverflow per FIPS 203 Section 7.2.
+/// This function validates the encapsulation key for ModulusOverflow per
+/// FIPS 203 Section 7.2 before performing encapsulation. This is the secure
+/// default that should be used when receiving keys from external sources.
 ///
 /// # Arguments
 ///
@@ -130,14 +131,26 @@ pub fn validate_encapsulation_key(encapsulation_key: &[u8]) -> Result<()> {
 /// Returns an error if:
 /// - The encapsulation key size is invalid
 /// - The encapsulation key has ModulusOverflow (coefficients >= 3329)
-pub fn encapsulate_validated(
+///
+/// # Example
+///
+/// ```
+/// use tesseract_lib::crypto::pqc::{MlKemKeyPair, encapsulate};
+///
+/// let keypair = MlKemKeyPair::generate();
+/// let (ciphertext, shared_secret) = encapsulate(keypair.encapsulation_key()).unwrap();
+///
+/// // Send ciphertext to the key holder
+/// // Use shared_secret as encryption key
+/// ```
+pub fn encapsulate(
     encapsulation_key: &[u8],
 ) -> Result<(Vec<u8>, Zeroizing<[u8; SHARED_SECRET_SIZE]>)> {
-    // First validate the key for ModulusOverflow
+    // First validate the key for ModulusOverflow (CWE-676 mitigation)
     validate_encapsulation_key(encapsulation_key)?;
 
-    // Then perform normal encapsulation
-    encapsulate(encapsulation_key)
+    // Then perform encapsulation
+    encapsulate_unchecked(encapsulation_key)
 }
 
 /// ML-KEM-1024 key pair.
@@ -290,7 +303,13 @@ impl MlKemKeyPair {
     }
 }
 
-/// Encapsulate a shared secret using a public encapsulation key.
+/// Encapsulate without ModulusOverflow validation (internal use only).
+///
+/// # Safety
+///
+/// This function does NOT validate the encapsulation key for ModulusOverflow.
+/// Only use this when the key is known to be valid (e.g., locally generated).
+/// For external keys, use [`encapsulate`] which performs validation.
 ///
 /// # Arguments
 ///
@@ -298,26 +317,8 @@ impl MlKemKeyPair {
 ///
 /// # Returns
 ///
-/// A tuple of (ciphertext, shared_secret) where:
-/// - `ciphertext` is the encapsulated key (1568 bytes)
-/// - `shared_secret` is the derived shared secret (32 bytes) in zeroizing memory
-///
-/// # Errors
-///
-/// Returns an error if the encapsulation key is invalid.
-///
-/// # Example
-///
-/// ```
-/// use tesseract_lib::crypto::pqc::{MlKemKeyPair, encapsulate};
-///
-/// let keypair = MlKemKeyPair::generate();
-/// let (ciphertext, shared_secret) = encapsulate(keypair.encapsulation_key()).unwrap();
-///
-/// // Send ciphertext to the key holder
-/// // Use shared_secret as encryption key
-/// ```
-pub fn encapsulate(
+/// A tuple of (ciphertext, shared_secret) on success.
+pub(crate) fn encapsulate_unchecked(
     encapsulation_key: &[u8],
 ) -> Result<(Vec<u8>, Zeroizing<[u8; SHARED_SECRET_SIZE]>)> {
     if encapsulation_key.len() != PUBLIC_KEY_SIZE {
@@ -573,14 +574,14 @@ mod tests {
         bad_key[0] = 0xFF;
         bad_key[1] = 0xFF; // This encodes 0xFFF = 4095 >> 3329
 
-        let result = encapsulate_validated(&bad_key);
+        let result = encapsulate(&bad_key);
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_encapsulate_validated_accepts_good_key() {
+    fn test_encapsulate_accepts_good_key() {
         let keypair = MlKemKeyPair::generate();
-        let result = encapsulate_validated(keypair.encapsulation_key());
+        let result = encapsulate(keypair.encapsulation_key());
         assert!(result.is_ok());
 
         // Verify the result can be decapsulated

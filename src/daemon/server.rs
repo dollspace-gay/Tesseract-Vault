@@ -2,14 +2,22 @@
 // SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
 //! Daemon server implementation
 //!
-//! Manages mounted volumes and handles IPC requests
+//! Manages mounted volumes and handles IPC requests.
+//!
+//! # Security
+//!
+//! All commands require authentication via a token generated at daemon startup.
+//! The token is stored in a file only readable by the current user.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// Maximum number of concurrent client connections to prevent thread exhaustion DoS
+const MAX_CONCURRENT_CONNECTIONS: usize = 32;
 
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -17,9 +25,11 @@ use std::os::unix::net::{UnixListener, UnixStream};
 #[cfg(windows)]
 use std::net::{TcpListener, TcpStream};
 
-use super::protocol::{DaemonCommand, DaemonResponse, MountInfo};
+use super::auth::AuthManager;
+use super::protocol::{AuthenticatedRequest, DaemonCommand, DaemonResponse, MountInfo};
 use crate::volume::manager::VolumeManager;
 use crate::volume::mount::MountOptions;
+use zeroize::Zeroize;
 
 /// Daemon server state
 pub struct DaemonServer {
@@ -32,24 +42,50 @@ pub struct DaemonServer {
     /// Socket path for IPC
     socket_path: PathBuf,
 
+    /// Counter for active connections (DoS protection)
+    active_connections: Arc<AtomicUsize>,
+
     /// Shutdown signal receiver (optional, for service integration)
     shutdown_rx: Option<mpsc::Receiver<()>>,
 
     /// Shared shutdown flag for graceful termination
     shutdown_flag: Arc<AtomicBool>,
+
+    /// Authentication manager for validating client tokens
+    auth_manager: Option<AuthManager>,
 }
 
 impl DaemonServer {
     /// Create a new daemon server
+    ///
+    /// This initializes authentication by generating a token that clients must use.
     pub fn new() -> Self {
         let socket_path = Self::default_socket_path();
+
+        // Initialize authentication - log warning if it fails but continue
+        let auth_manager = match AuthManager::new() {
+            Ok(auth) => {
+                println!("Authentication token saved to {:?}", auth.token_path());
+                Some(auth)
+            }
+            Err(e) => {
+                eprintln!(
+                    "WARNING: Failed to initialize authentication: {}. \
+                     Daemon will run without authentication!",
+                    e
+                );
+                None
+            }
+        };
 
         Self {
             volume_manager: Arc::new(Mutex::new(VolumeManager::new())),
             mounts: Arc::new(Mutex::new(HashMap::new())),
             socket_path,
+            active_connections: Arc::new(AtomicUsize::new(0)),
             shutdown_rx: None,
             shutdown_flag: Arc::new(AtomicBool::new(false)),
+            auth_manager,
         }
     }
 
@@ -60,12 +96,30 @@ impl DaemonServer {
     pub fn new_with_shutdown(shutdown_rx: mpsc::Receiver<()>) -> Self {
         let socket_path = Self::default_socket_path();
 
+        // Initialize authentication - log warning if it fails but continue
+        let auth_manager = match AuthManager::new() {
+            Ok(auth) => {
+                println!("Authentication token saved to {:?}", auth.token_path());
+                Some(auth)
+            }
+            Err(e) => {
+                eprintln!(
+                    "WARNING: Failed to initialize authentication: {}. \
+                     Daemon will run without authentication!",
+                    e
+                );
+                None
+            }
+        };
+
         Self {
             volume_manager: Arc::new(Mutex::new(VolumeManager::new())),
             mounts: Arc::new(Mutex::new(HashMap::new())),
             socket_path,
+            active_connections: Arc::new(AtomicUsize::new(0)),
             shutdown_rx: Some(shutdown_rx),
             shutdown_flag: Arc::new(AtomicBool::new(false)),
+            auth_manager,
         }
     }
 
@@ -77,19 +131,36 @@ impl DaemonServer {
     /// Get the default socket path for the platform
     #[cfg(unix)]
     fn default_socket_path() -> PathBuf {
-        // Use XDG_RUNTIME_DIR if available, otherwise /tmp
+        // Use XDG_RUNTIME_DIR if available (preferred - per-session, auto-cleaned)
+        // Otherwise fall back to XDG_DATA_HOME or ~/.local/share/tesseract
+        // Avoid /tmp to prevent symlink attacks and unauthorized access
         if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
-            PathBuf::from(runtime_dir).join("tesseract-daemon.sock")
+            let dir = PathBuf::from(runtime_dir).join("tesseract");
+            let _ = std::fs::create_dir_all(&dir);
+            dir.join("daemon.sock")
+        } else if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
+            let dir = PathBuf::from(data_home).join("tesseract");
+            let _ = std::fs::create_dir_all(&dir);
+            dir.join("daemon.sock")
+        } else if let Ok(home) = std::env::var("HOME") {
+            let dir = PathBuf::from(home).join(".local/share/tesseract");
+            let _ = std::fs::create_dir_all(&dir);
+            dir.join("daemon.sock")
         } else {
+            // Last resort - this should rarely happen on Unix systems
             PathBuf::from("/tmp/tesseract-daemon.sock")
         }
     }
 
     #[cfg(windows)]
     fn default_socket_path() -> PathBuf {
-        // On Windows, we'll use a TCP socket on localhost as a fallback
-        // (named pipes would be better but Unix sockets are now supported on Windows 10+)
-        PathBuf::from("127.0.0.1:37284") // Arbitrary port
+        // On Windows, we use a TCP socket on localhost
+        // Port is configurable via TESSERACT_DAEMON_PORT environment variable
+        let port = std::env::var("TESSERACT_DAEMON_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(37284);
+        PathBuf::from(format!("127.0.0.1:{}", port))
     }
 
     /// Start the daemon server
@@ -121,6 +192,10 @@ impl DaemonServer {
         // Set non-blocking mode for graceful shutdown support
         listener.set_nonblocking(true)?;
 
+        // Get the expected token (if authentication is enabled)
+        let expected_token: Option<String> =
+            self.auth_manager.as_ref().map(|a| a.token().to_string());
+
         loop {
             // Check for shutdown signal
             if self.check_shutdown() {
@@ -131,12 +206,32 @@ impl DaemonServer {
 
             match listener.accept() {
                 Ok((stream, _)) => {
+                    // Check connection limit to prevent thread exhaustion DoS
+                    let current = self.active_connections.load(Ordering::Relaxed);
+                    if current >= MAX_CONCURRENT_CONNECTIONS {
+                        eprintln!(
+                            "Connection limit reached ({}/{}), rejecting connection",
+                            current, MAX_CONCURRENT_CONNECTIONS
+                        );
+                        // Drop the stream to close the connection
+                        drop(stream);
+                        continue;
+                    }
+
+                    // Increment connection counter
+                    self.active_connections.fetch_add(1, Ordering::Relaxed);
+
                     let mounts = Arc::clone(&self.mounts);
                     let volume_manager = Arc::clone(&self.volume_manager);
+                    let token = expected_token.clone();
+                    let conn_counter = Arc::clone(&self.active_connections);
 
                     // Handle connection in a new thread
                     std::thread::spawn(move || {
-                        if let Err(e) = Self::handle_client(stream, mounts, volume_manager) {
+                        let result = Self::handle_client(stream, mounts, volume_manager, token);
+                        // Always decrement counter when done
+                        conn_counter.fetch_sub(1, Ordering::Relaxed);
+                        if let Err(e) = result {
                             eprintln!("Error handling client: {}", e);
                         }
                     });
@@ -166,6 +261,10 @@ impl DaemonServer {
         // Set non-blocking mode for graceful shutdown support
         listener.set_nonblocking(true)?;
 
+        // Get the expected token (if authentication is enabled)
+        let expected_token: Option<String> =
+            self.auth_manager.as_ref().map(|a| a.token().to_string());
+
         loop {
             // Check for shutdown signal
             if self.check_shutdown() {
@@ -176,12 +275,32 @@ impl DaemonServer {
 
             match listener.accept() {
                 Ok((stream, _)) => {
+                    // Check connection limit to prevent thread exhaustion DoS
+                    let current = self.active_connections.load(Ordering::Relaxed);
+                    if current >= MAX_CONCURRENT_CONNECTIONS {
+                        eprintln!(
+                            "Connection limit reached ({}/{}), rejecting connection",
+                            current, MAX_CONCURRENT_CONNECTIONS
+                        );
+                        // Drop the stream to close the connection
+                        drop(stream);
+                        continue;
+                    }
+
+                    // Increment connection counter
+                    self.active_connections.fetch_add(1, Ordering::Relaxed);
+
                     let mounts = Arc::clone(&self.mounts);
                     let volume_manager = Arc::clone(&self.volume_manager);
+                    let token = expected_token.clone();
+                    let conn_counter = Arc::clone(&self.active_connections);
 
                     // Handle connection in a new thread
                     std::thread::spawn(move || {
-                        if let Err(e) = Self::handle_client(stream, mounts, volume_manager) {
+                        let result = Self::handle_client(stream, mounts, volume_manager, token);
+                        // Always decrement counter when done
+                        conn_counter.fetch_sub(1, Ordering::Relaxed);
+                        if let Err(e) = result {
                             eprintln!("Error handling client: {}", e);
                         }
                     });
@@ -254,8 +373,9 @@ impl DaemonServer {
         mut stream: UnixStream,
         mounts: Arc<Mutex<HashMap<PathBuf, MountInfo>>>,
         volume_manager: Arc<Mutex<VolumeManager>>,
+        expected_token: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        Self::handle_client_impl(&mut stream, mounts, volume_manager)
+        Self::handle_client_impl(&mut stream, mounts, volume_manager, expected_token)
     }
 
     #[cfg(windows)]
@@ -263,29 +383,70 @@ impl DaemonServer {
         mut stream: TcpStream,
         mounts: Arc<Mutex<HashMap<PathBuf, MountInfo>>>,
         volume_manager: Arc<Mutex<VolumeManager>>,
+        expected_token: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        Self::handle_client_impl(&mut stream, mounts, volume_manager)
+        Self::handle_client_impl(&mut stream, mounts, volume_manager, expected_token)
     }
+
+    /// Maximum allowed message size (16 MB) to prevent DoS via memory exhaustion
+    const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
 
     /// Implementation of client handling (generic over stream type)
     fn handle_client_impl<S: Read + Write>(
         stream: &mut S,
         mounts: Arc<Mutex<HashMap<PathBuf, MountInfo>>>,
         volume_manager: Arc<Mutex<VolumeManager>>,
+        expected_token: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Read request (prefixed with 4-byte length)
         let mut len_bytes = [0u8; 4];
         stream.read_exact(&mut len_bytes)?;
         let len = u32::from_be_bytes(len_bytes) as usize;
 
+        // Prevent DoS via unbounded memory allocation
+        if len > Self::MAX_MESSAGE_SIZE {
+            return Err(format!(
+                "Message size {} exceeds maximum allowed size {}",
+                len,
+                Self::MAX_MESSAGE_SIZE
+            )
+            .into());
+        }
+
         let mut buffer = vec![0u8; len];
         stream.read_exact(&mut buffer)?;
 
-        // Parse command
-        let command = DaemonCommand::from_bytes(&buffer)?;
-
-        // Process command
-        let response = Self::process_command(command, mounts, volume_manager);
+        // Parse and authenticate request
+        let response = match AuthenticatedRequest::from_bytes(&buffer) {
+            Ok(request) => {
+                // Validate authentication token if authentication is enabled
+                if let Some(ref expected) = expected_token {
+                    if !Self::validate_token(expected, &request.auth_token) {
+                        DaemonResponse::unauthorized("Invalid authentication token")
+                    } else {
+                        // Token valid, process the command
+                        // Clone command since AuthenticatedRequest implements ZeroizeOnDrop
+                        Self::process_command(request.command.clone(), mounts, volume_manager)
+                    }
+                } else {
+                    // Authentication not enabled (should not happen in production)
+                    eprintln!("WARNING: Processing command without authentication");
+                    Self::process_command(request.command.clone(), mounts, volume_manager)
+                }
+                // request is dropped here, zeroizing the auth_token
+            }
+            Err(_) => {
+                // Try parsing as legacy unauthenticated command for backward compatibility
+                // but only allow Ping command without auth
+                match DaemonCommand::from_bytes(&buffer) {
+                    Ok(DaemonCommand::Ping) => DaemonResponse::Pong,
+                    Ok(_) => DaemonResponse::unauthorized(
+                        "Authentication required. Please use AuthenticatedRequest.",
+                    ),
+                    Err(e) => DaemonResponse::error(format!("Invalid request format: {}", e)),
+                }
+            }
+        };
 
         // Send response (prefixed with 4-byte length)
         let response_bytes = response.to_bytes()?;
@@ -295,6 +456,22 @@ impl DaemonServer {
         stream.flush()?;
 
         Ok(())
+    }
+
+    /// Validate authentication token using constant-time comparison
+    fn validate_token(expected: &str, provided: &str) -> bool {
+        use subtle::ConstantTimeEq;
+
+        let expected_bytes = expected.as_bytes();
+        let provided_bytes = provided.as_bytes();
+
+        // Length check is okay to leak
+        if expected_bytes.len() != provided_bytes.len() {
+            return false;
+        }
+
+        // Constant-time comparison
+        expected_bytes.ct_eq(provided_bytes).into()
     }
 
     /// Process a daemon command
@@ -307,15 +484,20 @@ impl DaemonServer {
             DaemonCommand::Mount {
                 container_path,
                 mount_point,
-                password,
+                mut password,
                 read_only,
                 hidden_offset,
-                hidden_password,
+                mut hidden_password,
             } => {
                 // Check if already mounted
                 {
                     let mounts_guard = mounts.lock().unwrap();
                     if mounts_guard.contains_key(&container_path) {
+                        // Zeroize passwords before returning
+                        password.zeroize();
+                        if let Some(ref mut hp) = hidden_password {
+                            hp.zeroize();
+                        }
                         return DaemonResponse::error("Volume is already mounted");
                     }
                 }
@@ -323,6 +505,7 @@ impl DaemonServer {
                 // Mount the volume
                 let mut mgr = volume_manager.lock().unwrap();
 
+                // Clone hidden_password for MountOptions, we'll zeroize our copy
                 let options = MountOptions {
                     mount_point: mount_point.clone(),
                     read_only,
@@ -330,10 +513,18 @@ impl DaemonServer {
                     auto_unmount: true,
                     fs_name: Some("SecureCryptor".to_string()),
                     hidden_offset,
-                    hidden_password,
+                    hidden_password: hidden_password.clone(),
                 };
 
-                match mgr.mount(&container_path, &password, options) {
+                let result = mgr.mount(&container_path, &password, options);
+
+                // Zeroize passwords immediately after use
+                password.zeroize();
+                if let Some(ref mut hp) = hidden_password {
+                    hp.zeroize();
+                }
+
+                match result {
                     Ok(_) => {
                         // Track the mount
                         let info = MountInfo {

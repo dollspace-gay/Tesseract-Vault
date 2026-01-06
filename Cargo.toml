@@ -99,6 +99,7 @@ libc = "0.2"
 # Hybrid PQC key derivation (used on all platforms)
 hkdf = "0.11"
 sha2 = "0.9"
+hmac = "0.11"  # For AWS SigV4 HMAC-SHA256 signing
 
 # WebAssembly support
 wasm-bindgen = "0.2"

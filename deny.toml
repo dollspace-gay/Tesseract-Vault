@@ -110,7 +110,7 @@ unknown-registry = "deny"
 unknown-git = "deny"
 # Only allow crates.io
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []
+allow-git = ["https://github.com/creusot-rs/creusot"]
 
 [sources.allow-org]
 github = []

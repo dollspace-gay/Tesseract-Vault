@@ -61,7 +61,8 @@ impl Default for YubiKeyConfig {
         Self {
             slot: YubiKeySlot::Slot2,
             timeout: Duration::from_secs(5),
-            allow_backup: true,
+            // Secure by default: backup disabled to prevent bypass of hardware 2FA (CWE-287)
+            allow_backup: false,
             serial: None,
         }
     }
@@ -243,7 +244,8 @@ mod tests {
         let config = YubiKeyConfig::default();
         assert_eq!(config.slot, YubiKeySlot::Slot2);
         assert_eq!(config.timeout, Duration::from_secs(5));
-        assert!(config.allow_backup);
+        // Secure by default: backup disabled to prevent bypass of hardware 2FA (CWE-287)
+        assert!(!config.allow_backup);
         assert_eq!(config.serial, None);
     }
 
@@ -285,7 +287,10 @@ mod tests {
 
     #[test]
     fn test_backup_key_fallback() {
-        let mut yubikey = YubiKey::new().unwrap();
+        // Create YubiKey with backup explicitly enabled for this test
+        let mut config = YubiKeyConfig::default();
+        config.allow_backup = true;
+        let mut yubikey = YubiKey::with_config(config).unwrap();
 
         let backup = vec![0x42u8; 32];
         yubikey.set_backup_key(backup.clone());
@@ -300,5 +305,22 @@ mod tests {
 
         let key = result.unwrap();
         assert_eq!(key.len(), 32);
+    }
+
+    #[test]
+    fn test_backup_disabled_by_default() {
+        // Verify that backup is disabled by default (CWE-287 mitigation)
+        let mut yubikey = YubiKey::new().unwrap();
+
+        let backup = vec![0x42u8; 32];
+        yubikey.set_backup_key(backup);
+
+        let password = b"test-password";
+        let salt = [0x01u8; 32];
+        let challenge = [0x42u8; 32];
+
+        // Should fail because allow_backup is false by default
+        let result = yubikey.derive_key(password, &salt, &challenge);
+        assert!(result.is_err());
     }
 }

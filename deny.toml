@@ -85,7 +85,8 @@ registries = []
 # https://embarkstudios.github.io/cargo-deny/checks/bans/cfg.html
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
+# Allow wildcards for git dependencies like creusot-contracts which don't have crates.io versions
+wildcards = "warn"
 highlight = "all"
 workspace-default-features = "allow"
 external-default-features = "allow"

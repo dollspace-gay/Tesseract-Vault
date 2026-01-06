@@ -74,14 +74,14 @@ jobs:
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_custom_pattern_value
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_custom_pattern_uniqueness
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_pattern_pass_counts
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_entropy
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_chacha_nonce_length
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_chacha_key_length
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_allocation_size_bounds
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_pool_stats_no_overflow
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_security_level_ordering
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_zero_scrub_result
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_ones_scrub_result
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_chacha_length_preserving
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_custom_scrub_result
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_dod_scrub_passes
 
   kani-volume:
     name: Volume Header

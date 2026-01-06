@@ -9,7 +9,7 @@
 
 use crate::config::{
     CryptoConfig, ARGON2_LANES, ARGON2_MEM_COST_KIB, ARGON2_TIME_COST, MAGIC_BYTES, MAX_SALT_LEN,
-    NONCE_LEN,
+    MIN_SECURE_LANES, MIN_SECURE_MEM_COST_KIB, MIN_SECURE_TIME_COST, NONCE_LEN,
 };
 
 /// Verify AES-GCM nonce length is exactly 96 bits (12 bytes).
@@ -69,9 +69,9 @@ fn verify_config_default_matches_constants() {
     assert_eq!(config.argon2_lanes, ARGON2_LANES);
 }
 
-/// Verify CryptoConfig::new() stores parameters correctly.
+/// Verify CryptoConfig::new() clamps insecure parameters to minimums.
 ///
-/// Property: Constructor preserves all input values
+/// Property: Constructor clamps values below minimums (CWE-326 mitigation)
 #[kani::proof]
 fn verify_config_new_preserves_values() {
     let mem: u32 = kani::any();
@@ -79,15 +79,16 @@ fn verify_config_new_preserves_values() {
     let lanes: u32 = kani::any();
 
     // Bound to reasonable values to avoid state explosion
-    kani::assume(mem >= 8 && mem <= 1048576);
+    kani::assume(mem >= 1 && mem <= 1048576);
     kani::assume(time >= 1 && time <= 100);
     kani::assume(lanes >= 1 && lanes <= 16);
 
     let config = CryptoConfig::new(mem, time, lanes);
 
-    assert_eq!(config.argon2_mem_cost_kib, mem);
-    assert_eq!(config.argon2_time_cost, time);
-    assert_eq!(config.argon2_lanes, lanes);
+    // Values are clamped to minimum secure values (not raw preservation)
+    assert_eq!(config.argon2_mem_cost_kib, mem.max(MIN_SECURE_MEM_COST_KIB));
+    assert_eq!(config.argon2_time_cost, time.max(MIN_SECURE_TIME_COST));
+    assert_eq!(config.argon2_lanes, lanes.max(MIN_SECURE_LANES));
 }
 
 /// Verify CryptoConfig::fast() has lower security than default.

@@ -102,7 +102,7 @@ fn verify_roundtrip() {
             match encryptor.decrypt(&key, &nonce, &ciphertext) {
                 Ok(decrypted) => {
                     // Round-trip must produce original plaintext
-                    assert_eq!(decrypted, plaintext);
+                    assert_eq!(&*decrypted, &plaintext);
                 }
                 Err(_) => {
                     // Decryption should not fail for valid ciphertext

@@ -313,7 +313,11 @@ mod mount_tests {
             let options = MountOptions {
                 mount_point: mount_point.clone().into(),
                 read_only: false,
-                ..Default::default()
+                allow_other: false,
+                auto_unmount: true,
+                fs_name: None,
+                hidden_offset: None,
+                hidden_password: None,
             };
 
             let password = "TestPassword123!@#Strong";
@@ -333,7 +337,11 @@ mod mount_tests {
             let options = MountOptions {
                 mount_point: mount_point.clone().into(),
                 read_only: true,
-                ..Default::default()
+                allow_other: false,
+                auto_unmount: true,
+                fs_name: None,
+                hidden_offset: None,
+                hidden_password: None,
             };
 
             let password = "TestPassword123!@#Strong";
@@ -409,7 +417,12 @@ mod error_tests {
 
         let options = MountOptions {
             mount_point: "Z:".into(),
-            ..Default::default()
+            read_only: false,
+            allow_other: false,
+            auto_unmount: true,
+            fs_name: None,
+            hidden_offset: None,
+            hidden_password: None,
         };
 
         let result = mount(Path::new("nonexistent_container.scv"), "password", options);
@@ -432,7 +445,12 @@ mod error_tests {
 
         let options = MountOptions {
             mount_point: "Z:".into(),
-            ..Default::default()
+            read_only: false,
+            allow_other: false,
+            auto_unmount: true,
+            fs_name: None,
+            hidden_offset: None,
+            hidden_password: None,
         };
 
         let result = mount(&container_path, "wrong_password", options);

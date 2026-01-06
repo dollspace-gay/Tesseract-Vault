@@ -51,7 +51,7 @@ proptest! {
             .expect("Decryption should succeed");
 
         // Verify round-trip
-        prop_assert_eq!(&plaintext, &decrypted);
+        prop_assert_eq!(&plaintext, &*decrypted);
     }
 
     /// Property: Ciphertext is never equal to plaintext (for non-empty input)
@@ -177,7 +177,7 @@ proptest! {
         let decrypted = encryptor.decrypt(&key_array, &nonce, &ciphertext)
             .expect("Decryption should succeed");
 
-        prop_assert_eq!(&plaintext, &decrypted);
+        prop_assert_eq!(&plaintext, &*decrypted);
     }
 
     /// Property: AES-GCM ciphertext length = plaintext + 16 (tag)

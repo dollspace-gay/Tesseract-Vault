@@ -17,7 +17,7 @@
 //! - FIPS 204: https://csrc.nist.gov/pubs/fips/204/final
 
 use tesseract_lib::crypto::pqc::{
-    encapsulate, encapsulate_validated, validate_encapsulation_key, MlKemKeyPair, CIPHERTEXT_SIZE,
+    encapsulate, validate_encapsulation_key, MlKemKeyPair, CIPHERTEXT_SIZE,
     PUBLIC_KEY_SIZE, SECRET_KEY_SIZE, SHARED_SECRET_SIZE,
 };
 use tesseract_lib::crypto::signatures::{verify, MlDsaKeyPair, SecurityLevel};
@@ -117,8 +117,8 @@ fn test_mlkem_validated_roundtrip() {
     for i in 0..5 {
         let keypair = MlKemKeyPair::generate();
 
-        // Use validated encapsulation
-        let (ciphertext, shared_secret_enc) = encapsulate_validated(keypair.encapsulation_key())
+        // Use encapsulation (validates by default)
+        let (ciphertext, shared_secret_enc) = encapsulate(keypair.encapsulation_key())
             .expect("Validated encapsulation should succeed");
 
         let shared_secret_dec = keypair

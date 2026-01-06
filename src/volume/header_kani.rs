@@ -7,7 +7,7 @@
 #![cfg(kani)]
 
 use super::{
-    CipherAlgorithm, HeaderError, PqAlgorithm, PqVolumeMetadata, VolumeHeader, HEADER_SIZE,
+    CipherAlgorithm, PqAlgorithm, PqVolumeMetadata, VolumeHeader, HEADER_SIZE,
     MAX_PQC_METADATA_SIZE, PQC_PADDING_SIZE, PQ_METADATA_SIZE,
 };
 

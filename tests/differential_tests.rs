@@ -91,7 +91,7 @@ proptest! {
         let decrypted = encryptor.decrypt(&vector.key, &vector.nonce, &ciphertext)
             .expect("Decryption should succeed");
 
-        prop_assert_eq!(&vector.plaintext, &decrypted);
+        prop_assert_eq!(&vector.plaintext, &*decrypted);
     }
 
     /// Verify same inputs always produce same outputs (deterministic)
@@ -225,7 +225,7 @@ proptest! {
         let decrypted = decrypt_bytes(&salt, &nonce, &ciphertext, &password)
             .expect("Decryption should succeed");
 
-        prop_assert_eq!(&plaintext, &decrypted,
+        prop_assert_eq!(&plaintext, &*decrypted,
             "Round-trip encryption/decryption must preserve data");
     }
 
@@ -380,7 +380,7 @@ proptest! {
         let decrypted = encryptor.decrypt(&key_array, &nonce, &ciphertext)
             .expect("Single-byte decryption should succeed");
 
-        prop_assert_eq!(&plaintext[..], &decrypted[..]);
+        prop_assert_eq!(&plaintext[..], &(*decrypted)[..]);
     }
 
     /// Test boundary sizes (powers of 2, block boundaries)
@@ -405,6 +405,6 @@ proptest! {
         let decrypted = encryptor.decrypt(&key_array, &nonce, &ciphertext)
             .expect("Boundary size decryption should succeed");
 
-        prop_assert_eq!(&plaintext, &decrypted);
+        prop_assert_eq!(&plaintext, &*decrypted);
     }
 }

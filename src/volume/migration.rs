@@ -730,9 +730,9 @@ mod tests {
 
     #[test]
     fn test_migration_error_serialization_contains_detail() {
-        let err = MigrationError::Serialization("bincode failed".to_string());
+        let err = MigrationError::Serialization("postcard failed".to_string());
         let msg = err.to_string();
-        assert!(msg.contains("bincode failed"));
+        assert!(msg.contains("postcard failed"));
     }
 
     #[test]

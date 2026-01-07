@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - Creusot formal verification - removed due to incompatibility with codebase patterns (dyn Error, chunks_exact iterator, String struct fields)
+- Orphaned `yubikey_stub.rs` - dead code never wired into module system (replaced by real `yubikey.rs` implementation long ago)
 
 ### Fixed
 - Race condition in concurrent filesystem operations - added inode table lock to protect read-modify-write cycles on shared inode blocks (32 inodes per 4KB block)

@@ -636,8 +636,8 @@ impl VolumeIOFilesystem {
         let (block, offset) = self.inode_location(inode_num);
 
         // Serialize inode before acquiring lock to minimize lock hold time
-        let inode_bytes =
-            postcard::to_allocvec(inode).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
+        let inode_bytes = postcard::to_allocvec(inode)
+            .map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
 
         // Lock protects the read-modify-write cycle on inode table blocks.
         // Multiple inodes share the same block (32 per 4KB), so concurrent

@@ -7,11 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Replaced `bincode` serialization with `postcard` - more compact varint encoding, actively maintained (RUSTSEC-2025-0141)
+- Updated `lru` from 0.16 to 0.16.3 to fix soundness issue with IterMut (RUSTSEC-2026-0002)
+
 ### Removed
 - Creusot formal verification - removed due to incompatibility with codebase patterns (dyn Error, chunks_exact iterator, String struct fields)
 
 ### Fixed
 - Race condition in concurrent filesystem operations - added inode table lock to protect read-modify-write cycles on shared inode blocks (32 inodes per 4KB block)
+
+### Security
+- **[MEDIUM]** Fixed RUSTSEC-2025-0141 - replaced unmaintained `bincode` crate with `postcard` for serialization
+- **[MEDIUM]** Fixed RUSTSEC-2026-0002 - upgraded `lru` to 0.16.3 to fix soundness issue in IterMut
 
 ## [1.6.0] - 2026-01-06
 

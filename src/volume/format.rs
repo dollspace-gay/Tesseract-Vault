@@ -879,7 +879,7 @@ mod tests {
     fn test_inode_size() {
         // Verify inode fits in INODE_SIZE bytes
         let inode = Inode::new();
-        let serialized = bincode::serialize(&inode).unwrap();
+        let serialized = postcard::to_allocvec(&inode).unwrap();
         assert!(
             serialized.len() <= INODE_SIZE as usize,
             "Inode too large: {} > {}",

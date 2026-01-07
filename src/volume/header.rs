@@ -79,7 +79,7 @@ pub const MAX_PQC_METADATA_SIZE: usize = 67072; // 65.5 KB (rounded up for align
 
 /// Post-quantum cryptography metadata for volume encryption
 ///
-/// This structure is serialized with bincode and stored after the main header.
+/// This structure is serialized with postcard and stored after the main header.
 /// It contains ML-KEM-1024 key encapsulation data for quantum-resistant
 /// volume encryption.
 ///
@@ -203,7 +203,7 @@ pub enum HeaderError {
 
     /// Serialization error
     #[error("Serialization error: {0}")]
-    Serialization(#[from] bincode::Error),
+    Serialization(#[from] postcard::Error),
 
     /// Header size mismatch
     #[error("Header size mismatch: expected {expected}, got {actual}")]
@@ -307,7 +307,7 @@ impl VolumeHeader {
     ///
     /// A byte vector of exactly HEADER_SIZE bytes
     pub fn to_bytes(&self) -> Result<Vec<u8>, HeaderError> {
-        let mut serialized = bincode::serialize(self)?;
+        let mut serialized = postcard::to_allocvec(self)?;
 
         // Ensure the header is exactly HEADER_SIZE bytes
         if serialized.len() > HEADER_SIZE {
@@ -349,7 +349,7 @@ impl VolumeHeader {
             });
         }
 
-        let header: Self = bincode::deserialize(bytes)?;
+        let header: Self = postcard::from_bytes(bytes)?;
 
         // Validate magic bytes
         if header.magic != MAGIC {
@@ -564,31 +564,31 @@ impl VolumeHeader {
     }
 }
 
-/// Expected serialized size of PqVolumeMetadata with bincode
+/// Expected serialized size of PqVolumeMetadata with postcard
 /// With cryptographic agility padding (60KB fixed padding for future algorithms like SPHINCS+)
-/// Actual measurement: 66336 bytes (includes bincode overhead + reserved_padding field)
-pub const PQ_METADATA_SIZE: usize = 66336;
+/// Postcard uses compact variable-length encoding: 1 + 1568 + 1568 + 3196 + 60000 = 66333 bytes
+pub const PQ_METADATA_SIZE: usize = 66333;
 
 /// Helper functions for PQ metadata I/O
 impl PqVolumeMetadata {
-    /// Serializes PQ metadata to binary bytes using bincode
+    /// Serializes PQ metadata to binary bytes using postcard
     ///
     /// # Returns
     ///
-    /// Bincode-encoded byte vector (fixed size: 6333 bytes)
+    /// Postcard-encoded byte vector
     ///
     /// # Errors
     ///
     /// Returns an error if serialization fails
     pub fn to_bytes(&self) -> Result<Vec<u8>, HeaderError> {
-        bincode::serialize(self).map_err(HeaderError::Serialization)
+        postcard::to_allocvec(self).map_err(HeaderError::Serialization)
     }
 
     /// Deserializes PQ metadata from binary bytes
     ///
     /// # Arguments
     ///
-    /// * `bytes` - Bincode-encoded byte slice
+    /// * `bytes` - Postcard-encoded byte slice
     ///
     /// # Returns
     ///
@@ -598,7 +598,7 @@ impl PqVolumeMetadata {
     ///
     /// Returns an error if deserialization fails
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, HeaderError> {
-        bincode::deserialize(bytes).map_err(HeaderError::Serialization)
+        postcard::from_bytes(bytes).map_err(HeaderError::Serialization)
     }
 
     /// Writes PQ metadata to a writer

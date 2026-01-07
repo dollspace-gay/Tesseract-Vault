@@ -162,7 +162,7 @@ pub enum ContainerError {
 
     /// Serialization error
     #[error("Serialization error: {0}")]
-    Serialization(#[from] bincode::Error),
+    Serialization(#[from] postcard::Error),
 
     /// Invalid container size
     #[error("Invalid container size: {0}")]
@@ -355,7 +355,7 @@ impl Container {
 
         // Key slots written at KEYSLOTS_OFFSET (69.5KB)
         // Serialize and write key slots
-        let keyslots_bytes = bincode::serialize(&key_slots)?;
+        let keyslots_bytes = postcard::to_allocvec(&key_slots)?;
         if keyslots_bytes.len() > KEYSLOTS_SIZE {
             return Err(ContainerError::InvalidSize(format!(
                 "Key slots data ({} bytes) exceeds maximum size ({})",
@@ -548,7 +548,7 @@ impl Container {
         file.write_all(&pq_section)?;
 
         // Write key slots
-        let keyslots_bytes = bincode::serialize(&key_slots)?;
+        let keyslots_bytes = postcard::to_allocvec(&key_slots)?;
         if keyslots_bytes.len() > KEYSLOTS_SIZE {
             return Err(ContainerError::InvalidSize(format!(
                 "Key slots data ({} bytes) exceeds maximum size ({})",
@@ -674,7 +674,7 @@ impl Container {
             // Read key slots
             let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
             file.read_exact(&mut keyslots_bytes)?;
-            let key_slots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
+            let key_slots: KeySlots = postcard::from_bytes(&keyslots_bytes)?;
 
             // Unlock with hybrid key
             let master_key = key_slots.unlock_with_derived_key(&hybrid_key)?;
@@ -685,7 +685,7 @@ impl Container {
             // Read key slots (immediately after header in V1)
             let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
             file.read_exact(&mut keyslots_bytes)?;
-            let mut key_slots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
+            let mut key_slots: KeySlots = postcard::from_bytes(&keyslots_bytes)?;
 
             // Unlock with password
             // WARNING: This may destroy all keys if duress password is entered
@@ -693,7 +693,7 @@ impl Container {
 
             // If key slots were modified (duress password entered), write them back
             // This persists the key destruction to disk
-            let keyslots_bytes = bincode::serialize(&key_slots)?;
+            let keyslots_bytes = postcard::to_allocvec(&key_slots)?;
             file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
             file.write_all(&keyslots_bytes)?;
             file.sync_all()?;
@@ -705,7 +705,7 @@ impl Container {
         file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
         let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
         file.read_exact(&mut keyslots_bytes)?;
-        let key_slots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
+        let key_slots: KeySlots = postcard::from_bytes(&keyslots_bytes)?;
 
         // Create container instance
         let mut container = Self {
@@ -853,7 +853,7 @@ impl Container {
             // Read and unlock key slots
             let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
             file.read_exact(&mut keyslots_bytes)?;
-            let key_slots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
+            let key_slots: KeySlots = postcard::from_bytes(&keyslots_bytes)?;
 
             let master_key = key_slots.unlock_with_derived_key(&hybrid_key)?;
             (master_key, Some(pq_shared_secret))
@@ -863,12 +863,12 @@ impl Container {
 
             let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
             file.read_exact(&mut keyslots_bytes)?;
-            let mut key_slots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
+            let mut key_slots: KeySlots = postcard::from_bytes(&keyslots_bytes)?;
 
             let master_key = key_slots.unlock(password)?;
 
             // Persist any key slot changes
-            let keyslots_bytes = bincode::serialize(&key_slots)?;
+            let keyslots_bytes = postcard::to_allocvec(&key_slots)?;
             file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
             file.write_all(&keyslots_bytes)?;
             file.sync_all()?;
@@ -879,7 +879,7 @@ impl Container {
         file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
         let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
         file.read_exact(&mut keyslots_bytes)?;
-        let key_slots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
+        let key_slots: KeySlots = postcard::from_bytes(&keyslots_bytes)?;
 
         // Create container instance
         let container = Self {
@@ -1311,7 +1311,7 @@ impl Container {
         file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
 
         // Serialize and write
-        let keyslots_bytes = bincode::serialize(&self.key_slots)?;
+        let keyslots_bytes = postcard::to_allocvec(&self.key_slots)?;
         let mut padded_keyslots = keyslots_bytes;
         padded_keyslots.resize(KEYSLOTS_SIZE, 0);
         file.write_all(&padded_keyslots)?;
@@ -1356,7 +1356,7 @@ impl Container {
 
         // Serialize header and key slots
         let header_bytes = self.header.to_bytes()?;
-        let keyslots_bytes = bincode::serialize(&self.key_slots)?;
+        let keyslots_bytes = postcard::to_allocvec(&self.key_slots)?;
 
         // Combine header + keyslots
         let mut backup_data = Vec::new();
@@ -1488,7 +1488,7 @@ impl Container {
 
         // Deserialize header and keyslots
         let header = VolumeHeader::from_bytes(header_bytes)?;
-        let key_slots: KeySlots = bincode::deserialize(keyslots_bytes)?;
+        let key_slots: KeySlots = postcard::from_bytes(keyslots_bytes)?;
 
         // Write to container file
         let file = self
@@ -1502,7 +1502,7 @@ impl Container {
 
         // Write key slots at fixed offset
         file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
-        let mut padded_keyslots = bincode::serialize(&key_slots)?;
+        let mut padded_keyslots = postcard::to_allocvec(&key_slots)?;
         padded_keyslots.resize(KEYSLOTS_SIZE, 0);
         file.write_all(&padded_keyslots)?;
         file.sync_all()?;
@@ -1753,7 +1753,7 @@ impl Container {
         hidden_header.write_to(file)?;
 
         // Write hidden volume key slots
-        let keyslots_bytes = bincode::serialize(&hidden_keyslots)?;
+        let keyslots_bytes = postcard::to_allocvec(&hidden_keyslots)?;
         let mut padded_keyslots = keyslots_bytes;
         padded_keyslots.resize(KEYSLOTS_SIZE, 0);
         file.write_all(&padded_keyslots)?;
@@ -1809,14 +1809,14 @@ impl Container {
         // Read hidden volume key slots
         let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
         file.read_exact(&mut keyslots_bytes)?;
-        let mut hidden_keyslots: KeySlots = bincode::deserialize(&keyslots_bytes)?;
+        let mut hidden_keyslots: KeySlots = postcard::from_bytes(&keyslots_bytes)?;
 
         // Unlock with hidden password
         // WARNING: This may destroy all keys if duress password is entered
         let hidden_master_key = hidden_keyslots.unlock(hidden_password)?;
 
         // If key slots were modified (duress password entered), write them back
-        let keyslots_bytes = bincode::serialize(&hidden_keyslots)?;
+        let keyslots_bytes = postcard::to_allocvec(&hidden_keyslots)?;
         file.seek(SeekFrom::Start(absolute_offset + HEADER_SIZE as u64))?;
         file.write_all(&keyslots_bytes)?;
         file.sync_all()?;

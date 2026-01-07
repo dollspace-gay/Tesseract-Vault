@@ -107,7 +107,7 @@ impl MigrationBackup {
         file.write_all(&header_bytes)?;
 
         // Write keyslots
-        let keyslots_bytes = bincode::serialize(&self.original_keyslots)
+        let keyslots_bytes = postcard::to_allocvec(&self.original_keyslots)
             .map_err(|e| MigrationError::Serialization(e.to_string()))?;
         file.write_all(&keyslots_bytes)?;
 
@@ -125,7 +125,7 @@ impl MigrationBackup {
 
         // Restore keyslots at offset 8KB
         file.seek(SeekFrom::Start(KEYSLOTS_OFFSET))?;
-        let keyslots_bytes = bincode::serialize(&self.original_keyslots)
+        let keyslots_bytes = postcard::to_allocvec(&self.original_keyslots)
             .map_err(|e| MigrationError::Serialization(e.to_string()))?;
         file.write_all(&keyslots_bytes)?;
 
@@ -181,7 +181,7 @@ impl VolumeMigration {
         let mut keyslots_bytes = vec![0u8; KEYSLOTS_SIZE];
         file.read_exact(&mut keyslots_bytes)?;
 
-        let keyslots: KeySlots = bincode::deserialize(&keyslots_bytes)
+        let keyslots: KeySlots = postcard::from_bytes(&keyslots_bytes)
             .map_err(|e| MigrationError::Serialization(e.to_string()))?;
 
         Ok(keyslots)

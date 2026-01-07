@@ -966,8 +966,6 @@ mod tests {
 
     #[test]
     fn test_duress_password_serialization() {
-        use bincode;
-
         let master_key = MasterKey::generate();
         let mut slots = KeySlots::new();
 
@@ -976,10 +974,10 @@ mod tests {
         slots.set_duress_password("Duress456!").unwrap();
 
         // Serialize
-        let serialized = bincode::serialize(&slots).unwrap();
+        let serialized = postcard::to_allocvec(&slots).unwrap();
 
         // Deserialize
-        let mut deserialized: KeySlots = bincode::deserialize(&serialized).unwrap();
+        let mut deserialized: KeySlots = postcard::from_bytes(&serialized).unwrap();
 
         // Verify duress password still works after deserialization
         assert!(deserialized.has_duress_password());

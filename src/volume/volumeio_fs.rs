@@ -410,11 +410,11 @@ impl VolumeIOFilesystem {
     }
 
     fn serialize_superblock(&self, sb: &Superblock) -> Result<Vec<u8>> {
-        bincode::serialize(sb).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))
+        postcard::to_allocvec(sb).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))
     }
 
     fn deserialize_superblock(&self, data: &[u8]) -> Result<Superblock> {
-        bincode::deserialize(data).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))
+        postcard::from_bytes(data).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))
     }
 
     /// Gets a reference to the cached superblock
@@ -616,7 +616,7 @@ impl VolumeIOFilesystem {
         let (block, offset) = self.inode_location(inode_num);
         let block_data = self.read_block(block)?;
 
-        let inode: Inode = bincode::deserialize(&block_data[offset..offset + INODE_SIZE as usize])
+        let inode: Inode = postcard::from_bytes(&block_data[offset..offset + INODE_SIZE as usize])
             .map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
 
         // Cache the inode
@@ -637,7 +637,7 @@ impl VolumeIOFilesystem {
 
         // Serialize inode before acquiring lock to minimize lock hold time
         let inode_bytes =
-            bincode::serialize(inode).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
+            postcard::to_allocvec(inode).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
 
         // Lock protects the read-modify-write cycle on inode table blocks.
         // Multiple inodes share the same block (32 per 4KB), so concurrent
@@ -693,7 +693,7 @@ impl VolumeIOFilesystem {
     /// Initializes the journal
     fn init_journal(&self) -> Result<()> {
         let header = JournalHeader::new(JOURNAL_BLOCKS as u32);
-        let header_bytes = bincode::serialize(&header)
+        let header_bytes = postcard::to_allocvec(&header)
             .map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
 
         self.write_block(JOURNAL_START, &header_bytes)?;

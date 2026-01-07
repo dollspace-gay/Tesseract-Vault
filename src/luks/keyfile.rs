@@ -613,8 +613,8 @@ impl TesseractLuksKeyfile {
         file.write_all(&[self.flags.to_byte()])?;
 
         // Serialize and write body
-        let body =
-            bincode::serialize(self).map_err(|e| LuksKeyfileError::Serialization(e.to_string()))?;
+        let body = postcard::to_allocvec(self)
+            .map_err(|e| LuksKeyfileError::Serialization(e.to_string()))?;
 
         // Write body length and body
         let len = body.len() as u32;
@@ -669,7 +669,7 @@ impl TesseractLuksKeyfile {
         file.read_exact(&mut body)?;
 
         // Deserialize
-        let keyfile: TesseractLuksKeyfile = bincode::deserialize(&body)
+        let keyfile: TesseractLuksKeyfile = postcard::from_bytes(&body)
             .map_err(|e| LuksKeyfileError::Serialization(e.to_string()))?;
 
         Ok(keyfile)

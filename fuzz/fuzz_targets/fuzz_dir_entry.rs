@@ -12,7 +12,7 @@ use tesseract_lib::volume::FsDirEntry;
 
 fuzz_target!(|data: &[u8]| {
     // Attempt to deserialize directory entry from arbitrary data
-    if let Ok(entry) = bincode::deserialize::<FsDirEntry>(data) {
+    if let Ok(entry) = postcard::from_bytes::<FsDirEntry>(data) {
         // If deserialization succeeds, test accessor methods
         let _ = entry.is_deleted();
         let _ = entry.size();

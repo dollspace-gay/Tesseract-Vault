@@ -13,7 +13,7 @@ use tesseract_lib::volume::Superblock;
 
 fuzz_target!(|data: &[u8]| {
     // Attempt to deserialize superblock from arbitrary data
-    if let Ok(superblock) = bincode::deserialize::<Superblock>(data) {
+    if let Ok(superblock) = postcard::from_bytes::<Superblock>(data) {
         // If deserialization succeeds, test validation
         let _ = superblock.validate();
 

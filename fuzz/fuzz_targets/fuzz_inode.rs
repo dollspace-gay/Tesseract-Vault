@@ -13,7 +13,7 @@ use tesseract_lib::volume::{Inode, INODE_SIZE};
 
 fuzz_target!(|data: &[u8]| {
     // Attempt to deserialize inode from arbitrary data
-    if let Ok(inode) = bincode::deserialize::<Inode>(data) {
+    if let Ok(inode) = postcard::from_bytes::<Inode>(data) {
         // If deserialization succeeds, test accessor methods
         let _ = inode.file_type();
         let _ = inode.permissions();
@@ -30,6 +30,6 @@ fuzz_target!(|data: &[u8]| {
 
     // Test with exact inode size if we have enough data
     if data.len() >= INODE_SIZE as usize {
-        let _ = bincode::deserialize::<Inode>(&data[..INODE_SIZE as usize]);
+        let _ = postcard::from_bytes::<Inode>(&data[..INODE_SIZE as usize]);
     }
 });

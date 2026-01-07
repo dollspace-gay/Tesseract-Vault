@@ -12,7 +12,7 @@ use tesseract_lib::volume::KeySlots;
 
 fuzz_target!(|data: &[u8]| {
     // Attempt to deserialize key slots from arbitrary data
-    if let Ok(keyslots) = bincode::deserialize::<KeySlots>(data) {
+    if let Ok(keyslots) = postcard::from_bytes::<KeySlots>(data) {
         // If deserialization succeeds, test accessor methods
         let _ = keyslots.active_count();
         let _ = keyslots.has_duress_password();

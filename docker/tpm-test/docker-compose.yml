@@ -1,0 +1,28 @@
+# Tesseract TPM Testing with Software TPM
+#
+# Usage:
+#   docker compose build
+#   docker compose run --rm tpm-test                    # Run all TPM tests
+#   docker compose run --rm tpm-test cargo test luks    # Run LUKS tests
+#   docker compose run --rm tpm-test bash               # Interactive shell
+
+services:
+  tpm-test:
+    build:
+      context: ../..
+      dockerfile: docker/tpm-test/Dockerfile
+    volumes:
+      # Mount source for faster iteration (optional)
+      - ../../src:/tesseract/src:ro
+      - ../../Cargo.toml:/tesseract/Cargo.toml:ro
+      - ../../Cargo.lock:/tesseract/Cargo.lock:ro
+    # Required for swtpm device creation
+    privileged: true
+    # Or use specific capabilities:
+    # cap_add:
+    #   - SYS_ADMIN
+    # devices:
+    #   - /dev/fuse
+    environment:
+      - RUST_BACKTRACE=1
+      - TPM2TOOLS_TCTI=device:/dev/tpm0

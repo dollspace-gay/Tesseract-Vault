@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Docker TPM testing environment using swtpm (Software TPM 2.0 emulator) for CI validation of TPM functionality
+- `.dockerignore` file to optimize Docker build context (21GB → 212MB)
+- `tesseract-luks` CLI tool for Linux Full Disk Encryption with Tesseract security features:
+  - Password-based key slot with Argon2id key derivation + AES-256-GCM encryption
+  - PQC hybrid key slot with ML-KEM-1024 post-quantum encryption
+  - Duress password slot that securely destroys all keys when used
+  - TPM 2.0 sealing with PCR-bound policy (PCR 0, 7 for Secure Boot chain)
+  - Keyfile wrapper approach compatible with standard cryptsetup/LUKS2
+
 ### Changed
 - Replaced `bincode` serialization with `postcard` - more compact varint encoding, actively maintained (RUSTSEC-2025-0141)
 - Updated `lru` from 0.16 to 0.16.3 to fix soundness issue with IterMut (RUSTSEC-2026-0002)

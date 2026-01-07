@@ -1,0 +1,37 @@
+# Build artifacts
+target/
+debug/
+release/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+
+# Generated files
+*.log
+*.tmp
+
+# Dependencies (Rust builds fresh in Docker)
+Cargo.lock.bak
+
+# Fuzz artifacts
+fuzz/target/
+fuzz/artifacts/
+fuzz/corpus/
+
+# Local test files
+*.keyfile
+*.vault
+
+# Docker
+.dockerignore
+docker/**/Dockerfile
+
+# Large ML models or data
+*.bin
+*.model

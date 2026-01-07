@@ -218,7 +218,6 @@ impl<T: Zeroize> LockedMemory<T> {
     }
 }
 
-#[cfg(not(creusot))]
 impl<T: Zeroize> Deref for LockedMemory<T> {
     type Target = T;
 
@@ -227,7 +226,6 @@ impl<T: Zeroize> Deref for LockedMemory<T> {
     }
 }
 
-#[cfg(not(creusot))]
 impl<T: Zeroize> DerefMut for LockedMemory<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.data

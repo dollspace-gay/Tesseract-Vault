@@ -27,7 +27,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::SystemTime;
 
 use thiserror::Error;
@@ -130,6 +130,11 @@ pub struct VolumeIOFilesystem {
 
     /// Whether filesystem has been modified
     dirty: RwLock<bool>,
+
+    /// Lock for inode table block read-modify-write operations.
+    /// Multiple inodes share the same block (32 per 4KB block), so concurrent
+    /// inode updates without this lock can cause lost writes.
+    inode_table_lock: Mutex<()>,
 }
 
 impl Default for VolumeIOFilesystem {
@@ -151,6 +156,7 @@ impl VolumeIOFilesystem {
             inode_bitmap: RwLock::new(None),
             inode_cache: RwLock::new(HashMap::new()),
             dirty: RwLock::new(false),
+            inode_table_lock: Mutex::new(()),
         }
     }
 
@@ -223,6 +229,7 @@ impl VolumeIOFilesystem {
             inode_bitmap: RwLock::new(Some(inode_bitmap.clone())),
             inode_cache: RwLock::new(HashMap::new()),
             dirty: RwLock::new(true),
+            inode_table_lock: Mutex::new(()),
         };
 
         // Write all structures to disk
@@ -275,6 +282,7 @@ impl VolumeIOFilesystem {
             inode_bitmap: RwLock::new(None),
             inode_cache: RwLock::new(HashMap::new()),
             dirty: RwLock::new(false),
+            inode_table_lock: Mutex::new(()),
         };
 
         // Read and validate superblock
@@ -627,12 +635,20 @@ impl VolumeIOFilesystem {
     fn write_inode_no_cache(&self, inode_num: u32, inode: &Inode) -> Result<()> {
         let (block, offset) = self.inode_location(inode_num);
 
-        // Read the block, modify the inode, write back
-        let mut block_data = self.read_block(block)?;
-
+        // Serialize inode before acquiring lock to minimize lock hold time
         let inode_bytes =
             bincode::serialize(inode).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
 
+        // Lock protects the read-modify-write cycle on inode table blocks.
+        // Multiple inodes share the same block (32 per 4KB), so concurrent
+        // updates without this lock can cause lost writes.
+        let _guard = self
+            .inode_table_lock
+            .lock()
+            .map_err(|_| VolumeIOFsError::LockPoisoned)?;
+
+        // Read the block, modify the inode, write back
+        let mut block_data = self.read_block(block)?;
         block_data[offset..offset + inode_bytes.len()].copy_from_slice(&inode_bytes);
         self.write_block(block, &block_data)?;
 

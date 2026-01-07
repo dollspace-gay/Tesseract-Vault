@@ -57,11 +57,7 @@ impl Default for Argon2Kdf {
 impl KeyDerivation for Argon2Kdf {
     /// Derives a 32-byte encryption key from password and salt using Argon2id.
     ///
-    /// # Formal Verification (Creusot)
-    ///
-    /// Proves: On success, output key is exactly 32 bytes.
-    // Formal Verification (Creusot): Output key is exactly 32 bytes (guaranteed by [u8; 32] type)
-    #[cfg_attr(creusot, creusot_contracts::macros::ensures(true))]
+    /// Output key is exactly 32 bytes (guaranteed by [u8; 32] type).
     fn derive_key(&self, password: &[u8], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
         let params = Params::new(
             self.config.argon2_mem_cost_kib,

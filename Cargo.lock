@@ -1434,25 +1434,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "creusot-contracts"
-version = "0.8.0"
-source = "git+https://github.com/creusot-rs/creusot?tag=v0.8.0#77f3e3e204b4d0ceecbfe5b91df8f2a3fe71165f"
-dependencies = [
- "creusot-contracts-proc",
- "num-rational",
-]
-
-[[package]]
-name = "creusot-contracts-proc"
-version = "0.8.0"
-source = "git+https://github.com/creusot-rs/creusot?tag=v0.8.0#77f3e3e204b4d0ceecbfe5b91df8f2a3fe71165f"
-dependencies = [
- "proc-macro2",
- "quote 1.0.41",
- "syn 2.0.108",
-]
-
-[[package]]
 name = "criterion"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5936,7 +5917,6 @@ dependencies = [
  "chacha20",
  "clap 4.5.51",
  "console_error_panic_hook",
- "creusot-contracts",
  "criterion",
  "ctrlc",
  "dirs 5.0.1",

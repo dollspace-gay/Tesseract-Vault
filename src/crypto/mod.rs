@@ -6,20 +6,12 @@
 //! allowing for pluggable implementations of different encryption algorithms.
 
 pub mod aes_gcm;
-// Hardware detection module excluded from Creusot verification due to unsupported patterns
-// (string pattern matching, CPUID intrinsics, int-to-float casts)
-#[cfg(not(creusot))]
 pub mod hardware;
 pub mod kdf;
-// Post-quantum modules excluded from Creusot verification due to unsupported patterns
-// (chunks_exact().enumerate() iterator, dyn Error types)
-#[cfg(all(feature = "post-quantum", not(creusot)))]
+#[cfg(feature = "post-quantum")]
 pub mod pqc;
-#[cfg(all(feature = "post-quantum", not(creusot)))]
+#[cfg(feature = "post-quantum")]
 pub mod signatures;
-// Streaming module excluded from Creusot verification due to unsupported patterns
-// (String fields in structs, int-to-float casts)
-#[cfg(not(creusot))]
 pub mod streaming;
 
 #[cfg(all(test, feature = "post-quantum"))]

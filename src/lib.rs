@@ -33,61 +33,45 @@ mod config_kani;
 pub mod crypto;
 pub mod error;
 
-// Modules excluded from Creusot verification due to unsupported patterns
-// (Deref/DerefMut/AsRef traits, enumerate/zip tuples, indexing operations)
-#[cfg(not(creusot))]
 pub mod daemon;
-#[cfg(not(creusot))]
 pub mod memory;
-#[cfg(not(creusot))]
 pub mod metadata;
-#[cfg(not(creusot))]
 pub mod power;
-#[cfg(not(creusot))]
 pub mod progress;
-#[cfg(not(creusot))]
 pub mod storage;
-#[cfg(not(creusot))]
 pub mod validation;
-#[cfg(not(creusot))]
 pub mod volume;
 
-#[cfg(all(target_arch = "wasm32", not(creusot)))]
+#[cfg(target_arch = "wasm32")]
 pub mod wasm;
 
-#[cfg(all(not(target_arch = "wasm32"), not(creusot)))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod hsm;
 
-#[cfg(all(target_os = "linux", not(creusot)))]
+#[cfg(target_os = "linux")]
 pub mod luks;
 
 // Re-export commonly used types
 pub use config::{CryptoConfig, MAGIC_BYTES, NONCE_LEN};
 pub use crypto::aes_gcm::AesGcmEncryptor;
 pub use crypto::kdf::{generate_salt_string, Argon2Kdf};
-#[cfg(not(creusot))]
 pub use crypto::streaming::{
     ChunkedDecryptor, ChunkedEncryptor, ChunkedReader, StreamConfig, StreamHeader, MAGIC_BYTES_V3,
 };
 pub use crypto::{Encryptor, KeyDerivation};
 pub use error::{CryptorError, Result};
-#[cfg(not(creusot))]
 pub use memory::allocator::{AllocatorStats, SecureAllocator};
-#[cfg(all(feature = "post-quantum", not(creusot)))]
+#[cfg(feature = "post-quantum")]
 pub use memory::pool::{EncryptedAllocation, EncryptedMemoryPool, SecurityLevel};
-#[cfg(not(creusot))]
 pub use memory::scrub::{
     scrub_and_verify, scrub_bytes, scrub_bytes_pattern, ScrubGuard, ScrubPattern, ScrubStats,
 };
-#[cfg(not(creusot))]
 pub use memory::LockedMemory;
-#[cfg(not(creusot))]
 pub use progress::{
     format_bytes, format_duration, ProgressCallback, ProgressReporter, ProgressTracker,
 };
-#[cfg(not(creusot))]
 pub use validation::validate_password;
-#[cfg(all(not(target_arch = "wasm32"), not(creusot)))]
+#[cfg(not(target_arch = "wasm32"))]
 pub use validation::{get_and_validate_password, get_password};
 
 use rand::rngs::OsRng;
@@ -134,7 +118,6 @@ use zeroize::Zeroizing;
 ///     "MyStrongPassword123!"
 /// ).unwrap();
 /// ```
-#[cfg(not(creusot))]
 pub fn encrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
     // Derive encryption key from password
     let salt = generate_salt_string();
@@ -190,7 +173,6 @@ pub fn encrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
 /// Returns an error if:
 /// - Password fails validation
 /// - Any error from `encrypt_file`
-#[cfg(not(creusot))]
 pub fn encrypt_file_validated(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
     validation::validate_password(password)?;
     encrypt_file(input_path, output_path, password)
@@ -216,7 +198,7 @@ pub fn encrypt_file_validated(input_path: &Path, output_path: &Path, password: &
 /// - Input file cannot be read
 /// - Encryption fails
 /// - Output file cannot be written
-#[cfg(all(not(target_arch = "wasm32"), not(creusot)))]
+#[cfg(not(target_arch = "wasm32"))]
 pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
     input_path: &Path,
     output_path: &Path,
@@ -289,7 +271,7 @@ pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
 /// - Input file cannot be read or has invalid format
 /// - Password is incorrect
 /// - Decryption or authentication fails
-#[cfg(all(not(target_arch = "wasm32"), not(creusot)))]
+#[cfg(not(target_arch = "wasm32"))]
 pub fn decrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
     input_path: &Path,
     output_path: &Path,
@@ -363,7 +345,6 @@ pub fn decrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
 ///     "MyStrongPassword123!"
 /// ).unwrap();
 /// ```
-#[cfg(not(creusot))]
 pub fn decrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
     use crate::config::MAGIC_BYTES;
 
@@ -389,7 +370,6 @@ pub fn decrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
 }
 
 /// Decrypts a v1 format file (legacy, in-memory).
-#[cfg(not(creusot))]
 fn decrypt_file_v1(mut file: File, output_path: &Path, password: &str) -> Result<()> {
     let header = storage::format::read_encrypted_header(&mut file)?;
 
@@ -408,7 +388,6 @@ fn decrypt_file_v1(mut file: File, output_path: &Path, password: &str) -> Result
 }
 
 /// Decrypts a v3 format file (streaming, memory-efficient, NIST-compliant).
-#[cfg(not(creusot))]
 fn decrypt_file_v3(input_path: &Path, output_path: &Path, password: &str) -> Result<()> {
     // First, read just the header to get the salt for key derivation
     let mut file = File::open(input_path)?;

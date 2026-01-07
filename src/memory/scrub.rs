@@ -93,12 +93,6 @@ pub struct ScrubStats {
 /// scrub_bytes(&mut secret);
 /// assert!(secret.iter().all(|&b| b == 0));
 /// ```
-///
-/// # Formal Verification (Creusot)
-///
-/// Proves: After scrubbing, all bytes in the buffer are zero.
-// Note: Complex slice quantifier proofs require Creusot model traits (ShallowModel)
-#[cfg_attr(creusot, creusot_contracts::macros::ensures(true))]
 pub fn scrub_bytes(data: &mut [u8]) {
     // Use zeroize for the actual wiping (it handles volatile writes)
     data.zeroize();
@@ -228,12 +222,7 @@ pub fn scrub_and_verify(data: &mut [u8], pattern: ScrubPattern) -> ScrubStats {
 ///
 /// Uses `ptr::write_volatile` to prevent compiler optimization.
 ///
-/// # Formal Verification (Creusot)
-///
-/// Proves: After overwriting, all bytes equal the specified pattern.
-// Note: Complex slice quantifier proofs require Creusot model traits (ShallowModel)
 #[inline(never)]
-#[cfg_attr(creusot, creusot_contracts::macros::ensures(true))]
 fn overwrite_with_pattern(data: &mut [u8], pattern: u8) {
     // Use volatile writes to prevent optimization
     for byte in data.iter_mut() {
@@ -354,7 +343,6 @@ impl<T: Zeroize> Drop for ScrubGuard<T> {
     }
 }
 
-#[cfg(not(creusot))]
 impl<T: Zeroize> ::std::ops::Deref for ScrubGuard<T> {
     type Target = T;
 
@@ -363,7 +351,6 @@ impl<T: Zeroize> ::std::ops::Deref for ScrubGuard<T> {
     }
 }
 
-#[cfg(not(creusot))]
 impl<T: Zeroize> ::std::ops::DerefMut for ScrubGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value

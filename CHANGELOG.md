@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - **[MEDIUM]** Fixed RUSTSEC-2025-0141 - replaced unmaintained `bincode` crate with `postcard` for serialization
-- **[MEDIUM]** Fixed RUSTSEC-2026-0002 - upgraded `lru` to 0.16.3 to fix soundness issue in IterMut
+- **[MEDIUM]** Fixed RUSTSEC-2026-0002 - upgraded `lru` to 0.16.3 to fix soundness issue in IterMut (main and fuzz crates)
 
 ## [1.6.0] - 2026-01-06
 

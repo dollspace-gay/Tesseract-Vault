@@ -410,7 +410,20 @@ impl VolumeIOFilesystem {
     }
 
     fn serialize_superblock(&self, sb: &Superblock) -> Result<Vec<u8>> {
-        postcard::to_allocvec(sb).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))
+        let bytes =
+            postcard::to_allocvec(sb).map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
+
+        // Pad to full block size for consistent disk layout
+        let mut padded = vec![0u8; FS_BLOCK_SIZE as usize];
+        if bytes.len() > FS_BLOCK_SIZE as usize {
+            return Err(VolumeIOFsError::Serialization(format!(
+                "Serialized superblock ({} bytes) exceeds block size ({})",
+                bytes.len(),
+                FS_BLOCK_SIZE
+            )));
+        }
+        padded[..bytes.len()].copy_from_slice(&bytes);
+        Ok(padded)
     }
 
     fn deserialize_superblock(&self, data: &[u8]) -> Result<Superblock> {
@@ -639,6 +652,18 @@ impl VolumeIOFilesystem {
         let inode_bytes = postcard::to_allocvec(inode)
             .map_err(|e| VolumeIOFsError::Serialization(e.to_string()))?;
 
+        // Pad to fixed INODE_SIZE to ensure consistent disk layout.
+        // Postcard uses variable-length encoding, but filesystem expects fixed-size inodes.
+        let mut padded_inode = vec![0u8; INODE_SIZE as usize];
+        if inode_bytes.len() > INODE_SIZE as usize {
+            return Err(VolumeIOFsError::Serialization(format!(
+                "Serialized inode ({} bytes) exceeds INODE_SIZE ({})",
+                inode_bytes.len(),
+                INODE_SIZE
+            )));
+        }
+        padded_inode[..inode_bytes.len()].copy_from_slice(&inode_bytes);
+
         // Lock protects the read-modify-write cycle on inode table blocks.
         // Multiple inodes share the same block (32 per 4KB), so concurrent
         // updates without this lock can cause lost writes.
@@ -649,7 +674,7 @@ impl VolumeIOFilesystem {
 
         // Read the block, modify the inode, write back
         let mut block_data = self.read_block(block)?;
-        block_data[offset..offset + inode_bytes.len()].copy_from_slice(&inode_bytes);
+        block_data[offset..offset + INODE_SIZE as usize].copy_from_slice(&padded_inode);
         self.write_block(block, &block_data)?;
 
         Ok(())

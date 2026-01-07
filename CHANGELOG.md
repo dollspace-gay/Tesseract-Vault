@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Race condition in concurrent filesystem operations - added inode table lock to protect read-modify-write cycles on shared inode blocks (32 inodes per 4KB block)
+- Filesystem corruption after postcard migration - inode serialization now pads to fixed INODE_SIZE (128 bytes) to ensure consistent disk layout with variable-length encoding
 
 ### Security
 - **[MEDIUM]** Fixed RUSTSEC-2025-0141 - replaced unmaintained `bincode` crate with `postcard` for serialization

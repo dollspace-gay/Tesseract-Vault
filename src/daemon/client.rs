@@ -279,6 +279,127 @@ impl DaemonClient {
     pub fn shutdown(&self) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
         self.send_command(DaemonCommand::Shutdown)
     }
+
+    /// Verify the server's identity before sending sensitive commands
+    ///
+    /// This sends a random challenge to the server and verifies that the server
+    /// can produce a valid response using the shared auth token. This proves
+    /// the server is legitimate and not an impersonator.
+    ///
+    /// # Security
+    ///
+    /// IMPORTANT: Call this method before sending any sensitive commands (like Mount)
+    /// to verify that you're communicating with the legitimate daemon, not a malicious
+    /// process that has taken over the socket/port.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(true)` if the server's identity was verified successfully
+    /// - `Ok(false)` if verification failed (server may be an impersonator)
+    /// - `Err(...)` if there was a communication error
+    pub fn verify_server(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        use super::protocol::CHALLENGE_NONCE_LENGTH;
+        use blake3::Hasher;
+        use subtle::ConstantTimeEq;
+
+        // We need the token to verify the server's response
+        let token = match &self.auth_token {
+            Some(t) => t,
+            None => return Err("No auth token available for server verification".into()),
+        };
+
+        // Generate a random challenge
+        let mut challenge_bytes = [0u8; CHALLENGE_NONCE_LENGTH];
+        getrandom::fill(&mut challenge_bytes)
+            .map_err(|e| format!("Failed to generate challenge: {}", e))?;
+        let challenge = hex::encode(challenge_bytes);
+
+        // Send VerifyServer command (without authentication wrapper)
+        let command = DaemonCommand::VerifyServer {
+            challenge: challenge.clone(),
+        };
+        let request_bytes = command.to_bytes()?;
+
+        // Connect and send (this bypasses the normal send_command which adds auth wrapper)
+        #[cfg(unix)]
+        let response = {
+            use std::os::unix::net::UnixStream;
+            let mut stream = UnixStream::connect(&self.socket_path)?;
+            self.send_raw_command(&mut stream, &request_bytes)?
+        };
+
+        #[cfg(windows)]
+        let response = {
+            use std::net::TcpStream;
+            let addr = self.socket_path.to_string_lossy();
+            let mut stream = TcpStream::connect(addr.as_ref())?;
+            self.send_raw_command(&mut stream, &request_bytes)?
+        };
+
+        // Verify the response
+        match response {
+            DaemonResponse::ServerIdentity { response: server_response } => {
+                // Decode the server's response
+                let server_response_bytes = match hex::decode(&server_response) {
+                    Ok(bytes) if bytes.len() == 32 => bytes,
+                    _ => return Ok(false), // Invalid response format
+                };
+
+                // Compute the expected response ourselves
+                let token_bytes: [u8; 32] = match hex::decode(token) {
+                    Ok(bytes) if bytes.len() == 32 => bytes.try_into().unwrap_or([0u8; 32]),
+                    _ => return Err("Invalid token format".into()),
+                };
+
+                let mut hasher = Hasher::new_keyed(&token_bytes);
+                hasher.update(&challenge_bytes);
+                hasher.update(b"tesseract-server-identity-v1");
+                let expected = hasher.finalize();
+
+                // Constant-time comparison
+                let is_valid: bool = expected.as_bytes().ct_eq(&server_response_bytes).into();
+                Ok(is_valid)
+            }
+            DaemonResponse::Error { message } => {
+                Err(format!("Server verification failed: {}", message).into())
+            }
+            _ => Ok(false), // Unexpected response type
+        }
+    }
+
+    /// Send a raw command without authentication wrapper
+    fn send_raw_command<S: Read + Write>(
+        &self,
+        stream: &mut S,
+        request_bytes: &[u8],
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+        // Send request with length prefix
+        let len_bytes = (request_bytes.len() as u32).to_be_bytes();
+        stream.write_all(&len_bytes)?;
+        stream.write_all(request_bytes)?;
+        stream.flush()?;
+
+        // Read response (prefixed with 4-byte length)
+        let mut len_bytes = [0u8; 4];
+        stream.read_exact(&mut len_bytes)?;
+        let len = u32::from_be_bytes(len_bytes) as usize;
+
+        // Validate response size
+        if len > MAX_RESPONSE_SIZE {
+            return Err(format!(
+                "Response size {} exceeds maximum allowed size {}",
+                len, MAX_RESPONSE_SIZE
+            )
+            .into());
+        }
+
+        let mut buffer = vec![0u8; len];
+        stream.read_exact(&mut buffer)?;
+
+        // Parse response
+        let response = DaemonResponse::from_bytes(&buffer)?;
+        Ok(response)
+    }
 }
 
 impl Default for DaemonClient {

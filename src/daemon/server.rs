@@ -437,9 +437,13 @@ impl DaemonServer {
             }
             Err(_) => {
                 // Try parsing as legacy unauthenticated command for backward compatibility
-                // but only allow Ping command without auth
+                // but only allow Ping and VerifyServer commands without auth
                 match DaemonCommand::from_bytes(&buffer) {
                     Ok(DaemonCommand::Ping) => DaemonResponse::Pong,
+                    Ok(DaemonCommand::VerifyServer { challenge }) => {
+                        // Handle VerifyServer - server proves it knows the token
+                        Self::handle_verify_server(&challenge, expected_token.as_deref())
+                    }
                     Ok(_) => DaemonResponse::unauthorized(
                         "Authentication required. Please use AuthenticatedRequest.",
                     ),
@@ -472,6 +476,66 @@ impl DaemonServer {
 
         // Constant-time comparison
         expected_bytes.ct_eq(provided_bytes).into()
+    }
+
+    /// Handle VerifyServer command - server proves it knows the auth token
+    ///
+    /// The server computes a keyed BLAKE3 hash of the challenge using the auth token
+    /// as the key. This proves to the client that the server is legitimate without
+    /// requiring the client to send sensitive data first.
+    ///
+    /// # Security
+    ///
+    /// This implements server identity verification to prevent man-in-the-middle
+    /// attacks where a malicious process impersonates the daemon.
+    fn handle_verify_server(challenge: &str, token: Option<&str>) -> DaemonResponse {
+        use super::protocol::{CHALLENGE_NONCE_LENGTH, SERVER_IDENTITY_LENGTH};
+        use blake3::Hasher;
+
+        // Validate challenge format (should be hex-encoded 32 bytes)
+        let challenge_bytes = match hex::decode(challenge) {
+            Ok(bytes) if bytes.len() == CHALLENGE_NONCE_LENGTH => bytes,
+            Ok(bytes) => {
+                return DaemonResponse::error(format!(
+                    "Invalid challenge length: expected {} bytes, got {}",
+                    CHALLENGE_NONCE_LENGTH,
+                    bytes.len()
+                ));
+            }
+            Err(e) => {
+                return DaemonResponse::error(format!("Invalid challenge format: {}", e));
+            }
+        };
+
+        // Get the token
+        let token = match token {
+            Some(t) => t,
+            None => {
+                return DaemonResponse::error(
+                    "Server identity verification unavailable: authentication not configured",
+                );
+            }
+        };
+
+        // Decode the token from hex
+        let token_bytes: [u8; 32] = match hex::decode(token) {
+            Ok(bytes) if bytes.len() == SERVER_IDENTITY_LENGTH => {
+                bytes.try_into().unwrap_or([0u8; 32])
+            }
+            _ => {
+                return DaemonResponse::error("Internal error: invalid token format");
+            }
+        };
+
+        // Compute keyed BLAKE3 hash: BLAKE3(token, challenge || domain_separator)
+        let mut hasher = Hasher::new_keyed(&token_bytes);
+        hasher.update(&challenge_bytes);
+        hasher.update(b"tesseract-server-identity-v1");
+        let response_bytes = hasher.finalize();
+
+        DaemonResponse::ServerIdentity {
+            response: hex::encode(response_bytes.as_bytes()),
+        }
     }
 
     /// Process a daemon command
@@ -617,6 +681,15 @@ impl DaemonServer {
             }
 
             DaemonCommand::Ping => DaemonResponse::Pong,
+
+            DaemonCommand::VerifyServer { .. } => {
+                // This should be handled in handle_client_impl, not here
+                // If we get here, it means it was wrapped in AuthenticatedRequest
+                // which is unusual but not an error
+                DaemonResponse::error(
+                    "VerifyServer should be sent without authentication wrapper",
+                )
+            }
 
             DaemonCommand::Shutdown => {
                 // Unmount all volumes

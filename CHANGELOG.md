@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - **[MEDIUM]** Fixed RUSTSEC-2025-0141 - replaced unmaintained `bincode` crate with `postcard` for serialization
 - **[MEDIUM]** Fixed RUSTSEC-2026-0002 - upgraded `lru` to 0.16.3 to fix soundness issue in IterMut (main and fuzz crates)
+- **[MEDIUM]** Fixed CWE-807 (Reliance on Untrusted Inputs) - replaced `%USERNAME%` environment variable with Windows `GetUserNameW` API for secure username retrieval in daemon auth
+- **[MEDIUM]** Added server identity verification to daemon IPC - clients can now verify they're communicating with the legitimate daemon using BLAKE3 keyed challenge-response before sending sensitive commands (prevents daemon impersonation attacks)
 
 ## [1.6.0] - 2026-01-06
 

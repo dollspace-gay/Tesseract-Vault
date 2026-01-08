@@ -18,6 +18,12 @@ use zeroize::Zeroize;
 /// Authentication token length in bytes (256 bits)
 pub const AUTH_TOKEN_LENGTH: usize = 32;
 
+/// Server identity response length in bytes (256 bits)
+pub const SERVER_IDENTITY_LENGTH: usize = 32;
+
+/// Challenge nonce length in bytes (256 bits)
+pub const CHALLENGE_NONCE_LENGTH: usize = 32;
+
 /// Authenticated request wrapper
 ///
 /// All daemon commands must be wrapped in this type with a valid auth token.
@@ -127,6 +133,22 @@ pub enum DaemonCommand {
 
     /// Shutdown the daemon
     Shutdown,
+
+    /// Verify server identity with a challenge-response
+    ///
+    /// The client sends a random challenge nonce, and the server must respond
+    /// with a keyed BLAKE3 hash of the challenge using the auth token as the key.
+    /// This proves the server knows the auth token without the client sending
+    /// sensitive data to an untrusted server.
+    ///
+    /// # Security
+    ///
+    /// This command MUST be called before sending any sensitive commands (Mount)
+    /// to verify that the daemon is legitimate and not an impersonator.
+    VerifyServer {
+        /// Random challenge nonce (32 bytes, hex-encoded)
+        challenge: String,
+    },
 }
 
 impl fmt::Debug for DaemonCommand {
@@ -167,6 +189,10 @@ impl fmt::Debug for DaemonCommand {
             DaemonCommand::UnmountAll => write!(f, "UnmountAll"),
             DaemonCommand::Ping => write!(f, "Ping"),
             DaemonCommand::Shutdown => write!(f, "Shutdown"),
+            DaemonCommand::VerifyServer { .. } => f
+                .debug_struct("VerifyServer")
+                .field("challenge", &"<CHALLENGE>")
+                .finish(),
         }
     }
 }
@@ -207,6 +233,16 @@ pub enum DaemonResponse {
 
     /// Pong response to ping
     Pong,
+
+    /// Server identity verification response
+    ///
+    /// Contains the server's proof that it knows the auth token by
+    /// signing the client's challenge with keyed BLAKE3.
+    ServerIdentity {
+        /// BLAKE3 keyed hash of challenge (32 bytes, hex-encoded)
+        /// Key = auth_token, Message = challenge || "tesseract-server-identity-v1"
+        response: String,
+    },
 
     /// Authentication failed - invalid or missing token
     Unauthorized {

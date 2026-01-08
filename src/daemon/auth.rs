@@ -233,13 +233,18 @@ impl AuthManager {
         // Use icacls to set permissions:
         // /inheritance:r - Remove inherited permissions
         // /grant:r - Grant explicit permissions
-        // %USERNAME%:F - Full control to current user only
-        let username = std::env::var("USERNAME").unwrap_or_else(|_| "".to_string());
-        if username.is_empty() {
-            // Can't determine username, skip permissions but don't fail
-            eprintln!("WARNING: Could not determine username for setting file permissions");
-            return Ok(());
-        }
+        // <username>:F - Full control to current user only
+        //
+        // SECURITY: Use GetUserNameW API instead of %USERNAME% env var to prevent
+        // environment variable spoofing attacks (fixes CWE-807: Reliance on Untrusted Inputs)
+        let username = match get_current_username_secure() {
+            Some(name) => name,
+            None => {
+                // Can't determine username, skip permissions but don't fail
+                eprintln!("WARNING: Could not determine username for setting file permissions");
+                return Ok(());
+            }
+        };
 
         // First, remove inheritance and existing permissions
         let _ = Command::new("icacls")
@@ -269,6 +274,39 @@ impl AuthManager {
         }
 
         Ok(())
+    }
+
+    /// Computes HMAC-SHA256 for server identity verification
+    ///
+    /// The server uses this to prove its identity to the client by signing
+    /// a challenge nonce with the auth token as the key.
+    pub fn compute_server_identity_response(&self, challenge: &[u8; 32]) -> [u8; 32] {
+        use blake3::Hasher;
+
+        let mut hasher = Hasher::new_keyed(
+            &hex::decode(&self.token)
+                .unwrap_or_else(|_| vec![0u8; AUTH_TOKEN_LENGTH])
+                .try_into()
+                .unwrap_or([0u8; AUTH_TOKEN_LENGTH]),
+        );
+        hasher.update(challenge);
+        hasher.update(b"tesseract-server-identity-v1");
+        *hasher.finalize().as_bytes()
+    }
+
+    /// Verifies a server identity response
+    ///
+    /// The client uses this to verify that the server knows the auth token
+    /// by checking the server's response to a challenge.
+    pub fn verify_server_identity(
+        &self,
+        challenge: &[u8; 32],
+        response: &[u8; 32],
+    ) -> bool {
+        use subtle::ConstantTimeEq;
+
+        let expected = self.compute_server_identity_response(challenge);
+        expected.ct_eq(response).into()
     }
 
     /// Read token from file
@@ -343,6 +381,67 @@ impl Drop for AuthManager {
         // Best-effort file cleanup
         let _ = self.cleanup();
     }
+}
+
+/// Gets the current username securely using Windows API
+///
+/// This function uses the Windows GetUserNameW API instead of environment variables
+/// to prevent environment variable spoofing attacks (CWE-807).
+///
+/// # Security
+///
+/// Environment variables like %USERNAME% can be spoofed by a malicious process
+/// before launching Tesseract. The Windows API provides the actual username
+/// from the process token, which cannot be spoofed without administrator privileges.
+#[cfg(windows)]
+fn get_current_username_secure() -> Option<String> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use windows::Win32::System::WindowsProgramming::GetUserNameW;
+    use windows::core::PWSTR;
+
+    // Initial buffer size (256 wide chars should be enough for most usernames)
+    let mut buffer: Vec<u16> = vec![0; 256];
+    let mut size = buffer.len() as u32;
+
+    // GetUserNameW retrieves the username from the process token
+    // This is secure because it queries the OS directly, not environment variables
+    let result = unsafe {
+        GetUserNameW(Some(PWSTR(buffer.as_mut_ptr())), &mut size)
+    };
+
+    match result {
+        Ok(()) => {
+            // Success - size now contains the length including null terminator
+            // Truncate buffer to actual size (excluding null terminator)
+            buffer.truncate((size.saturating_sub(1)) as usize);
+            let os_string = OsString::from_wide(&buffer);
+            os_string.into_string().ok()
+        }
+        Err(error) => {
+            // Check if buffer was too small and retry
+            if error.code().0 as u32 == windows::Win32::Foundation::ERROR_INSUFFICIENT_BUFFER.0 {
+                buffer.resize(size as usize, 0);
+                let retry_result = unsafe {
+                    GetUserNameW(Some(PWSTR(buffer.as_mut_ptr())), &mut size)
+                };
+                if retry_result.is_ok() {
+                    buffer.truncate((size.saturating_sub(1)) as usize);
+                    let os_string = OsString::from_wide(&buffer);
+                    return os_string.into_string().ok();
+                }
+            }
+            None
+        }
+    }
+}
+
+/// Stub for non-Windows platforms (Linux uses file permissions via mode bits)
+#[cfg(not(windows))]
+fn get_current_username_secure() -> Option<String> {
+    // On Unix, we use file mode bits (0o600) for permissions, not ACLs
+    // So we don't need the username for permission setting
+    None
 }
 
 #[cfg(test)]

@@ -1334,21 +1334,13 @@ fn handle_deadman_command(cmd: DeadManCommands) -> Result<(), CryptorError> {
             warning,
             grace,
         } => {
-            println!(
-                "Enabling dead man's switch for '{}'",
-                container.display()
-            );
+            println!("Enabling dead man's switch for '{}'", container.display());
             println!("  Timeout: {} days", timeout);
             println!("  Warning period: {} days before deadline", warning);
             println!("  Grace period: {} days after deadline", grace);
             println!();
 
-            match client.dead_man_enable(
-                container.clone(),
-                timeout,
-                Some(warning),
-                Some(grace),
-            ) {
+            match client.dead_man_enable(container.clone(), timeout, Some(warning), Some(grace)) {
                 Ok(response) => match response {
                     DaemonResponse::DeadManConfigured {
                         container_path,
@@ -1356,7 +1348,10 @@ fn handle_deadman_command(cmd: DeadManCommands) -> Result<(), CryptorError> {
                         config,
                     } => {
                         if enabled {
-                            println!("✓ Dead man's switch enabled for '{}'", container_path.display());
+                            println!(
+                                "✓ Dead man's switch enabled for '{}'",
+                                container_path.display()
+                            );
                             if let Some(cfg) = config {
                                 let deadline_date = format_timestamp(cfg.deadline);
                                 println!("  Next deadline: {}", deadline_date);
@@ -1433,10 +1428,7 @@ fn handle_deadman_command(cmd: DeadManCommands) -> Result<(), CryptorError> {
                         if volumes_checked_in == 0 {
                             println!("No volumes with dead man's switch enabled.");
                         } else {
-                            println!(
-                                "✓ Checked in for {} volume(s).",
-                                volumes_checked_in
-                            );
+                            println!("✓ Checked in for {} volume(s).", volumes_checked_in);
                             for (path, deadline) in new_deadlines {
                                 let deadline_date = format_timestamp(deadline);
                                 println!("  {}: new deadline {}", path.display(), deadline_date);
@@ -1463,44 +1455,59 @@ fn handle_deadman_command(cmd: DeadManCommands) -> Result<(), CryptorError> {
 
         DeadManCommands::Status { container } => {
             match client.dead_man_status(container) {
-                Ok(response) => match response {
-                    DaemonResponse::DeadManStatus { statuses } => {
-                        if statuses.is_empty() {
-                            println!("No volumes with dead man's switch configured.");
-                        } else {
-                            println!("Dead Man's Switch Status:");
-                            println!();
-                            for status in statuses {
-                                println!("  Volume: {}", status.container_path.display());
-                                println!("    Enabled: {}", status.enabled);
-                                if status.enabled {
-                                    let status_str = match status.status {
+                Ok(response) => {
+                    match response {
+                        DaemonResponse::DeadManStatus { statuses } => {
+                            if statuses.is_empty() {
+                                println!("No volumes with dead man's switch configured.");
+                            } else {
+                                println!("Dead Man's Switch Status:");
+                                println!();
+                                for status in statuses {
+                                    println!("  Volume: {}", status.container_path.display());
+                                    println!("    Enabled: {}", status.enabled);
+                                    if status.enabled {
+                                        let status_str = match status.status {
                                         tesseract_lib::daemon::DeadManStatusType::Disabled => "Disabled",
                                         tesseract_lib::daemon::DeadManStatusType::Ok => "OK",
                                         tesseract_lib::daemon::DeadManStatusType::Warning => "⚠️  WARNING",
                                         tesseract_lib::daemon::DeadManStatusType::GracePeriod => "🚨 GRACE PERIOD",
                                         tesseract_lib::daemon::DeadManStatusType::Expired => "💀 EXPIRED",
                                     };
-                                    println!("    Status: {}", status_str);
-                                    println!("    Last check-in: {}", format_timestamp(status.last_checkin));
-                                    println!("    Deadline: {}", format_timestamp(status.deadline));
-                                    println!("    Time remaining: {}", format_duration(status.seconds_remaining));
-                                    println!("    Config: timeout={}d, warning={}d, grace={}d",
-                                        status.timeout_days, status.warning_days, status.grace_period_days);
+                                        println!("    Status: {}", status_str);
+                                        println!(
+                                            "    Last check-in: {}",
+                                            format_timestamp(status.last_checkin)
+                                        );
+                                        println!(
+                                            "    Deadline: {}",
+                                            format_timestamp(status.deadline)
+                                        );
+                                        println!(
+                                            "    Time remaining: {}",
+                                            format_duration(status.seconds_remaining)
+                                        );
+                                        println!(
+                                            "    Config: timeout={}d, warning={}d, grace={}d",
+                                            status.timeout_days,
+                                            status.warning_days,
+                                            status.grace_period_days
+                                        );
+                                    }
+                                    println!();
                                 }
-                                println!();
                             }
                         }
+                        DaemonResponse::Error { message } => {
+                            return Err(CryptorError::Io(std::io::Error::other(message)));
+                        }
+                        _ => {
+                            return Err(CryptorError::Io(std::io::Error::other(
+                                "Unexpected response from daemon",
+                            )));
+                        }
                     }
-                    DaemonResponse::Error { message } => {
-                        return Err(CryptorError::Io(std::io::Error::other(message)));
-                    }
-                    _ => {
-                        return Err(CryptorError::Io(std::io::Error::other(
-                            "Unexpected response from daemon",
-                        )));
-                    }
-                },
+                }
                 Err(e) => {
                     return Err(CryptorError::Io(std::io::Error::other(format!(
                         "Failed to get status: {}",
@@ -1537,7 +1544,11 @@ fn format_timestamp(timestamp: u64) -> String {
 
             format!(
                 "{:04}-{:02}-{:02} {:02}:{:02} UTC",
-                years, month.min(12), day.min(31), hours, minutes
+                years,
+                month.min(12),
+                day.min(31),
+                hours,
+                minutes
             )
         }
         Err(_) => "Invalid timestamp".to_string(),

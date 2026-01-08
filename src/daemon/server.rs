@@ -78,7 +78,10 @@ impl DaemonServer {
 
         // Ensure config directory exists
         if let Err(e) = std::fs::create_dir_all(&config_dir) {
-            eprintln!("WARNING: Failed to create config directory {:?}: {}", config_dir, e);
+            eprintln!(
+                "WARNING: Failed to create config directory {:?}: {}",
+                config_dir, e
+            );
         }
 
         // Initialize authentication - log warning if it fails but continue
@@ -123,7 +126,10 @@ impl DaemonServer {
 
         // Ensure config directory exists
         if let Err(e) = std::fs::create_dir_all(&config_dir) {
-            eprintln!("WARNING: Failed to create config directory {:?}: {}", config_dir, e);
+            eprintln!(
+                "WARNING: Failed to create config directory {:?}: {}",
+                config_dir, e
+            );
         }
 
         // Initialize authentication - log warning if it fails but continue
@@ -239,19 +245,12 @@ impl DaemonServer {
                     match RemoteWipeManager::load(&path) {
                         Ok(manager) => {
                             // Extract container path from the config
-                            let container_path =
-                                PathBuf::from(&manager.config().volume_id);
-                            println!(
-                                "Loaded wipe config for volume: {:?}",
-                                container_path
-                            );
+                            let container_path = PathBuf::from(&manager.config().volume_id);
+                            println!("Loaded wipe config for volume: {:?}", container_path);
                             managers.insert(container_path, manager);
                         }
                         Err(e) => {
-                            eprintln!(
-                                "WARNING: Failed to load wipe config {:?}: {}",
-                                path, e
-                            );
+                            eprintln!("WARNING: Failed to load wipe config {:?}: {}", path, e);
                         }
                     }
                 }
@@ -367,10 +366,7 @@ impl DaemonServer {
                     // Persist config after potential state changes
                     let config_path = Self::generate_config_path(config_dir, path);
                     if let Err(e) = manager.save(&config_path) {
-                        eprintln!(
-                            "WARNING: Failed to save config for {:?}: {}",
-                            path, e
-                        );
+                        eprintln!("WARNING: Failed to save config for {:?}: {}", path, e);
                     }
                 }
                 Err(e) => {
@@ -970,16 +966,14 @@ impl DaemonServer {
                 timeout_days,
                 warning_days,
                 grace_period_days,
-            } => {
-                Self::handle_dead_man_enable(
-                    container_path,
-                    timeout_days,
-                    warning_days,
-                    grace_period_days,
-                    wipe_managers,
-                    config_dir,
-                )
-            }
+            } => Self::handle_dead_man_enable(
+                container_path,
+                timeout_days,
+                warning_days,
+                grace_period_days,
+                wipe_managers,
+                config_dir,
+            ),
 
             DaemonCommand::DeadManDisable { container_path } => {
                 Self::handle_dead_man_disable(container_path, wipe_managers, config_dir)

@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dead Man's Switch** - automatic key destruction after configurable inactivity period:
+  - Configurable timeout (default 30 days), warning period (7 days), and grace period (3 days)
+  - Check-in via CLI command or remote wipe protocol
+  - Status tracking: Ok → Warning → GracePeriod → Expired (triggers destruction)
+  - Integrates with existing RemoteWipeManager for key destruction
+- **Dead Man's Switch Daemon Integration**:
+  - Background monitoring thread checks all volumes every hour
+  - Automatic key destruction when deadlines expire
+  - Persistent config storage survives daemon restarts (Windows: `%LOCALAPPDATA%\Tesseract\wipe_configs`, Linux: `~/.local/share/tesseract/wipe_configs`)
+  - New daemon protocol commands: `DeadManEnable`, `DeadManDisable`, `DeadManCheckin`, `DeadManStatus`
+  - Client-side API methods for dead man's switch management
 - Docker TPM testing environment using swtpm (Software TPM 2.0 emulator) for CI validation of TPM functionality
 - `.dockerignore` file to optimize Docker build context (21GB → 212MB)
 - `tesseract-luks` CLI tool for Linux Full Disk Encryption with Tesseract security features:
@@ -18,6 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Keyfile wrapper approach compatible with standard cryptsetup/LUKS2
 
 ### Changed
+- Handle edge cases and contingencies (#223)
+- Add CLI commands for Dead Man's Switch (#222)
+- Wire up Dead Man's Switch to daemon (#219)
+- Define persistent storage paths for wipe configs (#221)
+- Add background monitoring thread to daemon server (#220)
+- Dead Man's Switch - Auto-destruct after inactivity (#72)
 - Replaced `bincode` serialization with `postcard` - more compact varint encoding, actively maintained (RUSTSEC-2025-0141)
 - Updated `lru` from 0.16 to 0.16.3 to fix soundness issue with IterMut (RUSTSEC-2026-0002)
 - Migrated fuzz targets from `bincode` to `postcard` deserialization

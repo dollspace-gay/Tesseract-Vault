@@ -149,6 +149,39 @@ pub enum DaemonCommand {
         /// Random challenge nonce (32 bytes, hex-encoded)
         challenge: String,
     },
+
+    // ========================================================================
+    // Dead Man's Switch Commands
+    // ========================================================================
+    /// Enable dead man's switch for a volume
+    DeadManEnable {
+        /// Path to the container file
+        container_path: PathBuf,
+        /// Inactivity timeout in days before triggering destruction
+        timeout_days: u32,
+        /// Optional: Days before deadline to start warnings (default: 7)
+        warning_days: Option<u32>,
+        /// Optional: Grace period in days after deadline (default: 3)
+        grace_period_days: Option<u32>,
+    },
+
+    /// Disable dead man's switch for a volume
+    DeadManDisable {
+        /// Path to the container file
+        container_path: PathBuf,
+    },
+
+    /// Record a check-in for a volume's dead man's switch
+    DeadManCheckin {
+        /// Path to the container file (None = all volumes)
+        container_path: Option<PathBuf>,
+    },
+
+    /// Get the status of dead man's switch for a volume
+    DeadManStatus {
+        /// Path to the container file (None = all volumes)
+        container_path: Option<PathBuf>,
+    },
 }
 
 impl fmt::Debug for DaemonCommand {
@@ -192,6 +225,30 @@ impl fmt::Debug for DaemonCommand {
             DaemonCommand::VerifyServer { .. } => f
                 .debug_struct("VerifyServer")
                 .field("challenge", &"<CHALLENGE>")
+                .finish(),
+            DaemonCommand::DeadManEnable {
+                container_path,
+                timeout_days,
+                warning_days,
+                grace_period_days,
+            } => f
+                .debug_struct("DeadManEnable")
+                .field("container_path", container_path)
+                .field("timeout_days", timeout_days)
+                .field("warning_days", warning_days)
+                .field("grace_period_days", grace_period_days)
+                .finish(),
+            DaemonCommand::DeadManDisable { container_path } => f
+                .debug_struct("DeadManDisable")
+                .field("container_path", container_path)
+                .finish(),
+            DaemonCommand::DeadManCheckin { container_path } => f
+                .debug_struct("DeadManCheckin")
+                .field("container_path", container_path)
+                .finish(),
+            DaemonCommand::DeadManStatus { container_path } => f
+                .debug_struct("DeadManStatus")
+                .field("container_path", container_path)
                 .finish(),
         }
     }
@@ -255,6 +312,71 @@ pub enum DaemonResponse {
         /// Error message
         message: String,
     },
+
+    // ========================================================================
+    // Dead Man's Switch Responses
+    // ========================================================================
+    /// Dead man's switch status for one or more volumes
+    DeadManStatus {
+        /// Status entries for each volume
+        statuses: Vec<DeadManStatusInfo>,
+    },
+
+    /// Dead man's switch enabled/disabled confirmation
+    DeadManConfigured {
+        /// Path to the container file
+        container_path: PathBuf,
+        /// Whether the switch is now enabled
+        enabled: bool,
+        /// Current configuration (if enabled)
+        config: Option<DeadManStatusInfo>,
+    },
+
+    /// Dead man's switch check-in confirmation
+    DeadManCheckedIn {
+        /// Number of volumes checked in
+        volumes_checked_in: usize,
+        /// New deadline for each volume
+        new_deadlines: Vec<(PathBuf, u64)>,
+    },
+}
+
+/// Status information for a volume's dead man's switch
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeadManStatusInfo {
+    /// Path to the container file
+    pub container_path: PathBuf,
+    /// Whether the switch is enabled
+    pub enabled: bool,
+    /// Current status
+    pub status: DeadManStatusType,
+    /// Unix timestamp of last check-in
+    pub last_checkin: u64,
+    /// Unix timestamp of deadline
+    pub deadline: u64,
+    /// Seconds remaining until deadline (0 if past)
+    pub seconds_remaining: u64,
+    /// Timeout configuration in days
+    pub timeout_days: u32,
+    /// Warning period in days
+    pub warning_days: u32,
+    /// Grace period in days
+    pub grace_period_days: u32,
+}
+
+/// Dead man's switch status type for protocol
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeadManStatusType {
+    /// Switch is disabled
+    Disabled,
+    /// Everything is OK
+    Ok,
+    /// Warning period - deadline approaching
+    Warning,
+    /// Grace period - deadline passed but not yet destroyed
+    GracePeriod,
+    /// Expired - destruction triggered
+    Expired,
 }
 
 /// Information about a mounted volume

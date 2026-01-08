@@ -402,6 +402,75 @@ impl DaemonClient {
         let response = DaemonResponse::from_bytes(&buffer)?;
         Ok(response)
     }
+
+    // ========================================================================
+    // Dead Man's Switch Methods
+    // ========================================================================
+
+    /// Enable dead man's switch for a volume
+    ///
+    /// # Arguments
+    ///
+    /// * `container_path` - Path to the container file
+    /// * `timeout_days` - Number of days of inactivity before triggering destruction
+    /// * `warning_days` - Optional: Days before deadline to start warnings (default: 7)
+    /// * `grace_period_days` - Optional: Grace period in days after deadline (default: 3)
+    pub fn dead_man_enable(
+        &self,
+        container_path: PathBuf,
+        timeout_days: u32,
+        warning_days: Option<u32>,
+        grace_period_days: Option<u32>,
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+        let command = DaemonCommand::DeadManEnable {
+            container_path,
+            timeout_days,
+            warning_days,
+            grace_period_days,
+        };
+        self.send_command(command)
+    }
+
+    /// Disable dead man's switch for a volume
+    ///
+    /// # Arguments
+    ///
+    /// * `container_path` - Path to the container file
+    pub fn dead_man_disable(
+        &self,
+        container_path: PathBuf,
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+        let command = DaemonCommand::DeadManDisable { container_path };
+        self.send_command(command)
+    }
+
+    /// Record a check-in for dead man's switch
+    ///
+    /// Resets the deadline timer for the specified volume(s).
+    ///
+    /// # Arguments
+    ///
+    /// * `container_path` - Optional path to a specific container. If None, checks in all volumes.
+    pub fn dead_man_checkin(
+        &self,
+        container_path: Option<PathBuf>,
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+        let command = DaemonCommand::DeadManCheckin { container_path };
+        self.send_command(command)
+    }
+
+    /// Get dead man's switch status
+    ///
+    /// # Arguments
+    ///
+    /// * `container_path` - Optional path to a specific container. If None, gets status for all volumes.
+    pub fn dead_man_status(
+        &self,
+        container_path: Option<PathBuf>,
+    ) -> Result<DaemonResponse, Box<dyn std::error::Error>> {
+        let command = DaemonCommand::DeadManStatus { container_path };
+        self.send_command(command)
+    }
 }
 
 impl Default for DaemonClient {

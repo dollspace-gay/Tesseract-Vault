@@ -61,6 +61,9 @@ enum Commands {
     /// Daemon management commands
     #[command(subcommand)]
     Daemon(DaemonCommands),
+    /// Dead Man's Switch management commands
+    #[command(subcommand)]
+    Deadman(DeadManCommands),
 }
 
 /// Volume subcommands
@@ -216,6 +219,44 @@ enum DaemonCommands {
     StopService,
 }
 
+/// Dead Man's Switch subcommands
+#[derive(Subcommand, Debug)]
+enum DeadManCommands {
+    /// Enable dead man's switch for a volume
+    Enable {
+        /// Path to the volume container
+        #[arg(short, long)]
+        container: PathBuf,
+        /// Inactivity timeout in days before triggering destruction (default: 30)
+        #[arg(short, long, default_value = "30")]
+        timeout: u32,
+        /// Days before deadline to start warnings (default: 7)
+        #[arg(short, long, default_value = "7")]
+        warning: u32,
+        /// Grace period in days after deadline (default: 3)
+        #[arg(short, long, default_value = "3")]
+        grace: u32,
+    },
+    /// Disable dead man's switch for a volume
+    Disable {
+        /// Path to the volume container
+        #[arg(short, long)]
+        container: PathBuf,
+    },
+    /// Record a check-in (reset the deadline timer)
+    Checkin {
+        /// Path to the volume container (optional - if not specified, checks in all volumes)
+        #[arg(short, long)]
+        container: Option<PathBuf>,
+    },
+    /// Get the status of dead man's switch
+    Status {
+        /// Path to the volume container (optional - if not specified, shows all volumes)
+        #[arg(short, long)]
+        container: Option<PathBuf>,
+    },
+}
+
 /// Main application entry point
 fn main() -> Result<(), CryptorError> {
     let cli = Cli::parse();
@@ -276,6 +317,9 @@ fn main() -> Result<(), CryptorError> {
         }
         Commands::Daemon(daemon_cmd) => {
             handle_daemon_command(daemon_cmd)?;
+        }
+        Commands::Deadman(deadman_cmd) => {
+            handle_deadman_command(deadman_cmd)?;
         }
     }
 
@@ -1266,6 +1310,257 @@ fn handle_daemon_command(cmd: DaemonCommands) -> Result<(), CryptorError> {
     }
 
     Ok(())
+}
+
+/// Handle dead man's switch subcommands
+fn handle_deadman_command(cmd: DeadManCommands) -> Result<(), CryptorError> {
+    use tesseract_lib::daemon::{DaemonClient, DaemonResponse};
+
+    let client = DaemonClient::new();
+
+    // Check if daemon is running first
+    if !client.is_running() {
+        eprintln!("Error: Daemon is not running.");
+        eprintln!("Start the daemon with: tesseract daemon start");
+        return Err(CryptorError::Io(std::io::Error::other(
+            "Daemon not running",
+        )));
+    }
+
+    match cmd {
+        DeadManCommands::Enable {
+            container,
+            timeout,
+            warning,
+            grace,
+        } => {
+            println!(
+                "Enabling dead man's switch for '{}'",
+                container.display()
+            );
+            println!("  Timeout: {} days", timeout);
+            println!("  Warning period: {} days before deadline", warning);
+            println!("  Grace period: {} days after deadline", grace);
+            println!();
+
+            match client.dead_man_enable(
+                container.clone(),
+                timeout,
+                Some(warning),
+                Some(grace),
+            ) {
+                Ok(response) => match response {
+                    DaemonResponse::DeadManConfigured {
+                        container_path,
+                        enabled,
+                        config,
+                    } => {
+                        if enabled {
+                            println!("✓ Dead man's switch enabled for '{}'", container_path.display());
+                            if let Some(cfg) = config {
+                                let deadline_date = format_timestamp(cfg.deadline);
+                                println!("  Next deadline: {}", deadline_date);
+                                println!("  Check in before this date to prevent key destruction.");
+                            }
+                        }
+                    }
+                    DaemonResponse::Error { message } => {
+                        return Err(CryptorError::Io(std::io::Error::other(message)));
+                    }
+                    _ => {
+                        return Err(CryptorError::Io(std::io::Error::other(
+                            "Unexpected response from daemon",
+                        )));
+                    }
+                },
+                Err(e) => {
+                    return Err(CryptorError::Io(std::io::Error::other(format!(
+                        "Failed to enable dead man's switch: {}",
+                        e
+                    ))));
+                }
+            }
+        }
+
+        DeadManCommands::Disable { container } => {
+            println!("Disabling dead man's switch for '{}'", container.display());
+
+            match client.dead_man_disable(container.clone()) {
+                Ok(response) => match response {
+                    DaemonResponse::DeadManConfigured {
+                        container_path,
+                        enabled,
+                        ..
+                    } => {
+                        if !enabled {
+                            println!(
+                                "✓ Dead man's switch disabled for '{}'",
+                                container_path.display()
+                            );
+                        }
+                    }
+                    DaemonResponse::Error { message } => {
+                        return Err(CryptorError::Io(std::io::Error::other(message)));
+                    }
+                    _ => {
+                        return Err(CryptorError::Io(std::io::Error::other(
+                            "Unexpected response from daemon",
+                        )));
+                    }
+                },
+                Err(e) => {
+                    return Err(CryptorError::Io(std::io::Error::other(format!(
+                        "Failed to disable dead man's switch: {}",
+                        e
+                    ))));
+                }
+            }
+        }
+
+        DeadManCommands::Checkin { container } => {
+            if let Some(ref path) = container {
+                println!("Checking in for '{}'...", path.display());
+            } else {
+                println!("Checking in for all volumes...");
+            }
+
+            match client.dead_man_checkin(container) {
+                Ok(response) => match response {
+                    DaemonResponse::DeadManCheckedIn {
+                        volumes_checked_in,
+                        new_deadlines,
+                    } => {
+                        if volumes_checked_in == 0 {
+                            println!("No volumes with dead man's switch enabled.");
+                        } else {
+                            println!(
+                                "✓ Checked in for {} volume(s).",
+                                volumes_checked_in
+                            );
+                            for (path, deadline) in new_deadlines {
+                                let deadline_date = format_timestamp(deadline);
+                                println!("  {}: new deadline {}", path.display(), deadline_date);
+                            }
+                        }
+                    }
+                    DaemonResponse::Error { message } => {
+                        return Err(CryptorError::Io(std::io::Error::other(message)));
+                    }
+                    _ => {
+                        return Err(CryptorError::Io(std::io::Error::other(
+                            "Unexpected response from daemon",
+                        )));
+                    }
+                },
+                Err(e) => {
+                    return Err(CryptorError::Io(std::io::Error::other(format!(
+                        "Failed to check in: {}",
+                        e
+                    ))));
+                }
+            }
+        }
+
+        DeadManCommands::Status { container } => {
+            match client.dead_man_status(container) {
+                Ok(response) => match response {
+                    DaemonResponse::DeadManStatus { statuses } => {
+                        if statuses.is_empty() {
+                            println!("No volumes with dead man's switch configured.");
+                        } else {
+                            println!("Dead Man's Switch Status:");
+                            println!();
+                            for status in statuses {
+                                println!("  Volume: {}", status.container_path.display());
+                                println!("    Enabled: {}", status.enabled);
+                                if status.enabled {
+                                    let status_str = match status.status {
+                                        tesseract_lib::daemon::DeadManStatusType::Disabled => "Disabled",
+                                        tesseract_lib::daemon::DeadManStatusType::Ok => "OK",
+                                        tesseract_lib::daemon::DeadManStatusType::Warning => "⚠️  WARNING",
+                                        tesseract_lib::daemon::DeadManStatusType::GracePeriod => "🚨 GRACE PERIOD",
+                                        tesseract_lib::daemon::DeadManStatusType::Expired => "💀 EXPIRED",
+                                    };
+                                    println!("    Status: {}", status_str);
+                                    println!("    Last check-in: {}", format_timestamp(status.last_checkin));
+                                    println!("    Deadline: {}", format_timestamp(status.deadline));
+                                    println!("    Time remaining: {}", format_duration(status.seconds_remaining));
+                                    println!("    Config: timeout={}d, warning={}d, grace={}d",
+                                        status.timeout_days, status.warning_days, status.grace_period_days);
+                                }
+                                println!();
+                            }
+                        }
+                    }
+                    DaemonResponse::Error { message } => {
+                        return Err(CryptorError::Io(std::io::Error::other(message)));
+                    }
+                    _ => {
+                        return Err(CryptorError::Io(std::io::Error::other(
+                            "Unexpected response from daemon",
+                        )));
+                    }
+                },
+                Err(e) => {
+                    return Err(CryptorError::Io(std::io::Error::other(format!(
+                        "Failed to get status: {}",
+                        e
+                    ))));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Format a Unix timestamp as a human-readable date string
+fn format_timestamp(timestamp: u64) -> String {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let datetime = UNIX_EPOCH + Duration::from_secs(timestamp);
+    match datetime.duration_since(UNIX_EPOCH) {
+        Ok(_) => {
+            // Convert to a simple date format
+            let secs_since_epoch = timestamp;
+            let days = secs_since_epoch / 86400;
+            let remaining = secs_since_epoch % 86400;
+            let hours = remaining / 3600;
+            let minutes = (remaining % 3600) / 60;
+
+            // Calculate approximate date (days since 1970-01-01)
+            // This is a simplified calculation
+            let years = 1970 + (days / 365);
+            let day_of_year = days % 365;
+            let month = (day_of_year / 30) + 1;
+            let day = (day_of_year % 30) + 1;
+
+            format!(
+                "{:04}-{:02}-{:02} {:02}:{:02} UTC",
+                years, month.min(12), day.min(31), hours, minutes
+            )
+        }
+        Err(_) => "Invalid timestamp".to_string(),
+    }
+}
+
+/// Format a duration in seconds as a human-readable string
+fn format_duration(seconds: u64) -> String {
+    if seconds == 0 {
+        return "Expired".to_string();
+    }
+
+    let days = seconds / 86400;
+    let hours = (seconds % 86400) / 3600;
+    let minutes = (seconds % 3600) / 60;
+
+    if days > 0 {
+        format!("{}d {}h {}m", days, hours, minutes)
+    } else if hours > 0 {
+        format!("{}h {}m", hours, minutes)
+    } else {
+        format!("{}m", minutes)
+    }
 }
 
 /// Parse a size string like "100M", "1G", "500M" into bytes

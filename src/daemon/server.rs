@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -26,10 +26,17 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::net::{TcpListener, TcpStream};
 
 use super::auth::AuthManager;
-use super::protocol::{AuthenticatedRequest, DaemonCommand, DaemonResponse, MountInfo};
+use super::protocol::{
+    AuthenticatedRequest, DaemonCommand, DaemonResponse, DeadManStatusInfo, DeadManStatusType,
+    MountInfo,
+};
 use crate::volume::manager::VolumeManager;
 use crate::volume::mount::MountOptions;
+use crate::volume::remote_wipe::{DeadMansSwitchStatus, RemoteWipeManager};
 use zeroize::Zeroize;
+
+/// Interval for dead man's switch monitoring (check every hour)
+const DEAD_MAN_CHECK_INTERVAL_SECS: u64 = 3600;
 
 /// Daemon server state
 pub struct DaemonServer {
@@ -38,6 +45,12 @@ pub struct DaemonServer {
 
     /// Track mounted volumes
     mounts: Arc<Mutex<HashMap<PathBuf, MountInfo>>>,
+
+    /// Remote wipe managers per volume (for dead man's switch)
+    wipe_managers: Arc<Mutex<HashMap<PathBuf, RemoteWipeManager>>>,
+
+    /// Directory for storing wipe configs
+    config_dir: PathBuf,
 
     /// Socket path for IPC
     socket_path: PathBuf,
@@ -61,6 +74,12 @@ impl DaemonServer {
     /// This initializes authentication by generating a token that clients must use.
     pub fn new() -> Self {
         let socket_path = Self::default_socket_path();
+        let config_dir = Self::default_config_dir();
+
+        // Ensure config directory exists
+        if let Err(e) = std::fs::create_dir_all(&config_dir) {
+            eprintln!("WARNING: Failed to create config directory {:?}: {}", config_dir, e);
+        }
 
         // Initialize authentication - log warning if it fails but continue
         let auth_manager = match AuthManager::new() {
@@ -78,9 +97,14 @@ impl DaemonServer {
             }
         };
 
+        // Load existing wipe configs
+        let wipe_managers = Self::load_wipe_configs(&config_dir);
+
         Self {
             volume_manager: Arc::new(Mutex::new(VolumeManager::new())),
             mounts: Arc::new(Mutex::new(HashMap::new())),
+            wipe_managers: Arc::new(Mutex::new(wipe_managers)),
+            config_dir,
             socket_path,
             active_connections: Arc::new(AtomicUsize::new(0)),
             shutdown_rx: None,
@@ -95,6 +119,12 @@ impl DaemonServer {
     /// When a signal is received, the server will gracefully shut down.
     pub fn new_with_shutdown(shutdown_rx: mpsc::Receiver<()>) -> Self {
         let socket_path = Self::default_socket_path();
+        let config_dir = Self::default_config_dir();
+
+        // Ensure config directory exists
+        if let Err(e) = std::fs::create_dir_all(&config_dir) {
+            eprintln!("WARNING: Failed to create config directory {:?}: {}", config_dir, e);
+        }
 
         // Initialize authentication - log warning if it fails but continue
         let auth_manager = match AuthManager::new() {
@@ -112,9 +142,14 @@ impl DaemonServer {
             }
         };
 
+        // Load existing wipe configs
+        let wipe_managers = Self::load_wipe_configs(&config_dir);
+
         Self {
             volume_manager: Arc::new(Mutex::new(VolumeManager::new())),
             mounts: Arc::new(Mutex::new(HashMap::new())),
+            wipe_managers: Arc::new(Mutex::new(wipe_managers)),
+            config_dir,
             socket_path,
             active_connections: Arc::new(AtomicUsize::new(0)),
             shutdown_rx: Some(shutdown_rx),
@@ -163,8 +198,74 @@ impl DaemonServer {
         PathBuf::from(format!("127.0.0.1:{}", port))
     }
 
+    /// Get the default config directory for storing wipe configs
+    #[cfg(unix)]
+    fn default_config_dir() -> PathBuf {
+        // Use XDG_DATA_HOME or ~/.local/share/tesseract/wipe_configs
+        if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
+            PathBuf::from(data_home).join("tesseract/wipe_configs")
+        } else if let Ok(home) = std::env::var("HOME") {
+            PathBuf::from(home).join(".local/share/tesseract/wipe_configs")
+        } else {
+            PathBuf::from("/var/lib/tesseract/wipe_configs")
+        }
+    }
+
+    #[cfg(windows)]
+    fn default_config_dir() -> PathBuf {
+        // On Windows, use %LOCALAPPDATA%\Tesseract\wipe_configs
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            PathBuf::from(local_app_data).join("Tesseract\\wipe_configs")
+        } else if let Ok(app_data) = std::env::var("APPDATA") {
+            PathBuf::from(app_data).join("Tesseract\\wipe_configs")
+        } else {
+            PathBuf::from("C:\\ProgramData\\Tesseract\\wipe_configs")
+        }
+    }
+
+    /// Load existing wipe configs from the config directory
+    fn load_wipe_configs(config_dir: &Path) -> HashMap<PathBuf, RemoteWipeManager> {
+        let mut managers = HashMap::new();
+
+        if !config_dir.exists() {
+            return managers;
+        }
+
+        // Read all .json files in the config directory
+        if let Ok(entries) = std::fs::read_dir(config_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                    match RemoteWipeManager::load(&path) {
+                        Ok(manager) => {
+                            // Extract container path from the config
+                            let container_path =
+                                PathBuf::from(&manager.config().volume_id);
+                            println!(
+                                "Loaded wipe config for volume: {:?}",
+                                container_path
+                            );
+                            managers.insert(container_path, manager);
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "WARNING: Failed to load wipe config {:?}: {}",
+                                path, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        managers
+    }
+
     /// Start the daemon server
     pub fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // Spawn background monitoring thread for dead man's switch
+        self.spawn_dead_man_monitor();
+
         #[cfg(unix)]
         {
             self.run_unix()
@@ -173,6 +274,112 @@ impl DaemonServer {
         #[cfg(windows)]
         {
             self.run_windows()
+        }
+    }
+
+    /// Spawns a background thread that periodically checks dead man's switch status
+    ///
+    /// This thread runs independently and:
+    /// - Checks all registered wipe managers every DEAD_MAN_CHECK_INTERVAL_SECS
+    /// - Logs warnings for volumes in Warning or GracePeriod status
+    /// - Triggers key destruction for volumes in Expired status
+    /// - Persists config changes after enforcement
+    fn spawn_dead_man_monitor(&self) {
+        let wipe_managers = Arc::clone(&self.wipe_managers);
+        let config_dir = self.config_dir.clone();
+        let shutdown_flag = Arc::clone(&self.shutdown_flag);
+
+        std::thread::spawn(move || {
+            println!("Dead man's switch monitor started");
+
+            loop {
+                // Check for shutdown
+                if shutdown_flag.load(Ordering::Relaxed) {
+                    println!("Dead man's switch monitor shutting down");
+                    break;
+                }
+
+                // Sleep for the check interval (but check shutdown flag periodically)
+                for _ in 0..(DEAD_MAN_CHECK_INTERVAL_SECS / 10) {
+                    if shutdown_flag.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_secs(10));
+                }
+
+                if shutdown_flag.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                // Check all wipe managers
+                Self::check_all_dead_mans_switches(&wipe_managers, &config_dir);
+            }
+        });
+    }
+
+    /// Check all dead man's switches and enforce expired ones
+    fn check_all_dead_mans_switches(
+        wipe_managers: &Arc<Mutex<HashMap<PathBuf, RemoteWipeManager>>>,
+        config_dir: &Path,
+    ) {
+        let mut managers = wipe_managers.lock().unwrap();
+
+        for (path, manager) in managers.iter_mut() {
+            if !manager.is_dead_mans_switch_enabled() {
+                continue;
+            }
+
+            match manager.check_and_enforce_dead_mans_switch() {
+                Ok((status, wiped_count)) => {
+                    match status {
+                        DeadMansSwitchStatus::Warning {
+                            seconds_remaining, ..
+                        } => {
+                            let days = seconds_remaining / 86400;
+                            let hours = (seconds_remaining % 86400) / 3600;
+                            eprintln!(
+                                "WARNING: Dead man's switch for {:?} expires in {}d {}h. \
+                                 Please check in to prevent key destruction.",
+                                path, days, hours
+                            );
+                        }
+                        DeadMansSwitchStatus::GracePeriod {
+                            seconds_remaining, ..
+                        } => {
+                            let hours = seconds_remaining / 3600;
+                            let minutes = (seconds_remaining % 3600) / 60;
+                            eprintln!(
+                                "CRITICAL: Dead man's switch for {:?} is in GRACE PERIOD! \
+                                 Keys will be destroyed in {}h {}m. CHECK IN IMMEDIATELY!",
+                                path, hours, minutes
+                            );
+                        }
+                        DeadMansSwitchStatus::Expired { .. } => {
+                            eprintln!(
+                                "ALERT: Dead man's switch EXPIRED for {:?}. \
+                                 Destroyed {} keyfiles.",
+                                path, wiped_count
+                            );
+                        }
+                        _ => {}
+                    }
+
+                    // Persist config after potential state changes
+                    let config_path = Self::generate_config_path(config_dir, path);
+                    if let Err(e) = manager.save(&config_path) {
+                        eprintln!(
+                            "WARNING: Failed to save config for {:?}: {}",
+                            path, e
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "ERROR: Failed to check dead man's switch for {:?}: {}",
+                        path, e
+                    );
+                }
+            }
         }
     }
 
@@ -223,12 +430,21 @@ impl DaemonServer {
 
                     let mounts = Arc::clone(&self.mounts);
                     let volume_manager = Arc::clone(&self.volume_manager);
+                    let wipe_managers = Arc::clone(&self.wipe_managers);
+                    let config_dir = self.config_dir.clone();
                     let token = expected_token.clone();
                     let conn_counter = Arc::clone(&self.active_connections);
 
                     // Handle connection in a new thread
                     std::thread::spawn(move || {
-                        let result = Self::handle_client(stream, mounts, volume_manager, token);
+                        let result = Self::handle_client(
+                            stream,
+                            mounts,
+                            volume_manager,
+                            wipe_managers,
+                            config_dir,
+                            token,
+                        );
                         // Always decrement counter when done
                         conn_counter.fetch_sub(1, Ordering::Relaxed);
                         if let Err(e) = result {
@@ -292,12 +508,21 @@ impl DaemonServer {
 
                     let mounts = Arc::clone(&self.mounts);
                     let volume_manager = Arc::clone(&self.volume_manager);
+                    let wipe_managers = Arc::clone(&self.wipe_managers);
+                    let config_dir = self.config_dir.clone();
                     let token = expected_token.clone();
                     let conn_counter = Arc::clone(&self.active_connections);
 
                     // Handle connection in a new thread
                     std::thread::spawn(move || {
-                        let result = Self::handle_client(stream, mounts, volume_manager, token);
+                        let result = Self::handle_client(
+                            stream,
+                            mounts,
+                            volume_manager,
+                            wipe_managers,
+                            config_dir,
+                            token,
+                        );
                         // Always decrement counter when done
                         conn_counter.fetch_sub(1, Ordering::Relaxed);
                         if let Err(e) = result {
@@ -373,9 +598,18 @@ impl DaemonServer {
         mut stream: UnixStream,
         mounts: Arc<Mutex<HashMap<PathBuf, MountInfo>>>,
         volume_manager: Arc<Mutex<VolumeManager>>,
+        wipe_managers: Arc<Mutex<HashMap<PathBuf, RemoteWipeManager>>>,
+        config_dir: PathBuf,
         expected_token: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        Self::handle_client_impl(&mut stream, mounts, volume_manager, expected_token)
+        Self::handle_client_impl(
+            &mut stream,
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+            expected_token,
+        )
     }
 
     #[cfg(windows)]
@@ -383,9 +617,18 @@ impl DaemonServer {
         mut stream: TcpStream,
         mounts: Arc<Mutex<HashMap<PathBuf, MountInfo>>>,
         volume_manager: Arc<Mutex<VolumeManager>>,
+        wipe_managers: Arc<Mutex<HashMap<PathBuf, RemoteWipeManager>>>,
+        config_dir: PathBuf,
         expected_token: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        Self::handle_client_impl(&mut stream, mounts, volume_manager, expected_token)
+        Self::handle_client_impl(
+            &mut stream,
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+            expected_token,
+        )
     }
 
     /// Maximum allowed message size (16 MB) to prevent DoS via memory exhaustion
@@ -396,6 +639,8 @@ impl DaemonServer {
         stream: &mut S,
         mounts: Arc<Mutex<HashMap<PathBuf, MountInfo>>>,
         volume_manager: Arc<Mutex<VolumeManager>>,
+        wipe_managers: Arc<Mutex<HashMap<PathBuf, RemoteWipeManager>>>,
+        config_dir: PathBuf,
         expected_token: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Read request (prefixed with 4-byte length)
@@ -426,12 +671,24 @@ impl DaemonServer {
                     } else {
                         // Token valid, process the command
                         // Clone command since AuthenticatedRequest implements ZeroizeOnDrop
-                        Self::process_command(request.command.clone(), mounts, volume_manager)
+                        Self::process_command(
+                            request.command.clone(),
+                            mounts,
+                            volume_manager,
+                            wipe_managers,
+                            config_dir,
+                        )
                     }
                 } else {
                     // Authentication not enabled (should not happen in production)
                     eprintln!("WARNING: Processing command without authentication");
-                    Self::process_command(request.command.clone(), mounts, volume_manager)
+                    Self::process_command(
+                        request.command.clone(),
+                        mounts,
+                        volume_manager,
+                        wipe_managers,
+                        config_dir,
+                    )
                 }
                 // request is dropped here, zeroizing the auth_token
             }
@@ -543,6 +800,8 @@ impl DaemonServer {
         command: DaemonCommand,
         mounts: Arc<Mutex<HashMap<PathBuf, MountInfo>>>,
         volume_manager: Arc<Mutex<VolumeManager>>,
+        wipe_managers: Arc<Mutex<HashMap<PathBuf, RemoteWipeManager>>>,
+        config_dir: PathBuf,
     ) -> DaemonResponse {
         match command {
             DaemonCommand::Mount {
@@ -704,7 +963,261 @@ impl DaemonServer {
                 // Exit the process
                 std::process::exit(0);
             }
+
+            // Dead Man's Switch commands
+            DaemonCommand::DeadManEnable {
+                container_path,
+                timeout_days,
+                warning_days,
+                grace_period_days,
+            } => {
+                Self::handle_dead_man_enable(
+                    container_path,
+                    timeout_days,
+                    warning_days,
+                    grace_period_days,
+                    wipe_managers,
+                    config_dir,
+                )
+            }
+
+            DaemonCommand::DeadManDisable { container_path } => {
+                Self::handle_dead_man_disable(container_path, wipe_managers, config_dir)
+            }
+
+            DaemonCommand::DeadManCheckin { container_path } => {
+                Self::handle_dead_man_checkin(container_path, wipe_managers, config_dir)
+            }
+
+            DaemonCommand::DeadManStatus { container_path } => {
+                Self::handle_dead_man_status(container_path, wipe_managers)
+            }
         }
+    }
+
+    /// Handle DeadManEnable command
+    fn handle_dead_man_enable(
+        container_path: PathBuf,
+        timeout_days: u32,
+        warning_days: Option<u32>,
+        grace_period_days: Option<u32>,
+        wipe_managers: Arc<Mutex<HashMap<PathBuf, RemoteWipeManager>>>,
+        config_dir: PathBuf,
+    ) -> DaemonResponse {
+        let mut managers = wipe_managers.lock().unwrap();
+
+        // Check if we already have a manager for this volume
+        if let Some(manager) = managers.get_mut(&container_path) {
+            // Update existing configuration
+            manager.enable_dead_mans_switch(timeout_days);
+            if let Some(days) = warning_days {
+                manager.set_warning_days(days);
+            }
+            if let Some(days) = grace_period_days {
+                manager.set_grace_period_days(days);
+            }
+
+            // Persist the config
+            let config_path = Self::generate_config_path(&config_dir, &container_path);
+            if let Err(e) = manager.save(&config_path) {
+                return DaemonResponse::error(format!("Failed to save config: {}", e));
+            }
+
+            let status_info = Self::manager_to_status_info(&container_path, manager);
+            DaemonResponse::DeadManConfigured {
+                container_path,
+                enabled: true,
+                config: Some(status_info),
+            }
+        } else {
+            // Create a new manager for this volume
+            let volume_id = container_path.to_string_lossy().to_string();
+            let (mut manager, _token) = RemoteWipeManager::new(&volume_id);
+
+            // Configure the dead man's switch
+            manager.enable_dead_mans_switch(timeout_days);
+            if let Some(days) = warning_days {
+                manager.set_warning_days(days);
+            }
+            if let Some(days) = grace_period_days {
+                manager.set_grace_period_days(days);
+            }
+
+            // Add keyfile paths (container path and potential key files)
+            manager.add_keyfile_path(&container_path.to_string_lossy());
+
+            // Persist the config
+            let config_path = Self::generate_config_path(&config_dir, &container_path);
+            if let Err(e) = manager.save(&config_path) {
+                return DaemonResponse::error(format!("Failed to save config: {}", e));
+            }
+
+            let status_info = Self::manager_to_status_info(&container_path, &mut manager);
+            managers.insert(container_path.clone(), manager);
+
+            DaemonResponse::DeadManConfigured {
+                container_path,
+                enabled: true,
+                config: Some(status_info),
+            }
+        }
+    }
+
+    /// Handle DeadManDisable command
+    fn handle_dead_man_disable(
+        container_path: PathBuf,
+        wipe_managers: Arc<Mutex<HashMap<PathBuf, RemoteWipeManager>>>,
+        config_dir: PathBuf,
+    ) -> DaemonResponse {
+        let mut managers = wipe_managers.lock().unwrap();
+
+        if let Some(manager) = managers.get_mut(&container_path) {
+            manager.disable_dead_mans_switch();
+
+            // Persist the config
+            let config_path = Self::generate_config_path(&config_dir, &container_path);
+            if let Err(e) = manager.save(&config_path) {
+                return DaemonResponse::error(format!("Failed to save config: {}", e));
+            }
+
+            DaemonResponse::DeadManConfigured {
+                container_path,
+                enabled: false,
+                config: None,
+            }
+        } else {
+            DaemonResponse::error(format!(
+                "No dead man's switch configured for {:?}",
+                container_path
+            ))
+        }
+    }
+
+    /// Handle DeadManCheckin command
+    fn handle_dead_man_checkin(
+        container_path: Option<PathBuf>,
+        wipe_managers: Arc<Mutex<HashMap<PathBuf, RemoteWipeManager>>>,
+        config_dir: PathBuf,
+    ) -> DaemonResponse {
+        let mut managers = wipe_managers.lock().unwrap();
+        let mut checked_in = 0;
+        let mut new_deadlines = Vec::new();
+
+        if let Some(path) = container_path {
+            // Check in for a specific volume
+            if let Some(manager) = managers.get_mut(&path) {
+                if manager.is_dead_mans_switch_enabled() {
+                    manager.checkin();
+                    checked_in = 1;
+                    let deadline = manager.dead_mans_switch_config().deadline();
+                    new_deadlines.push((path.clone(), deadline));
+
+                    // Persist the config
+                    let config_path = Self::generate_config_path(&config_dir, &path);
+                    if let Err(e) = manager.save(&config_path) {
+                        eprintln!("WARNING: Failed to save config after checkin: {}", e);
+                    }
+                }
+            } else {
+                return DaemonResponse::error(format!(
+                    "No dead man's switch configured for {:?}",
+                    path
+                ));
+            }
+        } else {
+            // Check in for all volumes
+            for (path, manager) in managers.iter_mut() {
+                if manager.is_dead_mans_switch_enabled() {
+                    manager.checkin();
+                    checked_in += 1;
+                    let deadline = manager.dead_mans_switch_config().deadline();
+                    new_deadlines.push((path.clone(), deadline));
+
+                    // Persist the config
+                    let config_path = Self::generate_config_path(&config_dir, path);
+                    if let Err(e) = manager.save(&config_path) {
+                        eprintln!("WARNING: Failed to save config after checkin: {}", e);
+                    }
+                }
+            }
+        }
+
+        DaemonResponse::DeadManCheckedIn {
+            volumes_checked_in: checked_in,
+            new_deadlines,
+        }
+    }
+
+    /// Handle DeadManStatus command
+    fn handle_dead_man_status(
+        container_path: Option<PathBuf>,
+        wipe_managers: Arc<Mutex<HashMap<PathBuf, RemoteWipeManager>>>,
+    ) -> DaemonResponse {
+        let mut managers = wipe_managers.lock().unwrap();
+        let mut statuses = Vec::new();
+
+        if let Some(path) = container_path {
+            // Get status for a specific volume
+            if let Some(manager) = managers.get_mut(&path) {
+                statuses.push(Self::manager_to_status_info(&path, manager));
+            } else {
+                return DaemonResponse::error(format!(
+                    "No dead man's switch configured for {:?}",
+                    path
+                ));
+            }
+        } else {
+            // Get status for all volumes
+            for (path, manager) in managers.iter_mut() {
+                statuses.push(Self::manager_to_status_info(path, manager));
+            }
+        }
+
+        DaemonResponse::DeadManStatus { statuses }
+    }
+
+    /// Convert a RemoteWipeManager to DeadManStatusInfo
+    fn manager_to_status_info(
+        container_path: &Path,
+        manager: &mut RemoteWipeManager,
+    ) -> DeadManStatusInfo {
+        // Get status first (this mutably borrows manager temporarily)
+        let status = manager.check_dead_mans_switch();
+
+        let status_type = match status {
+            DeadMansSwitchStatus::Disabled => DeadManStatusType::Disabled,
+            DeadMansSwitchStatus::Ok { .. } => DeadManStatusType::Ok,
+            DeadMansSwitchStatus::Warning { .. } => DeadManStatusType::Warning,
+            DeadMansSwitchStatus::GracePeriod { .. } => DeadManStatusType::GracePeriod,
+            DeadMansSwitchStatus::Expired { .. } => DeadManStatusType::Expired,
+        };
+
+        // Now get config (immutable borrow)
+        let config = manager.dead_mans_switch_config();
+
+        DeadManStatusInfo {
+            container_path: container_path.to_path_buf(),
+            enabled: config.enabled,
+            status: status_type,
+            last_checkin: config.last_checkin,
+            deadline: config.deadline(),
+            seconds_remaining: config.seconds_until_deadline(),
+            timeout_days: config.timeout_days,
+            warning_days: config.warning_days,
+            grace_period_days: config.grace_period_days,
+        }
+    }
+
+    /// Generate a config file path for a container (helper for command handlers)
+    fn generate_config_path(config_dir: &Path, container_path: &Path) -> PathBuf {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        container_path.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        config_dir.join(format!("wipe_{:016x}.json", hash))
     }
 
     /// Set up signal handlers for graceful shutdown

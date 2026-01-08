@@ -61,6 +61,294 @@ pub const MAX_FAILED_ATTEMPTS: u32 = 5;
 /// Lockout duration after max failed attempts (1 hour)
 pub const LOCKOUT_DURATION_SECS: u64 = 3600;
 
+/// Default inactivity timeout for dead man's switch (30 days)
+pub const DEFAULT_INACTIVITY_TIMEOUT_DAYS: u32 = 30;
+
+/// Default warning period before deadline (7 days)
+pub const DEFAULT_WARNING_DAYS: u32 = 7;
+
+/// Default grace period after deadline (3 days)
+pub const DEFAULT_GRACE_PERIOD_DAYS: u32 = 3;
+
+/// Seconds per day (for time calculations)
+const SECONDS_PER_DAY: u64 = 86400;
+
+/// Maximum tolerable clock regression for NTP adjustments (5 minutes)
+/// If clock goes backwards more than this, it's considered tampering
+const MAX_CLOCK_DRIFT_SECS: u64 = 300;
+
+/// Dead Man's Switch configuration
+///
+/// Configures automatic key destruction after a period of inactivity.
+/// The user must periodically "check in" to prove they're still alive/in control.
+/// If no check-in is received within the timeout period, keys are destroyed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeadMansSwitchConfig {
+    /// Whether the dead man's switch is enabled
+    pub enabled: bool,
+    /// Inactivity timeout in days before triggering destruction
+    pub timeout_days: u32,
+    /// Days before deadline to start sending warnings
+    pub warning_days: u32,
+    /// Grace period in days after deadline (allows recovery)
+    pub grace_period_days: u32,
+    /// Unix timestamp of last check-in
+    pub last_checkin: u64,
+    /// Whether we're currently in the grace period
+    pub in_grace_period: bool,
+    /// When grace period started (if in_grace_period is true)
+    pub grace_period_started: Option<u64>,
+    /// Last observed system time (for clock tampering detection)
+    #[serde(default)]
+    pub last_observed_time: u64,
+    /// Whether clock tampering was detected
+    #[serde(default)]
+    pub clock_tampering_detected: bool,
+}
+
+impl Default for DeadMansSwitchConfig {
+    fn default() -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        Self {
+            enabled: false,
+            timeout_days: DEFAULT_INACTIVITY_TIMEOUT_DAYS,
+            warning_days: DEFAULT_WARNING_DAYS,
+            grace_period_days: DEFAULT_GRACE_PERIOD_DAYS,
+            last_checkin: now,
+            in_grace_period: false,
+            grace_period_started: None,
+            last_observed_time: now,
+            clock_tampering_detected: false,
+        }
+    }
+}
+
+impl DeadMansSwitchConfig {
+    /// Creates a new enabled dead man's switch configuration
+    pub fn new(timeout_days: u32) -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        Self {
+            enabled: true,
+            timeout_days,
+            warning_days: DEFAULT_WARNING_DAYS,
+            grace_period_days: DEFAULT_GRACE_PERIOD_DAYS,
+            last_checkin: now,
+            in_grace_period: false,
+            grace_period_started: None,
+            last_observed_time: now,
+            clock_tampering_detected: false,
+        }
+    }
+
+    /// Records a check-in, resetting the deadline
+    ///
+    /// Also clears any clock tampering flag if the current time is valid.
+    pub fn record_checkin(&mut self) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Update observed time and check for tampering
+        self.update_observed_time(now);
+
+        // Only allow check-in if no tampering detected
+        if !self.clock_tampering_detected {
+            self.last_checkin = now;
+            self.in_grace_period = false;
+            self.grace_period_started = None;
+        }
+    }
+
+    /// Updates the last observed time and checks for clock tampering
+    ///
+    /// If the system clock goes backwards more than MAX_CLOCK_DRIFT_SECS,
+    /// this is considered clock tampering and the switch will trigger.
+    fn update_observed_time(&mut self, now: u64) {
+        if self.last_observed_time > 0 && now + MAX_CLOCK_DRIFT_SECS < self.last_observed_time {
+            // Clock went backwards more than tolerable drift - tampering detected
+            self.clock_tampering_detected = true;
+            eprintln!(
+                "WARNING: Clock tampering detected! System time went backwards by {} seconds. \
+                 Dead man's switch will trigger immediately.",
+                self.last_observed_time.saturating_sub(now)
+            );
+        }
+        // Always update observed time (even if tampering detected)
+        self.last_observed_time = now;
+    }
+
+    /// Returns whether clock tampering has been detected
+    pub fn is_clock_tampered(&self) -> bool {
+        self.clock_tampering_detected
+    }
+
+    /// Clears the clock tampering flag (use with caution - requires manual verification)
+    ///
+    /// This should only be called after verifying with an external time source.
+    pub fn clear_tampering_flag(&mut self) {
+        self.clock_tampering_detected = false;
+    }
+
+    /// Calculates the deadline timestamp
+    pub fn deadline(&self) -> u64 {
+        self.last_checkin + (self.timeout_days as u64 * SECONDS_PER_DAY)
+    }
+
+    /// Calculates the warning start timestamp
+    pub fn warning_start(&self) -> u64 {
+        self.deadline()
+            .saturating_sub(self.warning_days as u64 * SECONDS_PER_DAY)
+    }
+
+    /// Calculates the final destruction timestamp (after grace period)
+    pub fn destruction_time(&self) -> u64 {
+        self.deadline() + (self.grace_period_days as u64 * SECONDS_PER_DAY)
+    }
+
+    /// Returns seconds until the deadline (0 if past deadline)
+    pub fn seconds_until_deadline(&self) -> u64 {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.deadline().saturating_sub(now)
+    }
+
+    /// Returns seconds until destruction (0 if past destruction time)
+    pub fn seconds_until_destruction(&self) -> u64 {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.destruction_time().saturating_sub(now)
+    }
+
+    /// Checks the current status of the dead man's switch
+    ///
+    /// This method also updates clock tampering detection. If tampering is
+    /// detected (clock went backwards significantly), returns Expired status.
+    pub fn check_status(&mut self) -> DeadMansSwitchStatus {
+        if !self.enabled {
+            return DeadMansSwitchStatus::Disabled;
+        }
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Check for clock tampering
+        self.update_observed_time(now);
+
+        // If clock tampering detected, immediately return Expired
+        if self.clock_tampering_detected {
+            return DeadMansSwitchStatus::Expired {
+                last_checkin: self.last_checkin,
+                expired_at: self.deadline(),
+            };
+        }
+
+        let deadline = self.deadline();
+        let warning_start = self.warning_start();
+        let destruction_time = self.destruction_time();
+
+        if now >= destruction_time {
+            // Past grace period - trigger destruction
+            DeadMansSwitchStatus::Expired {
+                last_checkin: self.last_checkin,
+                expired_at: deadline,
+            }
+        } else if now >= deadline {
+            // In grace period
+            if !self.in_grace_period {
+                self.in_grace_period = true;
+                self.grace_period_started = Some(now);
+            }
+            let seconds_remaining = destruction_time.saturating_sub(now);
+            DeadMansSwitchStatus::GracePeriod {
+                last_checkin: self.last_checkin,
+                deadline,
+                seconds_remaining,
+            }
+        } else if now >= warning_start {
+            // Warning period
+            let seconds_remaining = deadline.saturating_sub(now);
+            DeadMansSwitchStatus::Warning {
+                last_checkin: self.last_checkin,
+                deadline,
+                seconds_remaining,
+            }
+        } else {
+            // All OK
+            let seconds_remaining = deadline.saturating_sub(now);
+            DeadMansSwitchStatus::Ok {
+                last_checkin: self.last_checkin,
+                deadline,
+                seconds_remaining,
+            }
+        }
+    }
+}
+
+/// Status of the dead man's switch
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeadMansSwitchStatus {
+    /// Dead man's switch is disabled
+    Disabled,
+    /// Everything is OK, check-in is current
+    Ok {
+        last_checkin: u64,
+        deadline: u64,
+        seconds_remaining: u64,
+    },
+    /// Warning: deadline approaching
+    Warning {
+        last_checkin: u64,
+        deadline: u64,
+        seconds_remaining: u64,
+    },
+    /// Grace period: deadline passed but destruction not yet triggered
+    GracePeriod {
+        last_checkin: u64,
+        deadline: u64,
+        seconds_remaining: u64,
+    },
+    /// Expired: grace period passed, destruction should be triggered
+    Expired { last_checkin: u64, expired_at: u64 },
+}
+
+impl DeadMansSwitchStatus {
+    /// Returns true if destruction should be triggered
+    pub fn should_destroy(&self) -> bool {
+        matches!(self, DeadMansSwitchStatus::Expired { .. })
+    }
+
+    /// Returns true if a warning should be shown
+    pub fn should_warn(&self) -> bool {
+        matches!(
+            self,
+            DeadMansSwitchStatus::Warning { .. } | DeadMansSwitchStatus::GracePeriod { .. }
+        )
+    }
+
+    /// Returns true if the switch is in a critical state (grace period or expired)
+    pub fn is_critical(&self) -> bool {
+        matches!(
+            self,
+            DeadMansSwitchStatus::GracePeriod { .. } | DeadMansSwitchStatus::Expired { .. }
+        )
+    }
+}
+
 /// Type of remote command
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WipeCommandType {
@@ -266,6 +554,9 @@ pub struct StoredWipeConfig {
     pub used_nonces: Vec<(u64, [u8; COMMAND_NONCE_SIZE])>,
     /// When the config was created
     pub created_at: u64,
+    /// Dead man's switch configuration
+    #[serde(default)]
+    pub dead_mans_switch: DeadMansSwitchConfig,
 }
 
 impl StoredWipeConfig {
@@ -293,6 +584,7 @@ impl StoredWipeConfig {
             lockout_until: 0,
             used_nonces: Vec::new(),
             created_at: now,
+            dead_mans_switch: DeadMansSwitchConfig::default(),
         }
     }
 
@@ -501,10 +793,37 @@ impl RemoteWipeManager {
         })
     }
 
-    /// Saves the config to disk
+    /// Saves the config to disk with secure permissions
+    ///
+    /// On Unix, the file is created with mode 0600 (owner read/write only).
+    /// This protects the wipe configuration from being read or modified
+    /// by other users on the system.
     pub fn save(&self, path: &Path) -> Result<()> {
         let data = self.config.to_bytes()?;
-        std::fs::write(path, data)?;
+
+        // Ensure parent directory exists
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+
+            // Set directory permissions on Unix
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let perms = std::fs::Permissions::from_mode(0o700);
+                let _ = std::fs::set_permissions(parent, perms);
+            }
+        }
+
+        std::fs::write(path, &data)?;
+
+        // Set restrictive file permissions on Unix (owner read/write only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o600);
+            std::fs::set_permissions(path, perms)?;
+        }
+
         Ok(())
     }
 
@@ -728,7 +1047,11 @@ impl RemoteWipeManager {
                 // Lock functionality would integrate with volume manager
                 Ok(WipeResult::Locked { timestamp: now })
             }
-            WipeCommandType::CheckIn => Ok(WipeResult::CheckedIn { timestamp: now }),
+            WipeCommandType::CheckIn => {
+                // Record check-in for dead man's switch
+                self.config.dead_mans_switch.record_checkin();
+                Ok(WipeResult::CheckedIn { timestamp: now })
+            }
             WipeCommandType::RevokeToken => {
                 self.config.enabled = false;
                 Ok(WipeResult::TokenRevoked { timestamp: now })
@@ -802,6 +1125,110 @@ impl RemoteWipeManager {
     /// Returns whether there's a pending confirmation
     pub fn has_pending_confirmation(&self) -> bool {
         self.pending_confirmation.is_some()
+    }
+
+    // ========================================================================
+    // Dead Man's Switch Methods
+    // ========================================================================
+
+    /// Enables the dead man's switch with the specified timeout
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout_days` - Number of days of inactivity before triggering destruction
+    pub fn enable_dead_mans_switch(&mut self, timeout_days: u32) {
+        self.config.dead_mans_switch = DeadMansSwitchConfig::new(timeout_days);
+    }
+
+    /// Disables the dead man's switch
+    pub fn disable_dead_mans_switch(&mut self) {
+        self.config.dead_mans_switch.enabled = false;
+    }
+
+    /// Configures the warning period for the dead man's switch
+    ///
+    /// # Arguments
+    ///
+    /// * `days` - Number of days before deadline to start warnings
+    pub fn set_warning_days(&mut self, days: u32) {
+        self.config.dead_mans_switch.warning_days = days;
+    }
+
+    /// Configures the grace period for the dead man's switch
+    ///
+    /// # Arguments
+    ///
+    /// * `days` - Number of days after deadline before destruction
+    pub fn set_grace_period_days(&mut self, days: u32) {
+        self.config.dead_mans_switch.grace_period_days = days;
+    }
+
+    /// Records a check-in for the dead man's switch
+    ///
+    /// This should be called periodically by the user to prove they're still
+    /// in control. Resets the deadline timer.
+    pub fn checkin(&mut self) {
+        self.config.dead_mans_switch.record_checkin();
+    }
+
+    /// Checks the status of the dead man's switch
+    ///
+    /// Returns the current status. If the status is `Expired`, the caller
+    /// should trigger key destruction.
+    pub fn check_dead_mans_switch(&mut self) -> DeadMansSwitchStatus {
+        self.config.dead_mans_switch.check_status()
+    }
+
+    /// Checks the dead man's switch and triggers destruction if expired
+    ///
+    /// This is the main method to be called periodically by the daemon.
+    /// Returns the status and the number of keyfiles destroyed (if any).
+    pub fn check_and_enforce_dead_mans_switch(
+        &mut self,
+    ) -> std::result::Result<(DeadMansSwitchStatus, usize), WipeError> {
+        let status = self.config.dead_mans_switch.check_status();
+
+        if status.should_destroy() {
+            let wiped = self.destroy_all_keyfiles()?;
+            Ok((status, wiped))
+        } else {
+            Ok((status, 0))
+        }
+    }
+
+    /// Returns whether the dead man's switch is enabled
+    pub fn is_dead_mans_switch_enabled(&self) -> bool {
+        self.config.dead_mans_switch.enabled
+    }
+
+    /// Returns the dead man's switch configuration
+    pub fn dead_mans_switch_config(&self) -> &DeadMansSwitchConfig {
+        &self.config.dead_mans_switch
+    }
+
+    /// Returns seconds until the dead man's switch deadline
+    pub fn seconds_until_deadline(&self) -> u64 {
+        self.config.dead_mans_switch.seconds_until_deadline()
+    }
+
+    /// Returns a human-readable time until deadline
+    pub fn time_until_deadline_string(&self) -> String {
+        let secs = self.seconds_until_deadline();
+        if secs == 0 {
+            return "EXPIRED".to_string();
+        }
+
+        let days = secs / SECONDS_PER_DAY;
+        let hours = (secs % SECONDS_PER_DAY) / 3600;
+        let minutes = (secs % 3600) / 60;
+
+        if days > 0 {
+            format!("{}d {}h {}m", days, hours, minutes)
+        } else if hours > 0 {
+            format!("{}h {}m", hours, minutes)
+        } else {
+            format!("{}m", minutes)
+        }
     }
 }
 
@@ -1387,5 +1814,368 @@ mod tests {
         assert_eq!(RATE_LIMIT_SECS, 5);
         assert_eq!(MAX_FAILED_ATTEMPTS, 5);
         assert_eq!(LOCKOUT_DURATION_SECS, 3600);
+    }
+
+    // ========================================================================
+    // Dead Man's Switch Tests
+    // ========================================================================
+
+    #[test]
+    fn test_dead_mans_switch_config_default() {
+        let config = DeadMansSwitchConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.timeout_days, DEFAULT_INACTIVITY_TIMEOUT_DAYS);
+        assert_eq!(config.warning_days, DEFAULT_WARNING_DAYS);
+        assert_eq!(config.grace_period_days, DEFAULT_GRACE_PERIOD_DAYS);
+        assert!(!config.in_grace_period);
+    }
+
+    #[test]
+    fn test_dead_mans_switch_config_new() {
+        let config = DeadMansSwitchConfig::new(60);
+        assert!(config.enabled);
+        assert_eq!(config.timeout_days, 60);
+        assert!(config.last_checkin > 0);
+    }
+
+    #[test]
+    fn test_dead_mans_switch_deadline_calculation() {
+        let mut config = DeadMansSwitchConfig::new(30);
+        let deadline = config.deadline();
+        let expected = config.last_checkin + (30 * SECONDS_PER_DAY);
+        assert_eq!(deadline, expected);
+    }
+
+    #[test]
+    fn test_dead_mans_switch_warning_start() {
+        let config = DeadMansSwitchConfig::new(30);
+        let warning_start = config.warning_start();
+        let expected = config.deadline() - (DEFAULT_WARNING_DAYS as u64 * SECONDS_PER_DAY);
+        assert_eq!(warning_start, expected);
+    }
+
+    #[test]
+    fn test_dead_mans_switch_destruction_time() {
+        let config = DeadMansSwitchConfig::new(30);
+        let destruction = config.destruction_time();
+        let expected = config.deadline() + (DEFAULT_GRACE_PERIOD_DAYS as u64 * SECONDS_PER_DAY);
+        assert_eq!(destruction, expected);
+    }
+
+    #[test]
+    fn test_dead_mans_switch_status_disabled() {
+        let mut config = DeadMansSwitchConfig::default();
+        let status = config.check_status();
+        assert!(matches!(status, DeadMansSwitchStatus::Disabled));
+    }
+
+    #[test]
+    fn test_dead_mans_switch_status_ok() {
+        let mut config = DeadMansSwitchConfig::new(30);
+        let status = config.check_status();
+        assert!(matches!(status, DeadMansSwitchStatus::Ok { .. }));
+        assert!(!status.should_destroy());
+        assert!(!status.should_warn());
+    }
+
+    #[test]
+    fn test_dead_mans_switch_status_warning() {
+        let mut config = DeadMansSwitchConfig::new(30);
+        // Set last_checkin to put us in warning period (deadline - 3 days)
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        config.last_checkin = now - (27 * SECONDS_PER_DAY); // 27 days ago, 3 days until deadline
+
+        let status = config.check_status();
+        assert!(matches!(status, DeadMansSwitchStatus::Warning { .. }));
+        assert!(!status.should_destroy());
+        assert!(status.should_warn());
+    }
+
+    #[test]
+    fn test_dead_mans_switch_status_grace_period() {
+        let mut config = DeadMansSwitchConfig::new(30);
+        // Set last_checkin to put us in grace period (1 day past deadline)
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        config.last_checkin = now - (31 * SECONDS_PER_DAY); // 31 days ago
+
+        let status = config.check_status();
+        assert!(matches!(status, DeadMansSwitchStatus::GracePeriod { .. }));
+        assert!(!status.should_destroy());
+        assert!(status.should_warn());
+        assert!(status.is_critical());
+        assert!(config.in_grace_period);
+    }
+
+    #[test]
+    fn test_dead_mans_switch_status_expired() {
+        let mut config = DeadMansSwitchConfig::new(30);
+        // Set last_checkin to put us past grace period
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        config.last_checkin = now - (34 * SECONDS_PER_DAY); // 34 days ago (30 + 3 grace + 1)
+
+        let status = config.check_status();
+        assert!(matches!(status, DeadMansSwitchStatus::Expired { .. }));
+        assert!(status.should_destroy());
+        assert!(status.is_critical());
+    }
+
+    #[test]
+    fn test_dead_mans_switch_checkin_resets_deadline() {
+        let mut config = DeadMansSwitchConfig::new(30);
+        let old_checkin = config.last_checkin;
+
+        // Set to past to simulate time passing
+        config.last_checkin = old_checkin - 1000;
+        config.in_grace_period = true;
+        config.grace_period_started = Some(old_checkin);
+
+        // Check in
+        config.record_checkin();
+
+        assert!(config.last_checkin > old_checkin - 1000);
+        assert!(!config.in_grace_period);
+        assert!(config.grace_period_started.is_none());
+    }
+
+    #[test]
+    fn test_manager_enable_dead_mans_switch() {
+        let (mut manager, _) = RemoteWipeManager::new("test-vol");
+        assert!(!manager.is_dead_mans_switch_enabled());
+
+        manager.enable_dead_mans_switch(60);
+        assert!(manager.is_dead_mans_switch_enabled());
+        assert_eq!(manager.dead_mans_switch_config().timeout_days, 60);
+    }
+
+    #[test]
+    fn test_manager_disable_dead_mans_switch() {
+        let (mut manager, _) = RemoteWipeManager::new("test-vol");
+        manager.enable_dead_mans_switch(30);
+        assert!(manager.is_dead_mans_switch_enabled());
+
+        manager.disable_dead_mans_switch();
+        assert!(!manager.is_dead_mans_switch_enabled());
+    }
+
+    #[test]
+    fn test_manager_checkin() {
+        let (mut manager, _) = RemoteWipeManager::new("test-vol");
+        manager.enable_dead_mans_switch(30);
+
+        let old_checkin = manager.dead_mans_switch_config().last_checkin;
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        manager.checkin();
+        assert!(manager.dead_mans_switch_config().last_checkin >= old_checkin);
+    }
+
+    #[test]
+    fn test_manager_check_dead_mans_switch() {
+        let (mut manager, _) = RemoteWipeManager::new("test-vol");
+        manager.enable_dead_mans_switch(30);
+
+        let status = manager.check_dead_mans_switch();
+        assert!(matches!(status, DeadMansSwitchStatus::Ok { .. }));
+    }
+
+    #[test]
+    fn test_manager_time_until_deadline_string() {
+        let (mut manager, _) = RemoteWipeManager::new("test-vol");
+        manager.enable_dead_mans_switch(30);
+
+        let time_str = manager.time_until_deadline_string();
+        assert!(time_str.contains("d")); // Should contain days
+    }
+
+    #[test]
+    fn test_manager_time_until_deadline_expired() {
+        let (mut manager, _) = RemoteWipeManager::new("test-vol");
+        manager.enable_dead_mans_switch(30);
+
+        // Set checkin to very far in the past
+        manager.config.dead_mans_switch.last_checkin = 0;
+
+        let time_str = manager.time_until_deadline_string();
+        assert_eq!(time_str, "EXPIRED");
+    }
+
+    #[test]
+    fn test_checkin_via_wipe_command() {
+        let (mut manager, token) = RemoteWipeManager::new("test-vol");
+        manager.enable_dead_mans_switch(30);
+        manager.set_require_confirmation(false);
+
+        // Set old checkin
+        let old_checkin = manager.dead_mans_switch_config().last_checkin;
+        manager.config.dead_mans_switch.last_checkin = old_checkin - 1000;
+
+        // Send CheckIn command
+        let cmd = WipeCommand::new(&token, "test-vol", WipeCommandType::CheckIn);
+        let result = manager.verify_and_execute(&cmd, &token);
+
+        assert!(matches!(result, Ok(WipeResult::CheckedIn { .. })));
+        assert!(manager.dead_mans_switch_config().last_checkin > old_checkin - 1000);
+    }
+
+    #[test]
+    fn test_dead_mans_switch_status_methods() {
+        let ok = DeadMansSwitchStatus::Ok {
+            last_checkin: 0,
+            deadline: 100,
+            seconds_remaining: 100,
+        };
+        assert!(!ok.should_destroy());
+        assert!(!ok.should_warn());
+        assert!(!ok.is_critical());
+
+        let warning = DeadMansSwitchStatus::Warning {
+            last_checkin: 0,
+            deadline: 100,
+            seconds_remaining: 50,
+        };
+        assert!(!warning.should_destroy());
+        assert!(warning.should_warn());
+        assert!(!warning.is_critical());
+
+        let grace = DeadMansSwitchStatus::GracePeriod {
+            last_checkin: 0,
+            deadline: 100,
+            seconds_remaining: 25,
+        };
+        assert!(!grace.should_destroy());
+        assert!(grace.should_warn());
+        assert!(grace.is_critical());
+
+        let expired = DeadMansSwitchStatus::Expired {
+            last_checkin: 0,
+            expired_at: 100,
+        };
+        assert!(expired.should_destroy());
+        assert!(!expired.should_warn());
+        assert!(expired.is_critical());
+
+        let disabled = DeadMansSwitchStatus::Disabled;
+        assert!(!disabled.should_destroy());
+        assert!(!disabled.should_warn());
+        assert!(!disabled.is_critical());
+    }
+
+    #[test]
+    fn test_dead_mans_switch_constants() {
+        assert_eq!(DEFAULT_INACTIVITY_TIMEOUT_DAYS, 30);
+        assert_eq!(DEFAULT_WARNING_DAYS, 7);
+        assert_eq!(DEFAULT_GRACE_PERIOD_DAYS, 3);
+        assert_eq!(SECONDS_PER_DAY, 86400);
+    }
+
+    // ========================================================================
+    // Clock Tampering Detection Tests
+    // ========================================================================
+
+    #[test]
+    fn test_clock_tampering_detection_initial_state() {
+        let config = DeadMansSwitchConfig::new(30);
+        assert!(!config.is_clock_tampered());
+        assert!(config.last_observed_time > 0);
+    }
+
+    #[test]
+    fn test_clock_tampering_small_drift_tolerated() {
+        let mut config = DeadMansSwitchConfig::new(30);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Set observed time slightly ahead (simulating small NTP adjustment)
+        config.last_observed_time = now + 100; // 100 seconds ahead
+
+        // Check status - should NOT trigger tampering for small drift
+        let status = config.check_status();
+        assert!(!config.is_clock_tampered());
+        assert!(matches!(status, DeadMansSwitchStatus::Ok { .. }));
+    }
+
+    #[test]
+    fn test_clock_tampering_large_regression_detected() {
+        let mut config = DeadMansSwitchConfig::new(30);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Set observed time far ahead (simulating clock set back)
+        config.last_observed_time = now + 1000; // 1000 seconds ahead (clock went back)
+
+        // Check status - SHOULD trigger tampering for large regression
+        let status = config.check_status();
+        assert!(config.is_clock_tampered());
+        assert!(matches!(status, DeadMansSwitchStatus::Expired { .. }));
+        assert!(status.should_destroy());
+    }
+
+    #[test]
+    fn test_clock_tampering_blocks_checkin() {
+        let mut config = DeadMansSwitchConfig::new(30);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let old_checkin = config.last_checkin;
+
+        // Set observed time far ahead to trigger tampering
+        config.last_observed_time = now + 1000;
+
+        // Try to check in
+        config.record_checkin();
+
+        // Checkin should be blocked due to tampering
+        assert!(config.is_clock_tampered());
+        assert_eq!(config.last_checkin, old_checkin); // Unchanged
+    }
+
+    #[test]
+    fn test_clock_tampering_clear_flag() {
+        let mut config = DeadMansSwitchConfig::new(30);
+
+        // Manually set tampering flag
+        config.clock_tampering_detected = true;
+        assert!(config.is_clock_tampered());
+
+        // Clear it
+        config.clear_tampering_flag();
+        assert!(!config.is_clock_tampered());
+    }
+
+    #[test]
+    fn test_clock_tampering_persists_across_checks() {
+        let mut config = DeadMansSwitchConfig::new(30);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Trigger tampering
+        config.last_observed_time = now + 1000;
+        let _ = config.check_status();
+        assert!(config.is_clock_tampered());
+
+        // Reset observed time to current (simulating clock restored)
+        config.last_observed_time = now;
+
+        // Check again - tampering should still be flagged
+        let status = config.check_status();
+        assert!(config.is_clock_tampered());
+        assert!(matches!(status, DeadMansSwitchStatus::Expired { .. }));
     }
 }

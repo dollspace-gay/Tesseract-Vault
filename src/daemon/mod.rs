@@ -21,5 +21,8 @@ pub mod service;
 
 pub use auth::AuthManager;
 pub use client::DaemonClient;
-pub use protocol::{AuthenticatedRequest, DaemonCommand, DaemonResponse, MountInfo};
+pub use protocol::{
+    AuthenticatedRequest, DaemonCommand, DaemonResponse, DeadManStatusInfo, DeadManStatusType,
+    MountInfo,
+};
 pub use server::DaemonServer;

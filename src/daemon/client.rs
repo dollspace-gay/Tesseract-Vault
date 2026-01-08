@@ -338,7 +338,9 @@ impl DaemonClient {
 
         // Verify the response
         match response {
-            DaemonResponse::ServerIdentity { response: server_response } => {
+            DaemonResponse::ServerIdentity {
+                response: server_response,
+            } => {
                 // Decode the server's response
                 let server_response_bytes = match hex::decode(&server_response) {
                     Ok(bytes) if bytes.len() == 32 => bytes,

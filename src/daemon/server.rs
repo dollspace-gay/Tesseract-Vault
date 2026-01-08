@@ -686,9 +686,7 @@ impl DaemonServer {
                 // This should be handled in handle_client_impl, not here
                 // If we get here, it means it was wrapped in AuthenticatedRequest
                 // which is unusual but not an error
-                DaemonResponse::error(
-                    "VerifyServer should be sent without authentication wrapper",
-                )
+                DaemonResponse::error("VerifyServer should be sent without authentication wrapper")
             }
 
             DaemonCommand::Shutdown => {

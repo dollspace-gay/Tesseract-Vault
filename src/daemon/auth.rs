@@ -298,11 +298,7 @@ impl AuthManager {
     ///
     /// The client uses this to verify that the server knows the auth token
     /// by checking the server's response to a challenge.
-    pub fn verify_server_identity(
-        &self,
-        challenge: &[u8; 32],
-        response: &[u8; 32],
-    ) -> bool {
+    pub fn verify_server_identity(&self, challenge: &[u8; 32], response: &[u8; 32]) -> bool {
         use subtle::ConstantTimeEq;
 
         let expected = self.compute_server_identity_response(challenge);
@@ -397,8 +393,8 @@ impl Drop for AuthManager {
 fn get_current_username_secure() -> Option<String> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
-    use windows::Win32::System::WindowsProgramming::GetUserNameW;
     use windows::core::PWSTR;
+    use windows::Win32::System::WindowsProgramming::GetUserNameW;
 
     // Initial buffer size (256 wide chars should be enough for most usernames)
     let mut buffer: Vec<u16> = vec![0; 256];
@@ -406,9 +402,7 @@ fn get_current_username_secure() -> Option<String> {
 
     // GetUserNameW retrieves the username from the process token
     // This is secure because it queries the OS directly, not environment variables
-    let result = unsafe {
-        GetUserNameW(Some(PWSTR(buffer.as_mut_ptr())), &mut size)
-    };
+    let result = unsafe { GetUserNameW(Some(PWSTR(buffer.as_mut_ptr())), &mut size) };
 
     match result {
         Ok(()) => {
@@ -422,9 +416,8 @@ fn get_current_username_secure() -> Option<String> {
             // Check if buffer was too small and retry
             if error.code().0 as u32 == windows::Win32::Foundation::ERROR_INSUFFICIENT_BUFFER.0 {
                 buffer.resize(size as usize, 0);
-                let retry_result = unsafe {
-                    GetUserNameW(Some(PWSTR(buffer.as_mut_ptr())), &mut size)
-                };
+                let retry_result =
+                    unsafe { GetUserNameW(Some(PWSTR(buffer.as_mut_ptr())), &mut size) };
                 if retry_result.is_ok() {
                     buffer.truncate((size.saturating_sub(1)) as usize);
                     let os_string = OsString::from_wide(&buffer);

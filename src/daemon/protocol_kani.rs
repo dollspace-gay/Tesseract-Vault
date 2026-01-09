@@ -6,9 +6,9 @@
 
 #![cfg(kani)]
 
-use super::{
-    AUTH_TOKEN_LENGTH, CHALLENGE_NONCE_LENGTH, SERVER_IDENTITY_LENGTH,
-    DeadManStatusType, DaemonCommand, DaemonResponse,
+use super::protocol::{
+    DaemonCommand, DaemonResponse, DeadManStatusType, AUTH_TOKEN_LENGTH, CHALLENGE_NONCE_LENGTH,
+    SERVER_IDENTITY_LENGTH,
 };
 
 /// Verify AUTH_TOKEN_LENGTH is 32 bytes (256 bits of entropy).

@@ -141,11 +141,16 @@ impl<T: Zeroize> LockedMemory<T> {
             Ok(()) => (locked_mem, true),
             Err(e) => {
                 // Print warning to stderr about security degradation
-                eprintln!("\u{26A0} Warning: mlock failed: {}. Sensitive data may be swapped to disk.", e);
+                eprintln!(
+                    "\u{26A0} Warning: mlock failed: {}. Sensitive data may be swapped to disk.",
+                    e
+                );
                 #[cfg(unix)]
                 eprintln!("  Increase limit: ulimit -l unlimited (or /etc/security/limits.conf)");
                 #[cfg(windows)]
-                eprintln!("  Windows may be under memory pressure. Consider closing other applications.");
+                eprintln!(
+                    "  Windows may be under memory pressure. Consider closing other applications."
+                );
                 (locked_mem, false)
             }
         }

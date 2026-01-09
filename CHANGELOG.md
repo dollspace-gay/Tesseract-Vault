@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Keyfile wrapper approach compatible with standard cryptsetup/LUKS2
 
 ### Changed
+- Improve code coverage (#261)
+- Add tests to daemon/server.rs (#264)
+- Add tests to daemon/client.rs (#263)
+- Exclude WASM from coverage (#262)
 - Expand Kani harnesses to cover daemon and volume operations (#257)
 - Keyslot Kani harnesses (#260)
 - Daemon auth Kani harnesses (#259)

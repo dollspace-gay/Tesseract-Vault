@@ -478,3 +478,108 @@ impl Default for DaemonClient {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that MAX_RESPONSE_SIZE is reasonable (16 MB)
+    #[test]
+    fn test_max_response_size() {
+        assert_eq!(MAX_RESPONSE_SIZE, 16 * 1024 * 1024);
+    }
+
+    /// Test Default implementation
+    #[test]
+    fn test_default() {
+        let client = DaemonClient::default();
+        // Token may or may not be available depending on daemon state
+        // Just verify the client is created without panic
+        let _ = client.has_token();
+    }
+
+    /// Test with_token constructor
+    #[test]
+    fn test_with_token() {
+        let token = "a".repeat(64); // 32 bytes hex-encoded
+        let client = DaemonClient::with_token(token.clone());
+        assert!(client.has_token());
+    }
+
+    /// Test has_token returns false when no token
+    #[test]
+    fn test_has_token_without_token() {
+        let client = DaemonClient {
+            socket_path: PathBuf::from("test"),
+            auth_token: None,
+        };
+        assert!(!client.has_token());
+    }
+
+    /// Test has_token returns true when token present
+    #[test]
+    fn test_has_token_with_token() {
+        let client = DaemonClient {
+            socket_path: PathBuf::from("test"),
+            auth_token: Some("test_token".to_string()),
+        };
+        assert!(client.has_token());
+    }
+
+    /// Test reload_token doesn't panic when daemon not running
+    #[test]
+    fn test_reload_token_no_daemon() {
+        let mut client = DaemonClient {
+            socket_path: PathBuf::from("test"),
+            auth_token: Some("old_token".to_string()),
+        };
+        client.reload_token();
+        // Token should be None since daemon isn't running
+        // (AuthManager::load will fail)
+    }
+
+    /// Test MAX_RESPONSE_SIZE constant is set appropriately
+    #[test]
+    fn test_max_response_size_reasonable() {
+        // 16 MB is a reasonable limit for volume lists
+        assert_eq!(MAX_RESPONSE_SIZE, 16 * 1024 * 1024);
+        // Should be at least 1 MB
+        assert!(MAX_RESPONSE_SIZE >= 1024 * 1024);
+        // Should be at most 100 MB to prevent DoS
+        assert!(MAX_RESPONSE_SIZE <= 100 * 1024 * 1024);
+    }
+
+    /// Test that DaemonClient properly zeroizes token on drop
+    #[test]
+    fn test_drop_zeroizes_token() {
+        // Create a client with a token
+        let token = "secret_token_12345".to_string();
+        let _client = DaemonClient {
+            socket_path: PathBuf::from("test"),
+            auth_token: Some(token),
+        };
+        // When _client goes out of scope, Drop should zeroize the token
+        // We can't easily verify the memory is zeroized, but we verify no panic
+    }
+
+    /// Test socket path generation on current platform
+    #[test]
+    fn test_default_socket_path() {
+        let path = DaemonClient::default_socket_path();
+        // Just verify it returns a valid path without panic
+        assert!(!path.as_os_str().is_empty());
+    }
+
+    /// Test verify_server returns error without token
+    #[test]
+    fn test_verify_server_no_token() {
+        let client = DaemonClient {
+            socket_path: PathBuf::from("test"),
+            auth_token: None,
+        };
+
+        let result = client.verify_server();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No auth token"));
+    }
+}

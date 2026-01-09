@@ -1237,3 +1237,399 @@ impl Default for DaemonServer {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    /// Test MAX_CONCURRENT_CONNECTIONS constant
+    #[test]
+    fn test_max_concurrent_connections() {
+        assert_eq!(MAX_CONCURRENT_CONNECTIONS, 32);
+    }
+
+    /// Test DEAD_MAN_CHECK_INTERVAL_SECS constant
+    #[test]
+    fn test_dead_man_check_interval() {
+        assert_eq!(DEAD_MAN_CHECK_INTERVAL_SECS, 3600); // 1 hour
+    }
+
+    /// Test MAX_MESSAGE_SIZE constant
+    #[test]
+    fn test_max_message_size() {
+        assert_eq!(DaemonServer::MAX_MESSAGE_SIZE, 16 * 1024 * 1024);
+    }
+
+    /// Test validate_token with matching tokens
+    #[test]
+    fn test_validate_token_match() {
+        let token = "a".repeat(64);
+        assert!(DaemonServer::validate_token(&token, &token));
+    }
+
+    /// Test validate_token with non-matching tokens
+    #[test]
+    fn test_validate_token_mismatch() {
+        let token1 = "a".repeat(64);
+        let token2 = "b".repeat(64);
+        assert!(!DaemonServer::validate_token(&token1, &token2));
+    }
+
+    /// Test validate_token with different lengths
+    #[test]
+    fn test_validate_token_different_lengths() {
+        let token1 = "a".repeat(64);
+        let token2 = "a".repeat(32);
+        assert!(!DaemonServer::validate_token(&token1, &token2));
+    }
+
+    /// Test validate_token with empty tokens
+    #[test]
+    fn test_validate_token_empty() {
+        assert!(DaemonServer::validate_token("", ""));
+    }
+
+    /// Test generate_config_path produces consistent paths
+    #[test]
+    fn test_generate_config_path_consistent() {
+        let config_dir = PathBuf::from("/tmp/test");
+        let container_path = PathBuf::from("/volumes/test.vol");
+
+        let path1 = DaemonServer::generate_config_path(&config_dir, &container_path);
+        let path2 = DaemonServer::generate_config_path(&config_dir, &container_path);
+
+        assert_eq!(path1, path2);
+    }
+
+    /// Test generate_config_path produces different paths for different containers
+    #[test]
+    fn test_generate_config_path_unique() {
+        let config_dir = PathBuf::from("/tmp/test");
+        let container1 = PathBuf::from("/volumes/test1.vol");
+        let container2 = PathBuf::from("/volumes/test2.vol");
+
+        let path1 = DaemonServer::generate_config_path(&config_dir, &container1);
+        let path2 = DaemonServer::generate_config_path(&config_dir, &container2);
+
+        assert_ne!(path1, path2);
+    }
+
+    /// Test generate_config_path produces .json extension
+    #[test]
+    fn test_generate_config_path_extension() {
+        let config_dir = PathBuf::from("/tmp/test");
+        let container_path = PathBuf::from("/volumes/test.vol");
+
+        let path = DaemonServer::generate_config_path(&config_dir, &container_path);
+
+        assert!(path.to_string_lossy().ends_with(".json"));
+        assert!(path.to_string_lossy().contains("wipe_"));
+    }
+
+    /// Test default_socket_path returns non-empty path
+    #[test]
+    fn test_default_socket_path() {
+        let path = DaemonServer::default_socket_path();
+        assert!(!path.as_os_str().is_empty());
+    }
+
+    /// Test default_config_dir returns non-empty path
+    #[test]
+    fn test_default_config_dir() {
+        let path = DaemonServer::default_config_dir();
+        assert!(!path.as_os_str().is_empty());
+    }
+
+    /// Test handle_verify_server with invalid challenge length
+    #[test]
+    fn test_handle_verify_server_invalid_challenge_length() {
+        let challenge = hex::encode([0u8; 16]); // 16 bytes instead of 32
+        let token_str = "a".repeat(64);
+        let token = Some(token_str.as_str());
+
+        let response = DaemonServer::handle_verify_server(&challenge, token);
+
+        match response {
+            DaemonResponse::Error { message } => {
+                assert!(message.contains("Invalid challenge length"));
+            }
+            _ => panic!("Expected error response"),
+        }
+    }
+
+    /// Test handle_verify_server with invalid challenge format
+    #[test]
+    fn test_handle_verify_server_invalid_challenge_format() {
+        let challenge = "not_hex!!!";
+        let token_str = "a".repeat(64);
+        let token = Some(token_str.as_str());
+
+        let response = DaemonServer::handle_verify_server(challenge, token);
+
+        match response {
+            DaemonResponse::Error { message } => {
+                assert!(message.contains("Invalid challenge format"));
+            }
+            _ => panic!("Expected error response"),
+        }
+    }
+
+    /// Test handle_verify_server without token
+    #[test]
+    fn test_handle_verify_server_no_token() {
+        let challenge = hex::encode([0u8; 32]);
+
+        let response = DaemonServer::handle_verify_server(&challenge, None);
+
+        match response {
+            DaemonResponse::Error { message } => {
+                assert!(message.contains("authentication not configured"));
+            }
+            _ => panic!("Expected error response"),
+        }
+    }
+
+    /// Test handle_verify_server with valid inputs returns ServerIdentity
+    #[test]
+    fn test_handle_verify_server_valid() {
+        let challenge = hex::encode([0u8; 32]);
+        let token = "a".repeat(64);
+
+        let response = DaemonServer::handle_verify_server(&challenge, Some(&token));
+
+        match response {
+            DaemonResponse::ServerIdentity { response } => {
+                // Response should be 64 hex chars (32 bytes)
+                assert_eq!(response.len(), 64);
+                assert!(response.chars().all(|c| c.is_ascii_hexdigit()));
+            }
+            _ => panic!("Expected ServerIdentity response"),
+        }
+    }
+
+    /// Test handle_client_impl with oversized message
+    #[test]
+    fn test_handle_client_impl_oversized_message() {
+        let oversized_len: u32 = (DaemonServer::MAX_MESSAGE_SIZE + 1) as u32;
+        let mut mock_data = Vec::new();
+        mock_data.extend_from_slice(&oversized_len.to_be_bytes());
+
+        let mut cursor = Cursor::new(mock_data);
+        let mounts = Arc::new(Mutex::new(HashMap::new()));
+        let volume_manager = Arc::new(Mutex::new(VolumeManager::new()));
+        let wipe_managers = Arc::new(Mutex::new(HashMap::new()));
+        let config_dir = PathBuf::from("/tmp");
+
+        let result = DaemonServer::handle_client_impl(
+            &mut cursor,
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+            None,
+        );
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("exceeds maximum"));
+    }
+
+    /// Test process_command with Ping
+    #[test]
+    fn test_process_command_ping() {
+        let mounts = Arc::new(Mutex::new(HashMap::new()));
+        let volume_manager = Arc::new(Mutex::new(VolumeManager::new()));
+        let wipe_managers = Arc::new(Mutex::new(HashMap::new()));
+        let config_dir = PathBuf::from("/tmp");
+
+        let response = DaemonServer::process_command(
+            DaemonCommand::Ping,
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+        );
+
+        assert!(matches!(response, DaemonResponse::Pong));
+    }
+
+    /// Test process_command with List on empty mounts
+    #[test]
+    fn test_process_command_list_empty() {
+        let mounts = Arc::new(Mutex::new(HashMap::new()));
+        let volume_manager = Arc::new(Mutex::new(VolumeManager::new()));
+        let wipe_managers = Arc::new(Mutex::new(HashMap::new()));
+        let config_dir = PathBuf::from("/tmp");
+
+        let response = DaemonServer::process_command(
+            DaemonCommand::List,
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+        );
+
+        match response {
+            DaemonResponse::MountList { mounts } => {
+                assert!(mounts.is_empty());
+            }
+            _ => panic!("Expected MountList response"),
+        }
+    }
+
+    /// Test process_command with UnmountAll on empty mounts
+    #[test]
+    fn test_process_command_unmount_all_empty() {
+        let mounts = Arc::new(Mutex::new(HashMap::new()));
+        let volume_manager = Arc::new(Mutex::new(VolumeManager::new()));
+        let wipe_managers = Arc::new(Mutex::new(HashMap::new()));
+        let config_dir = PathBuf::from("/tmp");
+
+        let response = DaemonServer::process_command(
+            DaemonCommand::UnmountAll,
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+        );
+
+        assert!(matches!(response, DaemonResponse::Success));
+    }
+
+    /// Test process_command with GetInfo for non-existent volume
+    #[test]
+    fn test_process_command_get_info_not_found() {
+        let mounts = Arc::new(Mutex::new(HashMap::new()));
+        let volume_manager = Arc::new(Mutex::new(VolumeManager::new()));
+        let wipe_managers = Arc::new(Mutex::new(HashMap::new()));
+        let config_dir = PathBuf::from("/tmp");
+
+        let response = DaemonServer::process_command(
+            DaemonCommand::GetInfo {
+                container_path: PathBuf::from("/nonexistent"),
+            },
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+        );
+
+        match response {
+            DaemonResponse::Error { message } => {
+                assert!(message.contains("not mounted"));
+            }
+            _ => panic!("Expected error response"),
+        }
+    }
+
+    /// Test process_command with DeadManDisable for non-existent volume
+    #[test]
+    fn test_process_command_dead_man_disable_not_found() {
+        let mounts = Arc::new(Mutex::new(HashMap::new()));
+        let volume_manager = Arc::new(Mutex::new(VolumeManager::new()));
+        let wipe_managers = Arc::new(Mutex::new(HashMap::new()));
+        let config_dir = PathBuf::from("/tmp");
+
+        let response = DaemonServer::process_command(
+            DaemonCommand::DeadManDisable {
+                container_path: PathBuf::from("/nonexistent"),
+            },
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+        );
+
+        match response {
+            DaemonResponse::Error { message } => {
+                assert!(message.contains("No dead man's switch configured"));
+            }
+            _ => panic!("Expected error response"),
+        }
+    }
+
+    /// Test process_command with DeadManStatus for non-existent volume
+    #[test]
+    fn test_process_command_dead_man_status_not_found() {
+        let mounts = Arc::new(Mutex::new(HashMap::new()));
+        let volume_manager = Arc::new(Mutex::new(VolumeManager::new()));
+        let wipe_managers = Arc::new(Mutex::new(HashMap::new()));
+        let config_dir = PathBuf::from("/tmp");
+
+        let response = DaemonServer::process_command(
+            DaemonCommand::DeadManStatus {
+                container_path: Some(PathBuf::from("/nonexistent")),
+            },
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+        );
+
+        match response {
+            DaemonResponse::Error { message } => {
+                assert!(message.contains("No dead man's switch configured"));
+            }
+            _ => panic!("Expected error response"),
+        }
+    }
+
+    /// Test process_command with DeadManCheckin for non-existent volume
+    #[test]
+    fn test_process_command_dead_man_checkin_not_found() {
+        let mounts = Arc::new(Mutex::new(HashMap::new()));
+        let volume_manager = Arc::new(Mutex::new(VolumeManager::new()));
+        let wipe_managers = Arc::new(Mutex::new(HashMap::new()));
+        let config_dir = PathBuf::from("/tmp");
+
+        let response = DaemonServer::process_command(
+            DaemonCommand::DeadManCheckin {
+                container_path: Some(PathBuf::from("/nonexistent")),
+            },
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+        );
+
+        match response {
+            DaemonResponse::Error { message } => {
+                assert!(message.contains("No dead man's switch configured"));
+            }
+            _ => panic!("Expected error response"),
+        }
+    }
+
+    /// Test process_command with VerifyServer returns error (should be handled earlier)
+    #[test]
+    fn test_process_command_verify_server_in_auth_wrapper() {
+        let mounts = Arc::new(Mutex::new(HashMap::new()));
+        let volume_manager = Arc::new(Mutex::new(VolumeManager::new()));
+        let wipe_managers = Arc::new(Mutex::new(HashMap::new()));
+        let config_dir = PathBuf::from("/tmp");
+
+        let response = DaemonServer::process_command(
+            DaemonCommand::VerifyServer {
+                challenge: "test".to_string(),
+            },
+            mounts,
+            volume_manager,
+            wipe_managers,
+            config_dir,
+        );
+
+        match response {
+            DaemonResponse::Error { message } => {
+                assert!(message.contains("without authentication wrapper"));
+            }
+            _ => panic!("Expected error response"),
+        }
+    }
+
+    /// Test load_wipe_configs with non-existent directory
+    #[test]
+    fn test_load_wipe_configs_nonexistent() {
+        let configs = DaemonServer::load_wipe_configs(Path::new("/nonexistent/path"));
+        assert!(configs.is_empty());
+    }
+}

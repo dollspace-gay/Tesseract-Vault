@@ -6,7 +6,7 @@
 
 #![cfg(kani)]
 
-use super::keyslot::{MAX_KEY_SLOTS, MASTER_KEY_SIZE};
+use super::keyslot::{MASTER_KEY_SIZE, MAX_KEY_SLOTS};
 
 /// Size of the encrypted master key (includes GCM authentication tag)
 const ENCRYPTED_KEY_SIZE: usize = MASTER_KEY_SIZE + 16;

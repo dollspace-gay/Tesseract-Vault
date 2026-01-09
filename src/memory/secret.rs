@@ -618,7 +618,10 @@ mod tests {
             Ok(secret) => {
                 assert_eq!(*secret, [42u8; 32]);
                 assert!(secret.protection_level().is_locked());
-                eprintln!("SecretMemory::new succeeded with: {}", secret.protection_level());
+                eprintln!(
+                    "SecretMemory::new succeeded with: {}",
+                    secret.protection_level()
+                );
             }
             Err(e) => {
                 // May fail on systems with restrictive limits

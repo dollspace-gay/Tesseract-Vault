@@ -111,3 +111,64 @@ jobs:
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_version_constants
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_encrypted_dk_size
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_sphincs_padding
+
+  kani-daemon:
+    name: Daemon IPC Protocol
+    runs-on: self-hosted
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify daemon protocol properties
+        run: |
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_auth_token_length
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_server_identity_length
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_challenge_nonce_length
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_dead_man_status_types
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_hex_token_length
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_security_constant_alignment
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_command_pattern_coverage
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_response_pattern_coverage
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_token_brute_force_resistance
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_mount_info_timestamp_bounds
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_dead_man_status_no_overflow
+
+      - name: Verify daemon auth properties
+        run: |
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_token_generation_length
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_token_hex_format
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_validation_length_check
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_constant_time_precondition
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_challenge_response_security
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_server_identity_domain_separation
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_keyed_hash_output_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_path_length_bounds
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_auth_error_discrimination
+
+  kani-keyslot:
+    name: Key Slot Management
+    runs-on: self-hosted
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify keyslot properties
+        run: |
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_max_key_slots
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_master_key_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_encrypted_key_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_slot_index_bounds
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_active_count_bounds
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_salt_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_keyslot_struct_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_find_free_slot_result
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_duress_detection_boolean
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_destruction_completeness
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_password_change_slot_preservation
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_derived_key_size
+          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_slot_invariant

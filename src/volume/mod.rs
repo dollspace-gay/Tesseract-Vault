@@ -24,6 +24,8 @@ pub mod header;
 mod header_kani;
 pub mod io;
 pub mod keyslot;
+#[cfg(kani)]
+mod keyslot_kani;
 pub mod manager;
 #[cfg(feature = "post-quantum")]
 pub mod migration;

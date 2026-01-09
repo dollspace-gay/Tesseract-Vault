@@ -10,10 +10,14 @@
 //! - Token-based authentication to prevent unauthorized access
 
 pub mod auth;
+#[cfg(kani)]
+mod auth_kani;
 pub mod client;
 #[cfg(test)]
 mod loom_tests;
 pub mod protocol;
+#[cfg(kani)]
+mod protocol_kani;
 pub mod server;
 
 #[cfg(windows)]

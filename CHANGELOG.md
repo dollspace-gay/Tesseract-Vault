@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Keyfile wrapper approach compatible with standard cryptsetup/LUKS2
 
 ### Changed
+- Expand Kani harnesses to cover daemon and volume operations (#257)
+- Keyslot Kani harnesses (#260)
+- Daemon auth Kani harnesses (#259)
+- Daemon protocol Kani harnesses (#258)
 - Add keyfile generation to GUI (#235)
 - PQC Keyfile Support - True Quantum Resistance (#227)
 - Make PQC keyfile mandatory for encryption (#234)

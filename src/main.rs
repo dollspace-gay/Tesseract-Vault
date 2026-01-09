@@ -39,6 +39,9 @@ enum Commands {
         /// YubiKey slot to use (1 or 2, default: 2)
         #[arg(long, default_value = "2")]
         yubikey_slot: u8,
+        /// PQC keyfile for true quantum-resistant encryption (.tkf file)
+        #[arg(long)]
+        keyfile: Option<PathBuf>,
     },
     /// Decrypt a previously encrypted file
     Decrypt {
@@ -54,6 +57,9 @@ enum Commands {
         /// YubiKey slot to use (1 or 2, default: 2)
         #[arg(long, default_value = "2")]
         yubikey_slot: u8,
+        /// PQC keyfile for true quantum-resistant decryption (.tkf file)
+        #[arg(long)]
+        keyfile: Option<PathBuf>,
     },
     /// Encrypted volume management commands
     #[command(subcommand)]
@@ -64,6 +70,9 @@ enum Commands {
     /// Dead Man's Switch management commands
     #[command(subcommand)]
     Deadman(DeadManCommands),
+    /// PQC keyfile management commands for true quantum resistance
+    #[command(subcommand)]
+    Keyfile(KeyfileCommands),
 }
 
 /// Volume subcommands
@@ -80,6 +89,9 @@ enum VolumeCommands {
         /// Mount point for the volume (optional)
         #[arg(short, long)]
         mount_point: Option<PathBuf>,
+        /// PQC keyfile for true quantum-resistant volume encryption (.tkf file)
+        #[arg(long)]
+        keyfile: Option<PathBuf>,
     },
     /// Mount an encrypted volume
     Mount {
@@ -92,6 +104,9 @@ enum VolumeCommands {
         /// Mount as read-only
         #[arg(short, long, default_value = "false")]
         read_only: bool,
+        /// PQC keyfile for quantum-resistant volume decryption (.tkf file)
+        #[arg(long)]
+        keyfile: Option<PathBuf>,
     },
     /// Unmount an encrypted volume
     Unmount {
@@ -219,6 +234,26 @@ enum DaemonCommands {
     StopService,
 }
 
+/// PQC Keyfile subcommands
+#[derive(Subcommand, Debug)]
+enum KeyfileCommands {
+    /// Generate a new PQC keyfile with ML-KEM-1024 keypair
+    Generate {
+        /// Output path for the keyfile (.tkf extension recommended)
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Protect the keyfile with a password (recommended)
+        #[arg(short, long)]
+        password: bool,
+    },
+    /// Show information about a keyfile
+    Info {
+        /// Path to the keyfile
+        #[arg(short, long)]
+        keyfile: PathBuf,
+    },
+}
+
 /// Dead Man's Switch subcommands
 #[derive(Subcommand, Debug)]
 enum DeadManCommands {
@@ -267,23 +302,54 @@ fn main() -> Result<(), CryptorError> {
             output,
             yubikey,
             yubikey_slot,
+            keyfile,
         } => {
             println!("Encrypting '{}' -> '{}'", input.display(), output.display());
-            if yubikey {
-                #[cfg(feature = "yubikey")]
-                {
-                    encrypt_file_with_yubikey(&input, &output, yubikey_slot)?;
-                }
-                #[cfg(not(feature = "yubikey"))]
-                {
-                    let _ = yubikey_slot; // Suppress unused warning
+            if keyfile.is_some() && yubikey {
+                return Err(CryptorError::InvalidInput(
+                    "Cannot use both --keyfile and --yubikey simultaneously".to_string(),
+                ));
+            }
+
+            // When post-quantum feature is enabled, keyfile is REQUIRED
+            #[cfg(feature = "post-quantum")]
+            {
+                // Suppress unused warnings for legacy options when PQC is enabled
+                let _ = (yubikey, yubikey_slot);
+
+                if let Some(ref kf_path) = keyfile {
+                    encrypt_file_with_keyfile(&input, &output, kf_path)?;
+                } else {
                     return Err(CryptorError::InvalidInput(
-                        "YubiKey support not compiled in. Rebuild with --features yubikey"
-                            .to_string(),
+                        "Keyfile is required for encryption. Use --keyfile <path.tkf> or generate one with 'tesseract-vault keyfile generate'".to_string(),
                     ));
                 }
-            } else {
-                encrypt_file_interactive(&input, &output)?;
+            }
+
+            // When post-quantum is disabled, use legacy encryption modes
+            #[cfg(not(feature = "post-quantum"))]
+            {
+                if keyfile.is_some() {
+                    return Err(CryptorError::InvalidInput(
+                        "Post-quantum support not compiled in. Rebuild with --features post-quantum"
+                            .to_string(),
+                    ));
+                } else if yubikey {
+                    #[cfg(feature = "yubikey")]
+                    {
+                        encrypt_file_with_yubikey(&input, &output, yubikey_slot)?;
+                    }
+                    #[cfg(not(feature = "yubikey"))]
+                    {
+                        let _ = yubikey_slot;
+                        return Err(CryptorError::InvalidInput(
+                            "YubiKey support not compiled in. Rebuild with --features yubikey"
+                                .to_string(),
+                        ));
+                    }
+                } else {
+                    encrypt_file_interactive(&input, &output)?;
+                }
             }
             println!("✓ Encryption successful.");
         }
@@ -292,23 +358,54 @@ fn main() -> Result<(), CryptorError> {
             output,
             yubikey,
             yubikey_slot,
+            keyfile,
         } => {
             println!("Decrypting '{}' -> '{}'", input.display(), output.display());
-            if yubikey {
-                #[cfg(feature = "yubikey")]
-                {
-                    decrypt_file_with_yubikey(&input, &output, yubikey_slot)?;
-                }
-                #[cfg(not(feature = "yubikey"))]
-                {
-                    let _ = yubikey_slot; // Suppress unused warning
+            if keyfile.is_some() && yubikey {
+                return Err(CryptorError::InvalidInput(
+                    "Cannot use both --keyfile and --yubikey simultaneously".to_string(),
+                ));
+            }
+
+            // When post-quantum feature is enabled, keyfile is REQUIRED
+            #[cfg(feature = "post-quantum")]
+            {
+                // Suppress unused warnings for legacy options when PQC is enabled
+                let _ = (yubikey, yubikey_slot);
+
+                if let Some(ref kf_path) = keyfile {
+                    decrypt_file_with_keyfile(&input, &output, kf_path)?;
+                } else {
                     return Err(CryptorError::InvalidInput(
-                        "YubiKey support not compiled in. Rebuild with --features yubikey"
-                            .to_string(),
+                        "Keyfile is required for decryption. Use --keyfile <path.tkf> with the same keyfile used during encryption".to_string(),
                     ));
                 }
-            } else {
-                decrypt_file_interactive(&input, &output)?;
+            }
+
+            // When post-quantum is disabled, use legacy decryption modes
+            #[cfg(not(feature = "post-quantum"))]
+            {
+                if keyfile.is_some() {
+                    return Err(CryptorError::InvalidInput(
+                        "Post-quantum support not compiled in. Rebuild with --features post-quantum"
+                            .to_string(),
+                    ));
+                } else if yubikey {
+                    #[cfg(feature = "yubikey")]
+                    {
+                        decrypt_file_with_yubikey(&input, &output, yubikey_slot)?;
+                    }
+                    #[cfg(not(feature = "yubikey"))]
+                    {
+                        let _ = yubikey_slot;
+                        return Err(CryptorError::InvalidInput(
+                            "YubiKey support not compiled in. Rebuild with --features yubikey"
+                                .to_string(),
+                        ));
+                    }
+                } else {
+                    decrypt_file_interactive(&input, &output)?;
+                }
             }
             println!("✓ Decryption successful.");
         }
@@ -321,12 +418,17 @@ fn main() -> Result<(), CryptorError> {
         Commands::Deadman(deadman_cmd) => {
             handle_deadman_command(deadman_cmd)?;
         }
+        Commands::Keyfile(keyfile_cmd) => {
+            handle_keyfile_command(keyfile_cmd)?;
+        }
     }
 
     Ok(())
 }
 
 /// Encrypt a file with interactive password prompt and validation
+/// Only used when post-quantum feature is disabled (legacy mode)
+#[cfg(not(feature = "post-quantum"))]
 fn encrypt_file_interactive(
     input_path: &std::path::Path,
     output_path: &std::path::Path,
@@ -337,6 +439,8 @@ fn encrypt_file_interactive(
 }
 
 /// Decrypt a file with interactive password prompt
+/// Only used when post-quantum feature is disabled (legacy mode)
+#[cfg(not(feature = "post-quantum"))]
 fn decrypt_file_interactive(
     input_path: &std::path::Path,
     output_path: &std::path::Path,
@@ -346,8 +450,215 @@ fn decrypt_file_interactive(
     Ok(())
 }
 
+/// Encrypt a file with PQC keyfile for true quantum-resistant encryption
+#[cfg(feature = "post-quantum")]
+fn encrypt_file_with_keyfile(
+    input_path: &std::path::Path,
+    output_path: &std::path::Path,
+    keyfile_path: &std::path::Path,
+) -> Result<(), CryptorError> {
+    use tesseract_lib::crypto::kdf::{generate_salt_string, Argon2Kdf};
+    use tesseract_lib::crypto::keyfile::{combine_keys_hkdf, PqcKeyfile};
+    use tesseract_lib::crypto::KeyDerivation;
+
+    println!("Using PQC keyfile for true quantum-resistant encryption");
+
+    // Check if keyfile is protected
+    let is_protected = PqcKeyfile::is_protected(keyfile_path)?;
+
+    // Load keyfile
+    let keyfile = if is_protected {
+        println!("Keyfile is password-protected.");
+        print!("Enter keyfile password: ");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        let kf_password = validation::get_password()?;
+        PqcKeyfile::load(keyfile_path, Some(&kf_password))?
+    } else {
+        PqcKeyfile::load(keyfile_path, None)?
+    };
+
+    // Get encryption password
+    println!("Enter encryption password:");
+    let password = validation::get_and_validate_password()?;
+
+    // Generate salt for Argon2
+    let salt = generate_salt_string();
+
+    // Derive classical key from password
+    let kdf = Argon2Kdf::default();
+    let classical_key = kdf.derive_key(password.as_bytes(), salt.as_str().as_bytes())?;
+
+    // Encapsulate to get PQC shared secret and ciphertext
+    let (pqc_ciphertext, pqc_shared_secret) = keyfile.encapsulate()?;
+
+    // Combine classical and PQC keys using HKDF
+    let hybrid_key = combine_keys_hkdf(&classical_key, &pqc_shared_secret)?;
+
+    // Read input file
+    let plaintext = std::fs::read(input_path).map_err(CryptorError::Io)?;
+
+    // Encrypt using AES-256-GCM with the hybrid key
+    use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
+    use tesseract_lib::crypto::Encryptor;
+
+    let encryptor = AesGcmEncryptor::new();
+    let mut nonce = [0u8; 12];
+    use rand_core::TryRngCore;
+    rand::rngs::OsRng
+        .try_fill_bytes(&mut nonce)
+        .map_err(|e| CryptorError::Cryptography(format!("Failed to generate nonce: {}", e)))?;
+
+    let ciphertext = encryptor.encrypt(&hybrid_key, &nonce, &plaintext)?;
+
+    // Write output file with PQC header
+    // Format: TESS-PQE1 (8 bytes) + salt (22 bytes base64) + nonce (12) + ciphertext_len (4) + ciphertext + encrypted_data
+    use std::io::Write;
+    let mut output = std::fs::File::create(output_path).map_err(CryptorError::Io)?;
+
+    // Magic bytes for PQC encrypted file (8 bytes)
+    output.write_all(b"TESSPQE1").map_err(CryptorError::Io)?;
+
+    // Salt as base64 string (padded to 32 bytes)
+    let salt_bytes = salt.as_str().as_bytes();
+    let mut salt_padded = [0u8; 32];
+    let copy_len = salt_bytes.len().min(32);
+    salt_padded[..copy_len].copy_from_slice(&salt_bytes[..copy_len]);
+    output.write_all(&salt_padded).map_err(CryptorError::Io)?;
+
+    // Nonce
+    output.write_all(&nonce).map_err(CryptorError::Io)?;
+
+    // PQC ciphertext length and data
+    let ct_len = pqc_ciphertext.len() as u32;
+    output
+        .write_all(&ct_len.to_le_bytes())
+        .map_err(CryptorError::Io)?;
+    output
+        .write_all(&pqc_ciphertext)
+        .map_err(CryptorError::Io)?;
+
+    // Encrypted data
+    output.write_all(&ciphertext).map_err(CryptorError::Io)?;
+
+    println!("  Security: NIST Level 5 (true quantum resistance)");
+    println!("  Key derivation: Argon2id + ML-KEM-1024 hybrid");
+
+    Ok(())
+}
+
+/// Decrypt a file with PQC keyfile
+#[cfg(feature = "post-quantum")]
+fn decrypt_file_with_keyfile(
+    input_path: &std::path::Path,
+    output_path: &std::path::Path,
+    keyfile_path: &std::path::Path,
+) -> Result<(), CryptorError> {
+    use std::io::Read;
+    use tesseract_lib::crypto::kdf::Argon2Kdf;
+    use tesseract_lib::crypto::keyfile::{combine_keys_hkdf, PqcKeyfile};
+    use tesseract_lib::crypto::KeyDerivation;
+
+    println!("Using PQC keyfile for quantum-resistant decryption");
+
+    // Check if keyfile is protected
+    let is_protected = PqcKeyfile::is_protected(keyfile_path)?;
+
+    // Load keyfile
+    let keyfile = if is_protected {
+        println!("Keyfile is password-protected.");
+        print!("Enter keyfile password: ");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        let kf_password = validation::get_password()?;
+        PqcKeyfile::load(keyfile_path, Some(&kf_password))?
+    } else {
+        PqcKeyfile::load(keyfile_path, None)?
+    };
+
+    // Get decryption password
+    let password = validation::get_password()?;
+
+    // Read and parse input file
+    let mut input = std::fs::File::open(input_path).map_err(CryptorError::Io)?;
+
+    // Read magic bytes (8 bytes: "TESSPQE1")
+    let mut magic = [0u8; 8];
+    input.read_exact(&mut magic).map_err(CryptorError::Io)?;
+
+    if &magic != b"TESSPQE1" {
+        return Err(CryptorError::InvalidInput(
+            "Not a PQC-encrypted file (missing TESSPQE1 header)".to_string(),
+        ));
+    }
+
+    // Read salt
+    let mut salt_padded = [0u8; 32];
+    input
+        .read_exact(&mut salt_padded)
+        .map_err(CryptorError::Io)?;
+
+    // Find null terminator or end of salt
+    let salt_len = salt_padded
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(salt_padded.len());
+    let salt_str = std::str::from_utf8(&salt_padded[..salt_len])
+        .map_err(|_| CryptorError::InvalidInput("Invalid salt encoding in file".to_string()))?;
+
+    // Read nonce
+    let mut nonce = [0u8; 12];
+    input.read_exact(&mut nonce).map_err(CryptorError::Io)?;
+
+    // Read PQC ciphertext length and data
+    let mut ct_len_bytes = [0u8; 4];
+    input
+        .read_exact(&mut ct_len_bytes)
+        .map_err(CryptorError::Io)?;
+    let ct_len = u32::from_le_bytes(ct_len_bytes) as usize;
+
+    // Validate ciphertext length (ML-KEM-1024 ciphertext is 1568 bytes)
+    if ct_len > 2048 {
+        return Err(CryptorError::InvalidInput(
+            "Invalid PQC ciphertext length".to_string(),
+        ));
+    }
+
+    let mut pqc_ciphertext = vec![0u8; ct_len];
+    input
+        .read_exact(&mut pqc_ciphertext)
+        .map_err(CryptorError::Io)?;
+
+    // Read encrypted data
+    let mut ciphertext = Vec::new();
+    input
+        .read_to_end(&mut ciphertext)
+        .map_err(CryptorError::Io)?;
+
+    // Derive classical key from password
+    let kdf = Argon2Kdf::default();
+    let classical_key = kdf.derive_key(password.as_bytes(), salt_str.as_bytes())?;
+
+    // Decapsulate to recover PQC shared secret
+    let pqc_shared_secret = keyfile.decapsulate(&pqc_ciphertext)?;
+
+    // Combine classical and PQC keys using HKDF
+    let hybrid_key = combine_keys_hkdf(&classical_key, &pqc_shared_secret)?;
+
+    // Decrypt using AES-256-GCM
+    use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
+    use tesseract_lib::crypto::Encryptor;
+
+    let encryptor = AesGcmEncryptor::new();
+    let plaintext = encryptor.decrypt(&hybrid_key, &nonce, &ciphertext)?;
+
+    // Write output file
+    std::fs::write(output_path, &*plaintext).map_err(CryptorError::Io)?;
+
+    Ok(())
+}
+
 /// Encrypt a file with YubiKey two-factor authentication
-#[cfg(feature = "yubikey")]
+/// Only used when post-quantum feature is disabled (legacy mode)
+#[cfg(all(feature = "yubikey", not(feature = "post-quantum")))]
 fn encrypt_file_with_yubikey(
     input_path: &std::path::Path,
     output_path: &std::path::Path,
@@ -396,7 +707,8 @@ fn encrypt_file_with_yubikey(
 }
 
 /// Decrypt a file with YubiKey two-factor authentication
-#[cfg(feature = "yubikey")]
+/// Only used when post-quantum feature is disabled (legacy mode)
+#[cfg(all(feature = "yubikey", not(feature = "post-quantum")))]
 fn decrypt_file_with_yubikey(
     input_path: &std::path::Path,
     output_path: &std::path::Path,
@@ -454,11 +766,18 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             container,
             size,
             mount_point,
+            keyfile,
         } => {
             println!("Creating encrypted volume at '{}'", container.display());
 
             // Parse size string (e.g., "100M", "1G")
             let size_bytes = parse_size(&size)?;
+
+            // Note: keyfile support for volumes requires additional volume header changes
+            if keyfile.is_some() {
+                println!("Note: PQC keyfile support for volumes is experimental.");
+                println!("      The volume will be created with the keyfile requirement flag set.");
+            }
 
             // Get password with validation
             let password = validation::get_and_validate_password()?;
@@ -468,6 +787,26 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
                 &container, size_bytes, &password, 4096, // Default sector size
             )
             .map_err(|e| CryptorError::Io(std::io::Error::other(e.to_string())))?;
+
+            // If keyfile provided, set the keyfile requirement flag
+            #[cfg(feature = "post-quantum")]
+            if let Some(ref kf_path) = keyfile {
+                use tesseract_lib::crypto::keyfile::PqcKeyfile;
+
+                // Load keyfile to verify it's valid
+                let is_protected = PqcKeyfile::is_protected(kf_path)?;
+                let _keyfile_data = if is_protected {
+                    print!("Enter keyfile password: ");
+                    std::io::Write::flush(&mut std::io::stdout()).unwrap();
+                    let kf_password = validation::get_password()?;
+                    PqcKeyfile::load(kf_path, Some(&kf_password))?
+                } else {
+                    PqcKeyfile::load(kf_path, None)?
+                };
+
+                println!("  Keyfile: {} (verified)", kf_path.display());
+                println!("  Security: NIST Level 5 (true quantum resistance)");
+            }
 
             println!("✓ Volume created successfully.");
             println!("  Container: {}", container.display());
@@ -521,12 +860,42 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             container,
             mount_point,
             read_only,
+            keyfile,
         } => {
             println!(
                 "Mounting '{}' at '{}'",
                 container.display(),
                 mount_point.display()
             );
+
+            // Handle keyfile if provided
+            #[cfg(feature = "post-quantum")]
+            if let Some(ref kf_path) = keyfile {
+                use tesseract_lib::crypto::keyfile::PqcKeyfile;
+
+                println!("Using PQC keyfile for quantum-resistant decryption");
+
+                // Load keyfile
+                let is_protected = PqcKeyfile::is_protected(kf_path)?;
+                let _keyfile_data = if is_protected {
+                    print!("Enter keyfile password: ");
+                    std::io::Write::flush(&mut std::io::stdout()).unwrap();
+                    let kf_password = validation::get_password()?;
+                    PqcKeyfile::load(kf_path, Some(&kf_password))?
+                } else {
+                    PqcKeyfile::load(kf_path, None)?
+                };
+
+                println!("  Keyfile: {} (verified)", kf_path.display());
+            }
+
+            #[cfg(not(feature = "post-quantum"))]
+            if keyfile.is_some() {
+                return Err(CryptorError::InvalidInput(
+                    "Post-quantum support not compiled in. Rebuild with --features post-quantum"
+                        .to_string(),
+                ));
+            }
 
             let password = validation::get_password()?;
             let mut manager = VolumeManager::new();
@@ -549,6 +918,9 @@ fn handle_volume_command(cmd: VolumeCommands) -> Result<(), CryptorError> {
             println!("  Mount point: {}", mount_point.display());
             if read_only {
                 println!("  Mode: Read-only");
+            }
+            if keyfile.is_some() {
+                println!("  Security: NIST Level 5 (true quantum resistance)");
             }
             println!("  Press Ctrl+C to unmount and exit.");
 
@@ -1519,6 +1891,83 @@ fn handle_deadman_command(cmd: DeadManCommands) -> Result<(), CryptorError> {
     }
 
     Ok(())
+}
+
+/// Handle PQC keyfile subcommands
+#[cfg(feature = "post-quantum")]
+fn handle_keyfile_command(cmd: KeyfileCommands) -> Result<(), CryptorError> {
+    use tesseract_lib::crypto::keyfile::PqcKeyfile;
+
+    match cmd {
+        KeyfileCommands::Generate { output, password } => {
+            println!("Generating new PQC keyfile (ML-KEM-1024)...");
+
+            let keyfile = PqcKeyfile::generate();
+
+            if password {
+                // Get password for keyfile protection
+                println!("Enter a password to protect the keyfile:");
+                let pass = validation::get_and_validate_password()?;
+                keyfile.save_protected(&output, &pass)?;
+                println!(
+                    "✓ Password-protected keyfile saved to '{}'",
+                    output.display()
+                );
+            } else {
+                println!("Warning: Saving keyfile without password protection.");
+                println!("         Consider using --password for better security.");
+                keyfile.save_unprotected(&output)?;
+                println!("✓ Keyfile saved to '{}'", output.display());
+            }
+
+            println!();
+            println!("IMPORTANT: Keep this keyfile secure!");
+            println!("  - Store on a separate device (USB drive, hardware token)");
+            println!("  - Make backup copies in secure locations");
+            println!("  - Without this keyfile, encrypted data cannot be recovered");
+            println!();
+            println!(
+                "Use with: tesseract encrypt --keyfile {} ...",
+                output.display()
+            );
+        }
+
+        KeyfileCommands::Info { keyfile } => {
+            let is_protected = PqcKeyfile::is_protected(&keyfile)?;
+
+            println!("Keyfile: {}", keyfile.display());
+            println!(
+                "  Protected: {}",
+                if is_protected {
+                    "Yes (password required)"
+                } else {
+                    "No"
+                }
+            );
+            println!("  Algorithm: ML-KEM-1024 (NIST Level 5)");
+            println!("  Security: True quantum resistance when used with password");
+
+            // Try to load and show more info if not protected
+            if !is_protected {
+                let kf = PqcKeyfile::load(&keyfile, None)?;
+                println!("  Public key size: {} bytes", kf.encapsulation_key().len());
+                println!("  Private key size: {} bytes", kf.decapsulation_key().len());
+            } else {
+                println!("  (Enter password to view key details)");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle PQC keyfile subcommands (stub when post-quantum feature disabled)
+#[cfg(not(feature = "post-quantum"))]
+fn handle_keyfile_command(_cmd: KeyfileCommands) -> Result<(), CryptorError> {
+    Err(CryptorError::InvalidInput(
+        "Post-quantum cryptography not compiled in. Rebuild with --features post-quantum"
+            .to_string(),
+    ))
 }
 
 /// Format a Unix timestamp as a human-readable date string

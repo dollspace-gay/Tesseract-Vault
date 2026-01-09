@@ -8,6 +8,8 @@ repository = "https://github.com/dollspace-gay/Tesseract"
 keywords = ["encryption", "cryptography", "aes-gcm", "argon2", "security"]
 categories = ["cryptography"]
 
+# DEPRECATED: WASM support will be removed in v2.0
+# Browser security model is incompatible with Tesseract's security guarantees
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ["-O4", "--enable-bulk-memory"]
 
@@ -17,9 +19,11 @@ encrypted-volumes = ["dep:fuser", "dep:winfsp"]  # Requires LLVM/Clang for WinFS
 cloud-storage = ["dep:reqwest"]  # S3, Dropbox, and other cloud backends
 ctrlc = ["dep:ctrlc"]
 
-# WASM build profiles
-wasm-minimal = []  # Only AES-256-GCM + Argon2id (smallest)
-wasm-full = ["post-quantum", "compression"]  # All features (default)
+# WASM build profiles (DEPRECATED - will be removed in v2.0)
+# Browser security model cannot provide mlock, guard pages, or anti-debugging.
+# See issue #225, #226 for removal plan.
+wasm-minimal = []  # DEPRECATED
+wasm-full = ["post-quantum", "compression"]  # DEPRECATED
 
 # Individual feature flags
 post-quantum = ["dep:ml-kem", "dep:ml-dsa", "dep:rand09", "dep:chacha20"]  # Include ML-KEM-1024 and ML-DSA post-quantum cryptography

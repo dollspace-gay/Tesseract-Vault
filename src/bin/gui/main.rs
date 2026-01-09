@@ -301,6 +301,15 @@ struct CryptorApp {
     mount_as_hidden: bool,
     mount_hidden_password: String,
     mount_hidden_offset: String,
+    // PQC Keyfile fields for quantum-resistant encryption
+    keyfile_path: String,
+    keyfile_password: String,
+    show_keyfile_generator: bool,
+    keyfile_output_path: String,
+    keyfile_protect_with_password: bool,
+    keyfile_gen_password: String,
+    keyfile_gen_password_confirm: String,
+    keyfile_gen_status: String,
 }
 
 impl Default for CryptorApp {
@@ -386,6 +395,15 @@ impl CryptorApp {
             mount_as_hidden: false,
             mount_hidden_password: String::new(),
             mount_hidden_offset: String::new(),
+            // PQC Keyfile fields
+            keyfile_path: String::new(),
+            keyfile_password: String::new(),
+            show_keyfile_generator: false,
+            keyfile_output_path: String::new(),
+            keyfile_protect_with_password: true,
+            keyfile_gen_password: String::new(),
+            keyfile_gen_password_confirm: String::new(),
+            keyfile_gen_status: String::new(),
         };
 
         // If initial file is provided, set it up
@@ -952,6 +970,214 @@ impl CryptorApp {
             });
     }
 
+    #[cfg(feature = "post-quantum")]
+    fn render_keyfile_generator(&mut self, ctx: &egui::Context) {
+        egui::Window::new("Generate PQC Keyfile")
+            .fixed_size([550.0, 450.0])
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                let panel_frame = egui::Frame::default()
+                    .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, self.settings.panel_transparency))
+                    .rounding(egui::Rounding::same(15.0))
+                    .inner_margin(egui::Margin::same(25.0))
+                    .shadow(egui::epaint::Shadow {
+                        offset: egui::Vec2::new(0.0, 4.0),
+                        blur: 15.0,
+                        spread: 0.0,
+                        color: egui::Color32::from_black_alpha(40),
+                    });
+
+                panel_frame.show(ui, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new("🔐 Generate Quantum-Resistant Keyfile")
+                            .size(22.0)
+                            .color(egui::Color32::from_rgb(50, 50, 50)));
+                    });
+
+                    ui.add_space(15.0);
+
+                    ui.label(egui::RichText::new(
+                        "Generate a new ML-KEM-1024 keyfile for quantum-resistant encryption.\n\
+                        This keyfile will be required when encrypting and decrypting files."
+                    ).size(12.0).color(egui::Color32::from_rgb(80, 80, 80)));
+
+                    ui.add_space(20.0);
+
+                    // Output path selection
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Save Location:").size(14.0));
+                        ui.add_space(10.0);
+                        let text_edit = egui::TextEdit::singleline(&mut self.keyfile_output_path)
+                            .desired_width(300.0)
+                            .hint_text("Choose keyfile location (.tkf)");
+                        ui.add(text_edit);
+                        ui.add_space(5.0);
+
+                        let browse_btn = egui::Button::new("Browse")
+                            .min_size(egui::vec2(70.0, 30.0))
+                            .fill(egui::Color32::from_rgb(200, 200, 200));
+
+                        if ui.add(browse_btn).clicked() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("Tesseract Keyfile", &["tkf"])
+                                .set_file_name("keyfile.tkf")
+                                .save_file()
+                            {
+                                self.keyfile_output_path = path.display().to_string();
+                            }
+                        }
+                    });
+
+                    ui.add_space(15.0);
+
+                    // Password protection checkbox
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Password Protect Keyfile:").size(14.0));
+                        ui.add_space(10.0);
+                        ui.checkbox(&mut self.keyfile_protect_with_password, "");
+                    });
+
+                    // Password fields (only show if password protection enabled)
+                    if self.keyfile_protect_with_password {
+                        ui.add_space(10.0);
+
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("Password:").size(14.0));
+                            ui.add_space(10.0);
+                            let password_edit = egui::TextEdit::singleline(&mut self.keyfile_gen_password)
+                                .desired_width(300.0)
+                                .password(true);
+                            ui.add(password_edit);
+                        });
+
+                        ui.add_space(8.0);
+
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("Confirm:").size(14.0));
+                            ui.add_space(10.0);
+                            let confirm_edit = egui::TextEdit::singleline(&mut self.keyfile_gen_password_confirm)
+                                .desired_width(300.0)
+                                .password(true);
+                            ui.add(confirm_edit);
+                        });
+                    }
+
+                    ui.add_space(20.0);
+
+                    // Status message
+                    if !self.keyfile_gen_status.is_empty() {
+                        let status_color = if self.keyfile_gen_status.starts_with("Error") {
+                            egui::Color32::from_rgb(200, 50, 50)
+                        } else {
+                            egui::Color32::from_rgb(50, 150, 50)
+                        };
+                        ui.label(egui::RichText::new(&self.keyfile_gen_status)
+                            .size(13.0)
+                            .color(status_color));
+                        ui.add_space(10.0);
+                    }
+
+                    ui.add_space(10.0);
+
+                    // Buttons
+                    ui.horizontal(|ui| {
+                        ui.add_space(100.0);
+
+                        // Generate button
+                        let can_generate = !self.keyfile_output_path.is_empty()
+                            && (!self.keyfile_protect_with_password
+                                || (!self.keyfile_gen_password.is_empty()
+                                    && self.keyfile_gen_password == self.keyfile_gen_password_confirm));
+
+                        let generate_btn = egui::Button::new(
+                            egui::RichText::new("Generate Keyfile").size(16.0).color(egui::Color32::WHITE)
+                        )
+                        .fill(if can_generate {
+                            egui::Color32::from_rgb(91, 206, 250)
+                        } else {
+                            egui::Color32::from_rgb(180, 180, 180)
+                        })
+                        .min_size(egui::vec2(150.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0));
+
+                        if ui.add_enabled(can_generate, generate_btn).clicked() {
+                            self.generate_keyfile();
+                        }
+
+                        ui.add_space(20.0);
+
+                        // Cancel button
+                        let cancel_btn = egui::Button::new(
+                            egui::RichText::new("Cancel").size(16.0)
+                        )
+                        .min_size(egui::vec2(100.0, 40.0))
+                        .rounding(egui::Rounding::same(20.0));
+
+                        if ui.add(cancel_btn).clicked() {
+                            self.show_keyfile_generator = false;
+                            self.keyfile_gen_status.clear();
+                            self.keyfile_gen_password.clear();
+                            self.keyfile_gen_password_confirm.clear();
+                        }
+                    });
+
+                    ui.add_space(15.0);
+
+                    // Info note
+                    ui.vertical_centered(|ui| {
+                        ui.label(egui::RichText::new("⚠ Keep your keyfile secure! Without it, encrypted files cannot be decrypted.")
+                            .size(11.0)
+                            .color(egui::Color32::from_rgb(150, 100, 50)));
+                    });
+                });
+            });
+    }
+
+    #[cfg(feature = "post-quantum")]
+    fn generate_keyfile(&mut self) {
+        use std::path::Path;
+        use tesseract_lib::crypto::keyfile::PqcKeyfile;
+
+        let output_path = Path::new(&self.keyfile_output_path);
+
+        // Ensure .tkf extension
+        let output_path = if output_path.extension().is_some_and(|e| e == "tkf") {
+            output_path.to_path_buf()
+        } else {
+            output_path.with_extension("tkf")
+        };
+
+        // Generate the keyfile
+        let keyfile = PqcKeyfile::generate();
+
+        // Save with or without password protection
+        let save_result = if self.keyfile_protect_with_password {
+            keyfile.save_protected(&output_path, &self.keyfile_gen_password)
+        } else {
+            keyfile.save_unprotected(&output_path)
+        };
+
+        match save_result {
+            Ok(()) => {
+                self.keyfile_gen_status = format!("✓ Keyfile generated: {}", output_path.display());
+                // Set the generated keyfile as the active keyfile
+                self.keyfile_path = output_path.display().to_string();
+                if self.keyfile_protect_with_password {
+                    self.keyfile_password = self.keyfile_gen_password.clone();
+                }
+                // Close the window after a successful generation
+                self.show_keyfile_generator = false;
+                self.keyfile_gen_password.clear();
+                self.keyfile_gen_password_confirm.clear();
+            }
+            Err(e) => {
+                self.keyfile_gen_status = format!("Error saving keyfile: {}", e);
+            }
+        }
+    }
+
     fn process_file(&mut self) {
         // Validation
         if self.input_path.is_empty() {
@@ -995,11 +1221,43 @@ impl CryptorApp {
         self.is_processing = true;
         self.progress = 0.0;
 
+        // YubiKey settings (only used when post-quantum is disabled)
+        #[cfg(not(feature = "post-quantum"))]
         let yubikey_enabled = self.settings.yubikey_enabled;
+        #[cfg(not(feature = "post-quantum"))]
         let yubikey_slot = self.settings.yubikey_slot;
+
+        // Get keyfile info for PQC encryption
+        #[cfg(feature = "post-quantum")]
+        let keyfile_path = self.keyfile_path.clone();
+        #[cfg(feature = "post-quantum")]
+        let keyfile_password = if self.keyfile_password.is_empty() {
+            None
+        } else {
+            Some(self.keyfile_password.clone())
+        };
 
         match mode {
             Mode::Encrypt => {
+                // Keyfile is REQUIRED for encryption when post-quantum feature is enabled
+                #[cfg(feature = "post-quantum")]
+                let result: Result<String, Box<dyn std::error::Error>> = if keyfile_path.is_empty()
+                {
+                    Err("Keyfile is required for encryption. Generate or select a .tkf keyfile first.".into())
+                } else {
+                    rt.block_on(async {
+                        encrypt_file_with_keyfile(
+                            &input_path,
+                            &output_path,
+                            &password,
+                            &keyfile_path,
+                            keyfile_password.as_deref(),
+                            use_compression,
+                        )
+                    })
+                };
+
+                #[cfg(not(feature = "post-quantum"))]
                 let result = rt.block_on(async {
                     encrypt_file(
                         &input_path,
@@ -1037,6 +1295,24 @@ impl CryptorApp {
                 }
             }
             Mode::Decrypt => {
+                // Keyfile is REQUIRED for decryption of PQC-encrypted files
+                #[cfg(feature = "post-quantum")]
+                let result: Result<String, Box<dyn std::error::Error>> = if keyfile_path.is_empty()
+                {
+                    Err("Keyfile is required for decryption. Select the .tkf keyfile used during encryption.".into())
+                } else {
+                    rt.block_on(async {
+                        decrypt_file_with_keyfile(
+                            &input_path,
+                            &output_path,
+                            &password,
+                            &keyfile_path,
+                            keyfile_password.as_deref(),
+                        )
+                    })
+                };
+
+                #[cfg(not(feature = "post-quantum"))]
                 let result = rt.block_on(async {
                     decrypt_file(
                         &input_path,
@@ -2918,6 +3194,12 @@ impl eframe::App for CryptorApp {
             self.render_settings_panel(ctx);
         }
 
+        // Keyfile generator window
+        #[cfg(feature = "post-quantum")]
+        if self.show_keyfile_generator {
+            self.render_keyfile_generator(ctx);
+        }
+
         // Main content panel
         egui::CentralPanel::default()
             .frame(egui::Frame::none())
@@ -3119,6 +3401,94 @@ impl eframe::App for CryptorApp {
                                     });
                                 }
 
+                                ui.add_space(20.0);
+
+                                // PQC Keyfile section (required for encryption)
+                                #[cfg(feature = "post-quantum")]
+                                {
+                                    ui.separator();
+                                    ui.add_space(10.0);
+
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new("🔑 Quantum-Resistant Keyfile (Required)").size(14.0).color(egui::Color32::from_rgb(91, 140, 200)));
+                                    });
+
+                                    ui.add_space(10.0);
+
+                                    // Keyfile path row
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new("Keyfile").size(14.0));
+                                        ui.add_space(30.0);
+                                        ui.add(
+                                            egui::TextEdit::singleline(&mut self.keyfile_path)
+                                                .desired_width(500.0)
+                                                .interactive(false),
+                                        );
+                                        ui.add_space(10.0);
+                                        let browse_btn = egui::Button::new("Browse...")
+                                            .fill(egui::Color32::from_rgb(200, 230, 255))
+                                            .min_size(egui::vec2(100.0, 30.0));
+                                        if ui.add_enabled(!self.is_processing, browse_btn).clicked() {
+                                            if let Some(path) = rfd::FileDialog::new()
+                                                .add_filter("Tesseract Keyfile", &["tkf"])
+                                                .pick_file()
+                                            {
+                                                self.keyfile_path = path.display().to_string();
+                                            }
+                                        }
+                                    });
+
+                                    // Keyfile password (if keyfile is protected)
+                                    if !self.keyfile_path.is_empty() {
+                                        ui.add_space(10.0);
+                                        ui.horizontal(|ui| {
+                                            ui.label(egui::RichText::new("Keyfile Pass").size(14.0));
+                                            ui.add_space(5.0);
+                                            ui.add(
+                                                egui::TextEdit::singleline(&mut self.keyfile_password)
+                                                    .password(true)
+                                                    .desired_width(500.0)
+                                                    .hint_text("Leave empty if keyfile is unprotected"),
+                                            );
+                                            ui.add_space(120.0);
+                                        });
+                                    }
+
+                                    ui.add_space(10.0);
+
+                                    // Generate keyfile button
+                                    ui.horizontal(|ui| {
+                                        ui.add_space(85.0);
+                                        let gen_btn = egui::Button::new(
+                                            egui::RichText::new("🔧 Generate New Keyfile")
+                                                .size(13.0)
+                                                .color(egui::Color32::WHITE),
+                                        )
+                                        .fill(egui::Color32::from_rgb(100, 180, 100))
+                                        .min_size(egui::vec2(180.0, 32.0))
+                                        .rounding(egui::Rounding::same(16.0));
+
+                                        if ui.add_enabled(!self.is_processing, gen_btn).clicked() {
+                                            self.show_keyfile_generator = true;
+                                            // Default output path
+                                            if self.keyfile_output_path.is_empty() {
+                                                self.keyfile_output_path = dirs::document_dir()
+                                                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+                                                    .join("my-keyfile.tkf")
+                                                    .display()
+                                                    .to_string();
+                                            }
+                                        }
+
+                                        ui.add_space(10.0);
+                                        ui.label(
+                                            egui::RichText::new("A keyfile is required for quantum-resistant encryption")
+                                                .size(11.0)
+                                                .color(egui::Color32::from_rgb(120, 120, 120)),
+                                        );
+                                    });
+                                }
+
                                 ui.add_space(30.0);
 
                                 // Action buttons
@@ -3137,12 +3507,19 @@ impl eframe::App for CryptorApp {
                                             }
                                         };
 
+                                        // Keyfile is required for encryption
+                                        #[cfg(feature = "post-quantum")]
+                                        let keyfile_valid = !self.keyfile_path.is_empty();
+                                        #[cfg(not(feature = "post-quantum"))]
+                                        let keyfile_valid = true;
+
                                         let button_enabled = !self.is_processing
                                             && !self.is_processing_queue
                                             && self.mode.is_some()
                                             && !self.input_path.is_empty()
                                             && !self.output_path.is_empty()
-                                            && !self.password.is_empty();
+                                            && !self.password.is_empty()
+                                            && keyfile_valid;
 
                                         let button_color = egui::Color32::from_rgb(91, 206, 250);
 
@@ -3475,6 +3852,184 @@ fn decrypt_file(
     decryptor.decrypt_to(&mut output_file)?;
 
     Ok(format!("File decrypted successfully: {}", output.display()))
+}
+
+/// Encrypt a file using PQC keyfile for quantum-resistant encryption
+#[cfg(feature = "post-quantum")]
+fn encrypt_file_with_keyfile(
+    input_path: &str,
+    output_path: &str,
+    password: &str,
+    keyfile_path: &str,
+    keyfile_password: Option<&str>,
+    use_compression: bool,
+) -> Result<String, Box<dyn std::error::Error>> {
+    use rand_core::TryRngCore;
+    use std::io::Write;
+    use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
+    use tesseract_lib::crypto::kdf::{generate_salt_string, Argon2Kdf};
+    use tesseract_lib::crypto::keyfile::{combine_keys_hkdf, PqcKeyfile};
+    use tesseract_lib::crypto::Encryptor;
+    use tesseract_lib::crypto::KeyDerivation;
+
+    let input = PathBuf::from(input_path);
+    let output = PathBuf::from(output_path);
+    let kf_path = PathBuf::from(keyfile_path);
+
+    // Load keyfile
+    let keyfile = PqcKeyfile::load(&kf_path, keyfile_password)?;
+
+    // Generate salt for Argon2
+    let salt = generate_salt_string();
+
+    // Derive classical key from password
+    let kdf = Argon2Kdf::default();
+    let classical_key = kdf.derive_key(password.as_bytes(), salt.as_str().as_bytes())?;
+
+    // Encapsulate to get PQC shared secret and ciphertext
+    let (pqc_ciphertext, pqc_shared_secret) = keyfile.encapsulate()?;
+
+    // Combine classical and PQC keys using HKDF
+    let hybrid_key = combine_keys_hkdf(&classical_key, &pqc_shared_secret)?;
+
+    // Read input file (with optional decompression handled at read time)
+    let plaintext = if use_compression {
+        // For now, just read the file - compression can be added later
+        std::fs::read(&input)?
+    } else {
+        std::fs::read(&input)?
+    };
+
+    // Encrypt using AES-256-GCM with the hybrid key
+    let encryptor = AesGcmEncryptor::new();
+    let mut nonce = [0u8; 12];
+    rand::rngs::OsRng
+        .try_fill_bytes(&mut nonce)
+        .map_err(|e| format!("RNG error: {}", e))?;
+
+    let ciphertext = encryptor.encrypt(&hybrid_key, &nonce, &plaintext)?;
+
+    // Write output file with PQC header
+    // Format: TESS-PQE1 (8 bytes) + salt (32 bytes) + nonce (12) + ciphertext_len (4) + pqc_ciphertext + encrypted_data
+    let mut output_file = std::fs::File::create(&output)?;
+
+    // Magic bytes for PQC encrypted file (8 bytes)
+    output_file.write_all(b"TESSPQE1")?;
+
+    // Salt as base64 string (padded to 32 bytes)
+    let salt_bytes = salt.as_str().as_bytes();
+    let mut salt_padded = [0u8; 32];
+    let copy_len = salt_bytes.len().min(32);
+    salt_padded[..copy_len].copy_from_slice(&salt_bytes[..copy_len]);
+    output_file.write_all(&salt_padded)?;
+
+    // Nonce
+    output_file.write_all(&nonce)?;
+
+    // Compression flag (1 byte)
+    output_file.write_all(&[if use_compression { 1 } else { 0 }])?;
+
+    // PQC ciphertext length and data
+    let ct_len = pqc_ciphertext.len() as u32;
+    output_file.write_all(&ct_len.to_le_bytes())?;
+    output_file.write_all(&pqc_ciphertext)?;
+
+    // Encrypted data
+    output_file.write_all(&ciphertext)?;
+
+    Ok(format!(
+        "File encrypted with quantum resistance (NIST Level 5): {}",
+        output.display()
+    ))
+}
+
+/// Decrypt a file using PQC keyfile for quantum-resistant decryption
+#[cfg(feature = "post-quantum")]
+fn decrypt_file_with_keyfile(
+    input_path: &str,
+    output_path: &str,
+    password: &str,
+    keyfile_path: &str,
+    keyfile_password: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    use std::io::Read;
+    use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
+    use tesseract_lib::crypto::kdf::Argon2Kdf;
+    use tesseract_lib::crypto::keyfile::{combine_keys_hkdf, PqcKeyfile};
+    use tesseract_lib::crypto::Encryptor;
+    use tesseract_lib::crypto::KeyDerivation;
+
+    let input = PathBuf::from(input_path);
+    let output = PathBuf::from(output_path);
+    let kf_path = PathBuf::from(keyfile_path);
+
+    // Load keyfile
+    let keyfile = PqcKeyfile::load(&kf_path, keyfile_password)?;
+
+    // Read and parse input file
+    let mut input_file = std::fs::File::open(&input)?;
+
+    // Read magic bytes (8 bytes: "TESSPQE1")
+    let mut magic = [0u8; 8];
+    input_file.read_exact(&mut magic)?;
+
+    if &magic != b"TESSPQE1" {
+        return Err("Not a PQC-encrypted file (missing TESSPQE1 header)".into());
+    }
+
+    // Read salt (32 bytes padded)
+    let mut salt_padded = [0u8; 32];
+    input_file.read_exact(&mut salt_padded)?;
+
+    // Find null terminator or end of salt
+    let salt_len = salt_padded
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(salt_padded.len());
+    let salt_str = std::str::from_utf8(&salt_padded[..salt_len])?;
+
+    // Read nonce (12 bytes)
+    let mut nonce = [0u8; 12];
+    input_file.read_exact(&mut nonce)?;
+
+    // Read compression flag (1 byte)
+    let mut compression_flag = [0u8; 1];
+    input_file.read_exact(&mut compression_flag)?;
+    let _use_compression = compression_flag[0] != 0;
+
+    // Read PQC ciphertext length and data
+    let mut ct_len_bytes = [0u8; 4];
+    input_file.read_exact(&mut ct_len_bytes)?;
+    let ct_len = u32::from_le_bytes(ct_len_bytes) as usize;
+
+    let mut pqc_ciphertext = vec![0u8; ct_len];
+    input_file.read_exact(&mut pqc_ciphertext)?;
+
+    // Read encrypted data
+    let mut encrypted_data = Vec::new();
+    input_file.read_to_end(&mut encrypted_data)?;
+
+    // Derive classical key from password
+    let kdf = Argon2Kdf::default();
+    let classical_key = kdf.derive_key(password.as_bytes(), salt_str.as_bytes())?;
+
+    // Decapsulate to get PQC shared secret
+    let pqc_shared_secret = keyfile.decapsulate(&pqc_ciphertext)?;
+
+    // Combine classical and PQC keys using HKDF
+    let hybrid_key = combine_keys_hkdf(&classical_key, &pqc_shared_secret)?;
+
+    // Decrypt using AES-256-GCM with the hybrid key
+    let encryptor = AesGcmEncryptor::new();
+    let plaintext = encryptor.decrypt(&hybrid_key, &nonce, &encrypted_data)?;
+
+    // Write output file
+    std::fs::write(&output, plaintext.as_slice())?;
+
+    Ok(format!(
+        "File decrypted successfully (quantum-resistant): {}",
+        output.display()
+    ))
 }
 
 /// Parse size string (e.g., "100M", "1G") into bytes

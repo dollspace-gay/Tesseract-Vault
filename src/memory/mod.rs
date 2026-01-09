@@ -22,6 +22,7 @@ mod memory_kani;
 #[cfg(feature = "post-quantum")]
 pub mod pool;
 pub mod scrub;
+pub mod secret;
 pub mod tme;
 
 use std::fmt;
@@ -127,6 +128,9 @@ impl<T: Zeroize> LockedMemory<T> {
     ///
     /// Using this function may result in unlocked memory if the system doesn't
     /// support or allow memory locking. Prefer `new()` when security is critical.
+    ///
+    /// If locking fails, a warning will be printed to stderr. On Linux, you may
+    /// need to increase the mlock limit. See docs/MEMORY_SCRUBBING.md for details.
     pub fn new_best_effort(data: T) -> (Self, bool) {
         let mut locked_mem = Self {
             data,
@@ -135,7 +139,15 @@ impl<T: Zeroize> LockedMemory<T> {
 
         match locked_mem.lock() {
             Ok(()) => (locked_mem, true),
-            Err(_) => (locked_mem, false),
+            Err(e) => {
+                // Print warning to stderr about security degradation
+                eprintln!("\u{26A0} Warning: mlock failed: {}. Sensitive data may be swapped to disk.", e);
+                #[cfg(unix)]
+                eprintln!("  Increase limit: ulimit -l unlimited (or /etc/security/limits.conf)");
+                #[cfg(windows)]
+                eprintln!("  Windows may be under memory pressure. Consider closing other applications.");
+                (locked_mem, false)
+            }
         }
     }
 
@@ -207,14 +219,22 @@ impl<T: Zeroize> LockedMemory<T> {
         self.locked
     }
 
-    /// Consumes the locked memory and returns the inner value.
+    /// Consumes the locked memory and returns the inner value wrapped in `Zeroizing<T>`.
     ///
-    /// The memory will be unlocked before returning.
-    pub fn into_inner(mut self) -> T {
+    /// The memory will be unlocked before returning. The returned `Zeroizing<T>` wrapper
+    /// ensures the data will still be securely zeroized when it goes out of scope,
+    /// maintaining the RAII security guarantee even after extraction.
+    ///
+    /// # Security Note
+    ///
+    /// The returned `Zeroizing<T>` preserves the automatic zeroization behavior.
+    /// If you need the raw value without zeroization (not recommended), you can
+    /// use `Zeroizing::into_inner()`, but this breaks the security guarantee.
+    pub fn into_inner(mut self) -> zeroize::Zeroizing<T> {
         self.unlock();
         let data = unsafe { ptr::read(&self.data) };
-        std::mem::forget(self); // Don't run Drop
-        data
+        std::mem::forget(self); // Don't run Drop (we've already extracted the data)
+        zeroize::Zeroizing::new(data)
     }
 }
 
@@ -308,7 +328,19 @@ mod tests {
         let (locked, _) = LockedMemory::new_best_effort(data);
 
         let inner = locked.into_inner();
-        assert_eq!(inner, [42u8; 32]);
+        // Returns Zeroizing<T> which derefs to T
+        assert_eq!(*inner, [42u8; 32]);
+    }
+
+    #[test]
+    fn test_into_inner_preserves_zeroization() {
+        // Verify that into_inner returns a Zeroizing wrapper
+        let data = [42u8; 32];
+        let (locked, _) = LockedMemory::new_best_effort(data);
+
+        let inner: zeroize::Zeroizing<[u8; 32]> = locked.into_inner();
+        assert_eq!(*inner, [42u8; 32]);
+        // When `inner` is dropped, it will be zeroized automatically
     }
 
     #[test]

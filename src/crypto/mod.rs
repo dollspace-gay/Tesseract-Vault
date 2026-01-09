@@ -9,6 +9,8 @@ pub mod aes_gcm;
 pub mod hardware;
 pub mod kdf;
 #[cfg(feature = "post-quantum")]
+pub mod keyfile;
+#[cfg(feature = "post-quantum")]
 pub mod pqc;
 #[cfg(feature = "post-quantum")]
 pub mod signatures;

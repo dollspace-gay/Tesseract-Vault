@@ -474,6 +474,12 @@ impl VolumeHeader {
     /// Flag bit indicating YubiKey 2FA is required for unlock
     pub const FLAG_YUBIKEY_2FA: u8 = 0x01;
 
+    /// Flag bit indicating external PQC keyfile is required for unlock
+    /// When set, the decapsulation key is stored externally in a user-provided keyfile
+    /// instead of being encrypted in the volume header. This provides true quantum
+    /// resistance since the keyfile can be stored on air-gapped media.
+    pub const FLAG_KEYFILE_REQUIRED: u8 = 0x02;
+
     /// Returns true if YubiKey 2FA is required to unlock this volume
     pub fn requires_yubikey(&self) -> bool {
         self.flags & Self::FLAG_YUBIKEY_2FA != 0
@@ -485,6 +491,32 @@ impl VolumeHeader {
             self.flags |= Self::FLAG_YUBIKEY_2FA;
         } else {
             self.flags &= !Self::FLAG_YUBIKEY_2FA;
+        }
+        // Recompute checksum after flag change
+        self.checksum = self.compute_checksum();
+    }
+
+    /// Returns true if an external PQC keyfile is required to unlock this volume
+    ///
+    /// When this flag is set, the volume uses true quantum-resistant encryption.
+    /// The ML-KEM decapsulation key is stored in an external keyfile that the user
+    /// must provide, rather than being encrypted with a password-derived key in
+    /// the volume header.
+    pub fn requires_keyfile(&self) -> bool {
+        self.flags & Self::FLAG_KEYFILE_REQUIRED != 0
+    }
+
+    /// Sets or clears the external PQC keyfile requirement flag
+    ///
+    /// When enabling keyfile mode:
+    /// - The `encrypted_decapsulation_key` in `PqVolumeMetadata` is unused
+    /// - The user must provide an external `.tkf` keyfile containing the ML-KEM keypair
+    /// - Volume unlock requires: password + keyfile + ciphertext from header
+    pub fn set_keyfile_required(&mut self, required: bool) {
+        if required {
+            self.flags |= Self::FLAG_KEYFILE_REQUIRED;
+        } else {
+            self.flags &= !Self::FLAG_KEYFILE_REQUIRED;
         }
         // Recompute checksum after flag change
         self.checksum = self.compute_checksum();
@@ -981,5 +1013,112 @@ mod tests {
         assert_eq!(cloned.encapsulation_key[0], 1);
         assert_eq!(cloned.ciphertext[0], 2);
         assert_eq!(cloned.encrypted_decapsulation_key[0], 3);
+    }
+
+    #[test]
+    fn test_keyfile_flag() {
+        let salt = [20u8; 32];
+        let iv = [21u8; 12];
+        let mut header = VolumeHeader::new_with_pqc(1024 * 1024, 4096, salt, iv, 1000);
+
+        // Initially, keyfile should not be required
+        assert!(!header.requires_keyfile());
+        assert_eq!(header.flags() & VolumeHeader::FLAG_KEYFILE_REQUIRED, 0);
+
+        // Set keyfile required
+        header.set_keyfile_required(true);
+        assert!(header.requires_keyfile());
+        assert_eq!(
+            header.flags() & VolumeHeader::FLAG_KEYFILE_REQUIRED,
+            VolumeHeader::FLAG_KEYFILE_REQUIRED
+        );
+
+        // Clear keyfile required
+        header.set_keyfile_required(false);
+        assert!(!header.requires_keyfile());
+        assert_eq!(header.flags() & VolumeHeader::FLAG_KEYFILE_REQUIRED, 0);
+    }
+
+    #[test]
+    fn test_keyfile_flag_persists_serialization() {
+        let salt = [22u8; 32];
+        let iv = [23u8; 12];
+        let mut header = VolumeHeader::new_with_pqc(1024 * 1024, 4096, salt, iv, 1000);
+
+        header.set_keyfile_required(true);
+        assert!(header.requires_keyfile());
+
+        // Serialize and deserialize
+        let bytes = header.to_bytes().unwrap();
+        let deserialized = VolumeHeader::from_bytes(&bytes).unwrap();
+
+        // Flag should persist
+        assert!(deserialized.requires_keyfile());
+        assert_eq!(
+            deserialized.flags() & VolumeHeader::FLAG_KEYFILE_REQUIRED,
+            VolumeHeader::FLAG_KEYFILE_REQUIRED
+        );
+    }
+
+    #[test]
+    fn test_keyfile_and_yubikey_flags_independent() {
+        let salt = [24u8; 32];
+        let iv = [25u8; 12];
+        let mut header = VolumeHeader::new_with_pqc(1024 * 1024, 4096, salt, iv, 1000);
+
+        // Both flags can be set independently
+        header.set_keyfile_required(true);
+        header.set_yubikey_required(true);
+
+        assert!(header.requires_keyfile());
+        assert!(header.requires_yubikey());
+        assert_eq!(
+            header.flags(),
+            VolumeHeader::FLAG_KEYFILE_REQUIRED | VolumeHeader::FLAG_YUBIKEY_2FA
+        );
+
+        // Clear keyfile, yubikey should remain
+        header.set_keyfile_required(false);
+        assert!(!header.requires_keyfile());
+        assert!(header.requires_yubikey());
+
+        // Clear yubikey too
+        header.set_yubikey_required(false);
+        assert!(!header.requires_keyfile());
+        assert!(!header.requires_yubikey());
+        assert_eq!(header.flags(), 0);
+    }
+
+    #[test]
+    fn test_keyfile_flag_checksum_updated() {
+        let salt = [26u8; 32];
+        let iv = [27u8; 12];
+        let mut header = VolumeHeader::new_with_pqc(1024 * 1024, 4096, salt, iv, 1000);
+
+        let checksum_before = header.checksum;
+
+        header.set_keyfile_required(true);
+
+        // Checksum should change after flag modification
+        assert_ne!(header.checksum, checksum_before);
+
+        // Checksum should be valid
+        assert!(header.verify_checksum().is_ok());
+
+        // Round-trip should work
+        let bytes = header.to_bytes().unwrap();
+        let deserialized = VolumeHeader::from_bytes(&bytes).unwrap();
+        assert!(deserialized.verify_checksum().is_ok());
+    }
+
+    #[test]
+    fn test_flag_constants_unique() {
+        // Ensure flag bits don't overlap
+        assert_eq!(VolumeHeader::FLAG_YUBIKEY_2FA, 0x01);
+        assert_eq!(VolumeHeader::FLAG_KEYFILE_REQUIRED, 0x02);
+        assert_eq!(
+            VolumeHeader::FLAG_YUBIKEY_2FA & VolumeHeader::FLAG_KEYFILE_REQUIRED,
+            0
+        );
     }
 }

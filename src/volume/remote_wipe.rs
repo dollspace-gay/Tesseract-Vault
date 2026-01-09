@@ -1840,7 +1840,7 @@ mod tests {
 
     #[test]
     fn test_dead_mans_switch_deadline_calculation() {
-        let mut config = DeadMansSwitchConfig::new(30);
+        let config = DeadMansSwitchConfig::new(30);
         let deadline = config.deadline();
         let expected = config.last_checkin + (30 * SECONDS_PER_DAY);
         assert_eq!(deadline, expected);

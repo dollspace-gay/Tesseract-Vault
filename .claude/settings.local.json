@@ -114,7 +114,8 @@
       "Bash(cargo fmt:*)",
       "Bash(git log:*)",
       "Bash(cargo llvm-cov:*)",
-      "Bash(chainlink create:*)"
+      "Bash(chainlink create:*)",
+      "Bash(chainlink comment:*)"
     ],
     "deny": [],
     "ask": []

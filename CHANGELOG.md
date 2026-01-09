@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **GUI Keyfile Generator** - integrated keyfile generation window in GUI for creating ML-KEM-1024 quantum-resistant keyfiles (.tkf) with optional password protection
 - **Dead Man's Switch** - automatic key destruction after configurable inactivity period:
   - Configurable timeout (default 30 days), warning period (7 days), and grace period (3 days)
   - Check-in via CLI command or remote wipe protocol
@@ -29,6 +30,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Keyfile wrapper approach compatible with standard cryptsetup/LUKS2
 
 ### Changed
+- Add keyfile generation to GUI (#235)
+- PQC Keyfile Support - True Quantum Resistance (#227)
+- Make PQC keyfile mandatory for encryption (#234)
+- Update encrypt flow to require keyfile (#237)
+- Make keyfile required for CLI encrypt command (#236)
+- Memory Security Model Improvements (review.md Section 3.2) (#238)
+- Evaluate EncryptedMemoryPool complexity vs benefit (#243)
+- Document Spectre/Meltdown limitations (#242)
+- Implemented SecretMemory<T> with memfd_secret() Support (#240)
+- Document mlock limits prominently (#239)
+- Fix into_inner() RAII gap - return Zeroizing<T> (#241)
+- **BREAKING**: Keyfile now mandatory for encryption/decryption when `post-quantum` feature is enabled:
+  - CLI: `tesseract-vault encrypt` requires `--keyfile <path.tkf>` argument
+  - CLI: `tesseract-vault decrypt` requires `--keyfile <path.tkf>` argument
+  - GUI: Encrypt/Decrypt buttons disabled until keyfile is selected
+  - Provides NIST Level 5 quantum resistance via hybrid key derivation (Argon2id + ML-KEM-1024)
+- CLI: --keyfile flag for encrypt/decrypt/volume commands (#232)
+- Volume: Store encapsulation ciphertext in header (#231)
+- CLI: tesseract keyfile generate command (#228)
+- Core: Hybrid key derivation with keyfile (#230)
+- Core: Keyfile format and serialization (#229)
+- Deprecate WASM feature flags (#225)
+- Write critical design review document (#224)
 - Handle edge cases and contingencies (#223)
 - Add CLI commands for Dead Man's Switch (#222)
 - Wire up Dead Man's Switch to daemon (#219)
@@ -38,6 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced `bincode` serialization with `postcard` - more compact varint encoding, actively maintained (RUSTSEC-2025-0141)
 - Updated `lru` from 0.16 to 0.16.3 to fix soundness issue with IterMut (RUSTSEC-2026-0002)
 - Migrated fuzz targets from `bincode` to `postcard` deserialization
+
+### Deprecated
+- **WASM support** (`wasm-minimal`, `wasm-full` features) - Browser security model cannot provide mlock, guard pages, or anti-debugging protections that are core to Tesseract's security guarantees. Will be removed in v2.0 (#225, #226)
 
 ### Removed
 - Creusot formal verification - removed due to incompatibility with codebase patterns (dyn Error, chunks_exact iterator, String struct fields)
@@ -49,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filesystem corruption after postcard migration - inode serialization now pads to fixed INODE_SIZE (128 bytes) to ensure consistent disk layout with variable-length encoding
 
 ### Security
+- **[HIGH]** Enforced mandatory PQC keyfile for all encryption operations - eliminates weak password-only encryption path, ensuring all encrypted data has NIST Level 5 quantum resistance
 - **[MEDIUM]** Fixed RUSTSEC-2025-0141 - replaced unmaintained `bincode` crate with `postcard` for serialization
 - **[MEDIUM]** Fixed RUSTSEC-2026-0002 - upgraded `lru` to 0.16.3 to fix soundness issue in IterMut (main and fuzz crates)
 - **[MEDIUM]** Fixed CWE-807 (Reliance on Untrusted Inputs) - replaced `%USERNAME%` environment variable with Windows `GetUserNameW` API for secure username retrieval in daemon auth

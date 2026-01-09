@@ -429,12 +429,48 @@ fn get_current_username_secure() -> Option<String> {
     }
 }
 
-/// Stub for non-Windows platforms (Linux uses file permissions via mode bits)
-#[cfg(not(windows))]
+/// Gets the current username securely using Unix system calls
+///
+/// This function uses getuid() and getpwuid_r() instead of environment variables
+/// to prevent environment variable spoofing attacks (CWE-807).
+///
+/// # Security
+///
+/// Environment variables like $USER can be spoofed by a malicious process
+/// before launching Tesseract. The system calls query the kernel and password
+/// database directly, which cannot be spoofed without root privileges.
+#[cfg(unix)]
+#[allow(dead_code)] // Used for potential future ACL support on Unix
 fn get_current_username_secure() -> Option<String> {
-    // On Unix, we use file mode bits (0o600) for permissions, not ACLs
-    // So we don't need the username for permission setting
-    None
+    use std::ffi::CStr;
+
+    // Get the real user ID from the kernel - cannot be spoofed
+    let uid = unsafe { libc::getuid() };
+
+    // Buffer for getpwuid_r - needs to hold passwd struct data
+    // sysconf(_SC_GETPW_R_SIZE_MAX) returns suggested size, but we use a safe default
+    let mut buf = vec![0u8; 4096];
+    let mut passwd: libc::passwd = unsafe { std::mem::zeroed() };
+    let mut result: *mut libc::passwd = std::ptr::null_mut();
+
+    // getpwuid_r is thread-safe unlike getpwuid
+    let ret = unsafe {
+        libc::getpwuid_r(
+            uid,
+            &mut passwd,
+            buf.as_mut_ptr() as *mut libc::c_char,
+            buf.len(),
+            &mut result,
+        )
+    };
+
+    if ret == 0 && !result.is_null() {
+        // Successfully got passwd entry
+        let name_cstr = unsafe { CStr::from_ptr(passwd.pw_name) };
+        name_cstr.to_str().ok().map(|s| s.to_string())
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

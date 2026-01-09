@@ -186,14 +186,14 @@ impl<T: Zeroize + Default + Copy> SecretMemory<T> {
         {
             // Try memfd_secret first
             match Self::try_memfd_secret(data) {
-                Ok(mem) => return Ok(mem),
+                Ok(mem) => Ok(mem),
                 Err(_) => {
                     // Fall back to mlock
                     let locked = LockedMemory::new(data)?;
-                    return Ok(Self {
+                    Ok(Self {
                         storage: SecretStorage::Locked(locked),
                         protection: ProtectionLevel::Mlocked,
-                    });
+                    })
                 }
             }
         }

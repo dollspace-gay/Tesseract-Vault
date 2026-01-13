@@ -16,6 +16,7 @@
 [![Code Coverage](https://github.com/dollspace-gay/Tesseract/actions/workflows/coverage.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/coverage.yml)
 [![codecov](https://codecov.io/gh/dollspace-gay/Tesseract-Vault/branch/main/graph/badge.svg)](https://codecov.io/gh/dollspace-gay/Tesseract-Vault)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/11678/badge?v=2)](https://www.bestpractices.dev/projects/11678)
+![AI Generated](https://img.shields.io/badge/Code-AI_Generated-blue?style=flat-square&logo=probot&logoColor=white)
 
 **Tesseract Vault** is an advanced encryption suite providing advanced file and volume encryption with post-quantum cryptography support.
 

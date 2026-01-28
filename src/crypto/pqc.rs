@@ -229,7 +229,8 @@ impl MlKemKeyPair {
 
         // Use type alias to simplify
         type DK = <MlKem1024 as KemCore>::DecapsulationKey;
-        let dk = DK::from_encoded_bytes(dk_array.into()).expect("Invalid decapsulation key encoding");
+        let dk =
+            DK::from_encoded_bytes(dk_array.into()).expect("Invalid decapsulation key encoding");
 
         // Parse the ciphertext
         let ct_array: &[u8; CIPHERTEXT_SIZE] = ciphertext

@@ -85,7 +85,9 @@ impl KeyDerivation for Argon2Kdf {
         SysRng
             .try_fill_bytes(&mut bytes)
             .expect("CRITICAL: OS entropy source unavailable - cannot generate secure salt");
-        let salt = Salt::new(&bytes).expect("Invalid salt length").to_salt_string();
+        let salt = Salt::new(&bytes)
+            .expect("Invalid salt length")
+            .to_salt_string();
         salt.as_ref().as_bytes().to_vec()
     }
 }
@@ -103,7 +105,9 @@ pub fn generate_salt_string() -> SaltString {
     SysRng
         .try_fill_bytes(&mut bytes)
         .expect("CRITICAL: OS entropy source unavailable - cannot generate secure salt");
-    Salt::new(&bytes).expect("Invalid salt length").to_salt_string()
+    Salt::new(&bytes)
+        .expect("Invalid salt length")
+        .to_salt_string()
 }
 
 /// Try to generate a new random salt as a `SaltString`.

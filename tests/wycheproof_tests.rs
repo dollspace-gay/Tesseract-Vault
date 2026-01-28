@@ -24,8 +24,6 @@ use ml_kem::{
 
 // Use rand 0.9 for ML-KEM compatibility (ml-kem uses rand_core 0.9)
 #[cfg(feature = "post-quantum")]
-
-
 // Import our validated encapsulation function
 #[cfg(feature = "post-quantum")]
 use tesseract_lib::crypto::pqc::validate_encapsulation_key;
@@ -708,7 +706,10 @@ fn test_mlkem_1024_decaps_validation_wycheproof() {
             let dk = match DK::from_encoded_bytes(dk_array.into()) {
                 Ok(dk) => dk,
                 Err(e) => {
-                    println!("Test {} SKIPPED: Could not parse decapsulation key: {:?}", test.tc_id, e);
+                    println!(
+                        "Test {} SKIPPED: Could not parse decapsulation key: {:?}",
+                        test.tc_id, e
+                    );
                     skipped += 1;
                     continue;
                 }

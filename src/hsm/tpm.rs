@@ -1250,7 +1250,7 @@ impl HardwareSecurityModule for Tpm2Device {
         let tpm_random = self.get_random(32).unwrap_or_else(|_| {
             // Fallback if TPM RNG fails
             let mut fallback = vec![0u8; 32];
-            rand::Rng::fill(&mut rand::rng(), &mut fallback[..]);
+            rand_core::Rng::fill_bytes(&mut rand::rng(), &mut fallback[..]);
             fallback
         });
 

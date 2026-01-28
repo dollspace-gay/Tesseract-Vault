@@ -60,7 +60,7 @@ impl MlDsaKeyPair {
     /// let keypair = MlDsaKeyPair::generate(SecurityLevel::Level44);
     /// ```
     pub fn generate(level: SecurityLevel) -> Self {
-        use rand::RngCore;
+        use rand_core::Rng;
 
         // Generate a random 32-byte seed using the system RNG
         let mut seed = [0u8; 32];

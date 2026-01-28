@@ -24,7 +24,7 @@ use ml_kem::{
 
 // Use rand 0.9 for ML-KEM compatibility (ml-kem uses rand_core 0.9)
 #[cfg(feature = "post-quantum")]
-use rand09 as rand_compat;
+
 
 // Import our validated encapsulation function
 #[cfg(feature = "post-quantum")]
@@ -518,12 +518,14 @@ fn test_mlkem_1024_encaps_wycheproof() {
                         Ok(()) => {
                             // Validation passed, now test actual encapsulation
                             type EK = <MlKem1024 as KemCore>::EncapsulationKey;
-                            let ek = EK::from_bytes(ek_array.into());
-                            let mut rng = rand_compat::rng();
-                            match ek.encapsulate(&mut rng) {
-                                Ok(_) => passed += 1,
+                            match EK::from_encoded_bytes(ek_array.into()) {
+                                Ok(ek) => {
+                                    let mut rng = rand::rng();
+                                    let (_ct, _ss) = ek.encapsulate_with_rng(&mut rng);
+                                    passed += 1;
+                                }
                                 Err(_) => {
-                                    println!("Test {} FAILED: Valid key passed validation but encapsulation failed", test.tc_id);
+                                    println!("Test {} FAILED: Valid key passed validation but encoding was invalid", test.tc_id);
                                     failed += 1;
                                 }
                             }
@@ -703,40 +705,29 @@ fn test_mlkem_1024_decaps_validation_wycheproof() {
             };
 
             type DK = <MlKem1024 as KemCore>::DecapsulationKey;
-            let dk = DK::from_bytes(dk_array.into());
+            let dk = match DK::from_encoded_bytes(dk_array.into()) {
+                Ok(dk) => dk,
+                Err(e) => {
+                    println!("Test {} SKIPPED: Could not parse decapsulation key: {:?}", test.tc_id, e);
+                    skipped += 1;
+                    continue;
+                }
+            };
             let ct = Ciphertext::<MlKem1024>::from(*ct_array);
 
             // Decapsulation in ML-KEM is designed to never fail (implicit rejection)
             // It always returns a shared secret, but the secret will be random/wrong
             // if the ciphertext is invalid
-            let decaps_result = dk.decapsulate(&ct);
+            let _ss = dk.decapsulate(&ct);
 
             match test.result {
                 TestResult::Valid => {
-                    // Should succeed (always does for ML-KEM)
-                    match decaps_result {
-                        Ok(_) => passed += 1,
-                        Err(_) => {
-                            println!("Test {} FAILED: Valid decapsulation failed", test.tc_id);
-                            failed += 1;
-                        }
-                    }
+                    passed += 1;
                 }
                 TestResult::Invalid => {
                     // ML-KEM decapsulation never fails - it uses implicit rejection
                     // Invalid ciphertexts return a pseudorandom shared secret
-                    // So we just verify it doesn't panic
-                    match decaps_result {
-                        Ok(_) => {
-                            // Expected - implicit rejection returns a value
-                            passed += 1;
-                        }
-                        Err(_) => {
-                            // Unexpected - decapsulation should never fail
-                            println!("Test {} UNEXPECTED: Decapsulation returned error (should use implicit rejection)", test.tc_id);
-                            skipped += 1;
-                        }
-                    }
+                    passed += 1;
                 }
                 TestResult::Acceptable => {
                     skipped += 1;

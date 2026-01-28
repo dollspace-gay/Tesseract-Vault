@@ -60,7 +60,7 @@
 //! - **Key Derivation**: Argon2id with high memory/time parameters prevents brute-force
 //! - **Secure Deletion**: Master keys are zeroized in memory on drop
 
-use rand::RngCore;
+use rand_core::Rng;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};

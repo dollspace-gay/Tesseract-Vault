@@ -187,7 +187,7 @@ impl Superblock {
     pub fn new(total_blocks: u64, label: &str) -> Self {
         let mut uuid = [0u8; 16];
         // Generate random UUID
-        rand::RngCore::fill_bytes(&mut rand::rng(), &mut uuid);
+        rand_core::Rng::fill_bytes(&mut rand::rng(), &mut uuid);
 
         let mut label_bytes = [0u8; 64];
         let label_slice = label.as_bytes();

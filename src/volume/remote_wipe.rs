@@ -32,7 +32,7 @@
 //! ```
 
 use blake3::Hasher;
-use rand::RngCore;
+use rand_core::Rng;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};

@@ -7,7 +7,7 @@
 
 use crate::memory::scrub::{scrub_bytes_pattern, ScrubPattern};
 use crate::volume::format::{Bitmap, Inode, JournalEntry, JournalHeader, Superblock};
-use rand::Rng;
+use rand::RngExt;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
@@ -352,7 +352,7 @@ impl MetadataSanitizer {
     /// Generates random padding bytes.
     pub fn generate_padding(&self, size: usize) -> Vec<u8> {
         let mut padding = vec![0u8; size];
-        rand::RngCore::fill_bytes(&mut rand::rng(), &mut padding);
+        rand_core::Rng::fill_bytes(&mut rand::rng(), &mut padding);
         padding
     }
 

@@ -74,8 +74,8 @@ pub use validation::validate_password;
 #[cfg(not(target_arch = "wasm32"))]
 pub use validation::{get_and_validate_password, get_password};
 
-use rand::rngs::OsRng;
-use rand_core::TryRngCore;
+use rand::rngs::SysRng;
+use rand_core::TryRng;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -126,7 +126,7 @@ pub fn encrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
 
     // Generate base nonce for chunk nonce derivation
     let mut base_nonce = [0u8; NONCE_LEN];
-    OsRng
+    SysRng
         .try_fill_bytes(&mut base_nonce)
         .map_err(|e| CryptorError::Cryptography(format!("RNG error: {}", e)))?;
 
@@ -136,7 +136,7 @@ pub fn encrypt_file(input_path: &Path, output_path: &Path, password: &str) -> Re
 
     // Create chunked encryptor
     let encryptor = Box::new(AesGcmEncryptor::new());
-    let salt_string = salt.as_str().to_string();
+    let salt_string = salt.as_ref().to_string();
 
     #[cfg(feature = "post-quantum")]
     let chunked_encryptor = {
@@ -209,7 +209,7 @@ pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
 
     // Generate salt (also used as HSM challenge)
     let salt = generate_salt_string();
-    let salt_bytes = salt.as_str().as_bytes();
+    let salt_bytes = salt.as_ref().as_bytes();
 
     // Derive key using HSM (combines password + hardware response)
     let key = hsm.derive_key(password.as_bytes(), salt_bytes, salt_bytes)?;
@@ -220,7 +220,7 @@ pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
 
     // Generate base nonce for chunk nonce derivation
     let mut base_nonce = [0u8; NONCE_LEN];
-    OsRng
+    SysRng
         .try_fill_bytes(&mut base_nonce)
         .map_err(|e| CryptorError::Cryptography(format!("RNG error: {}", e)))?;
 
@@ -230,7 +230,7 @@ pub fn encrypt_file_with_hsm<H: hsm::HardwareSecurityModule>(
 
     // Create chunked encryptor
     let encryptor = Box::new(AesGcmEncryptor::new());
-    let salt_string = salt.as_str().to_string();
+    let salt_string = salt.as_ref().to_string();
 
     #[cfg(feature = "post-quantum")]
     let chunked_encryptor = {
@@ -395,7 +395,7 @@ fn decrypt_file_v3(input_path: &Path, output_path: &Path, password: &str) -> Res
 
     // Derive key from password using salt from header
     let kdf = Argon2Kdf::default();
-    let salt = argon2::password_hash::SaltString::from_b64(&header.salt)
+    let salt = argon2::password_hash::phc::SaltString::from_b64(&header.salt)
         .map_err(|e| CryptorError::PasswordHash(e.to_string()))?;
     let key = kdf.derive_key_with_salt_string(password.as_bytes(), &salt)?;
 
@@ -428,13 +428,13 @@ pub fn encrypt_bytes(plaintext: &[u8], password: &str) -> Result<(Vec<u8>, Vec<u
 
     let encryptor = AesGcmEncryptor::new();
     let mut nonce = vec![0u8; encryptor.nonce_len()];
-    OsRng
+    SysRng
         .try_fill_bytes(&mut nonce)
         .map_err(|e| CryptorError::Cryptography(format!("RNG error: {}", e)))?;
 
     let ciphertext = encryptor.encrypt(&key, &nonce, plaintext)?;
 
-    Ok((salt.as_str().as_bytes().to_vec(), nonce, ciphertext))
+    Ok((salt.as_ref().as_bytes().to_vec(), nonce, ciphertext))
 }
 
 /// Decrypts data in memory (without file I/O).
@@ -456,7 +456,7 @@ pub fn decrypt_bytes(
     password: &str,
 ) -> Result<Zeroizing<Vec<u8>>> {
     let salt_str = std::str::from_utf8(salt).map_err(|_| CryptorError::InvalidFormat)?;
-    let salt_string = argon2::password_hash::SaltString::from_b64(salt_str)
+    let salt_string = argon2::password_hash::phc::SaltString::from_b64(salt_str)
         .map_err(|e| CryptorError::PasswordHash(e.to_string()))?;
 
     let kdf = Argon2Kdf::default();

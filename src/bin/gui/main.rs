@@ -3715,8 +3715,8 @@ fn encrypt_file(
     yubikey_enabled: bool,
     yubikey_slot: u8,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use rand::rngs::OsRng;
-    use rand_core::TryRngCore;
+    use rand::rngs::SysRng;
+    use rand_core::TryRng;
 
     let input = PathBuf::from(input_path);
     let output = PathBuf::from(output_path);
@@ -3769,7 +3769,7 @@ fn encrypt_file(
     let key = kdf.derive_key(password.as_bytes(), &salt)?;
 
     let mut base_nonce = [0u8; 12];
-    OsRng
+    SysRng
         .try_fill_bytes(&mut base_nonce)
         .map_err(|e| format!("RNG error: {}", e))?;
 
@@ -3864,7 +3864,7 @@ fn encrypt_file_with_keyfile(
     keyfile_password: Option<&str>,
     use_compression: bool,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use rand_core::TryRngCore;
+    use rand_core::TryRng;
     use std::io::Write;
     use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
     use tesseract_lib::crypto::kdf::{generate_salt_string, Argon2Kdf};
@@ -3884,7 +3884,7 @@ fn encrypt_file_with_keyfile(
 
     // Derive classical key from password
     let kdf = Argon2Kdf::default();
-    let classical_key = kdf.derive_key(password.as_bytes(), salt.as_str().as_bytes())?;
+    let classical_key = kdf.derive_key(password.as_bytes(), salt.as_ref().as_bytes())?;
 
     // Encapsulate to get PQC shared secret and ciphertext
     let (pqc_ciphertext, pqc_shared_secret) = keyfile.encapsulate()?;
@@ -3903,7 +3903,7 @@ fn encrypt_file_with_keyfile(
     // Encrypt using AES-256-GCM with the hybrid key
     let encryptor = AesGcmEncryptor::new();
     let mut nonce = [0u8; 12];
-    rand::rngs::OsRng
+    rand::rngs::SysRng
         .try_fill_bytes(&mut nonce)
         .map_err(|e| format!("RNG error: {}", e))?;
 
@@ -3917,7 +3917,7 @@ fn encrypt_file_with_keyfile(
     output_file.write_all(b"TESSPQE1")?;
 
     // Salt as base64 string (padded to 32 bytes)
-    let salt_bytes = salt.as_str().as_bytes();
+    let salt_bytes = salt.as_ref().as_bytes();
     let mut salt_padded = [0u8; 32];
     let copy_len = salt_bytes.len().min(32);
     salt_padded[..copy_len].copy_from_slice(&salt_bytes[..copy_len]);

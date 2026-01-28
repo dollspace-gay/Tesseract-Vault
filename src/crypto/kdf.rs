@@ -9,11 +9,11 @@ use crate::config::CryptoConfig;
 use crate::error::{CryptorError, Result};
 
 use argon2::{
-    password_hash::{Salt, SaltString},
+    password_hash::phc::{Salt, SaltString},
     Argon2, Params,
 };
-use rand::rngs::OsRng;
-use rand_core::TryRngCore;
+use rand::rngs::SysRng;
+use rand_core::TryRng;
 use zeroize::Zeroizing;
 
 /// Argon2id key derivation function.
@@ -44,7 +44,7 @@ impl Argon2Kdf {
         password: &[u8],
         salt: &SaltString,
     ) -> Result<Zeroizing<[u8; 32]>> {
-        self.derive_key(password, salt.as_str().as_bytes())
+        self.derive_key(password, salt.as_ref().as_bytes())
     }
 }
 
@@ -82,11 +82,11 @@ impl KeyDerivation for Argon2Kdf {
         // catastrophically broken state. Continuing without entropy would be a worse
         // security failure than panicking. Use try_generate_salt_string() if you need fallible behavior.
         let mut bytes = [0u8; Salt::RECOMMENDED_LENGTH];
-        OsRng
+        SysRng
             .try_fill_bytes(&mut bytes)
             .expect("CRITICAL: OS entropy source unavailable - cannot generate secure salt");
-        let salt = SaltString::encode_b64(&bytes).expect("Failed to encode salt");
-        salt.as_str().as_bytes().to_vec()
+        let salt = Salt::new(&bytes).expect("Invalid salt length").to_salt_string();
+        salt.as_ref().as_bytes().to_vec()
     }
 }
 
@@ -100,10 +100,10 @@ impl KeyDerivation for Argon2Kdf {
 /// broken system state. Use [`try_generate_salt_string`] for fallible behavior.
 pub fn generate_salt_string() -> SaltString {
     let mut bytes = [0u8; Salt::RECOMMENDED_LENGTH];
-    OsRng
+    SysRng
         .try_fill_bytes(&mut bytes)
         .expect("CRITICAL: OS entropy source unavailable - cannot generate secure salt");
-    SaltString::encode_b64(&bytes).expect("Failed to encode salt")
+    Salt::new(&bytes).expect("Invalid salt length").to_salt_string()
 }
 
 /// Try to generate a new random salt as a `SaltString`.
@@ -115,11 +115,12 @@ pub fn generate_salt_string() -> SaltString {
 /// Returns an error if the OS entropy source is unavailable.
 pub fn try_generate_salt_string() -> Result<SaltString> {
     let mut bytes = [0u8; Salt::RECOMMENDED_LENGTH];
-    OsRng
+    SysRng
         .try_fill_bytes(&mut bytes)
         .map_err(|e| CryptorError::Cryptography(format!("Entropy source unavailable: {}", e)))?;
-    SaltString::encode_b64(&bytes)
-        .map_err(|e| CryptorError::Cryptography(format!("Salt encoding failed: {}", e)))
+    let salt = Salt::new(&bytes)
+        .map_err(|e| CryptorError::Cryptography(format!("Salt encoding failed: {}", e)))?;
+    Ok(salt.to_salt_string())
 }
 
 #[cfg(test)]
@@ -211,8 +212,8 @@ mod tests {
         let salt2 = generate_salt_string();
 
         assert_ne!(
-            salt1.as_str(),
-            salt2.as_str(),
+            salt1.as_ref(),
+            salt2.as_ref(),
             "Generated salt strings should be unique"
         );
     }

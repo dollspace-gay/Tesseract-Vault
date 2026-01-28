@@ -239,7 +239,7 @@ fn overwrite_with_pattern(data: &mut [u8], pattern: u8) {
 #[inline(never)]
 #[cfg(not(kani))]
 fn overwrite_with_random(data: &mut [u8]) {
-    use rand::RngCore;
+    use rand_core::Rng;
 
     // Fill with random bytes
     rand::rng().fill_bytes(data);

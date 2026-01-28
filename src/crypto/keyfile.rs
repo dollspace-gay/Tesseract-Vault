@@ -39,8 +39,8 @@ use crate::crypto::kdf::{generate_salt_string, Argon2Kdf};
 use crate::crypto::pqc::{MlKemKeyPair, PUBLIC_KEY_SIZE, SECRET_KEY_SIZE, SHARED_SECRET_SIZE};
 use crate::crypto::Encryptor;
 use crate::error::{CryptorError, Result};
-use rand::rngs::OsRng;
-use rand_core::TryRngCore;
+use rand::rngs::SysRng;
+use rand_core::TryRng;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -204,13 +204,13 @@ impl PqcKeyfile {
     pub fn save_protected(&self, path: &Path, password: &str) -> Result<()> {
         // Generate salt and derive key
         let salt = generate_salt_string();
-        let salt_str = salt.as_str();
+        let salt_str = salt.as_ref();
         let kdf = Argon2Kdf::default();
         let key = kdf.derive_key_with_salt_string(password.as_bytes(), &salt)?;
 
         // Generate nonce
         let mut nonce = [0u8; NONCE_SIZE];
-        OsRng
+        SysRng
             .try_fill_bytes(&mut nonce)
             .map_err(|e| CryptorError::Cryptography(format!("RNG error: {}", e)))?;
 
@@ -340,7 +340,7 @@ impl PqcKeyfile {
             let salt_bytes = &data[salt_start..salt_end];
             let salt_str = std::str::from_utf8(salt_bytes)
                 .map_err(|_| CryptorError::Cryptography("Invalid salt encoding".to_string()))?;
-            let salt = argon2::password_hash::SaltString::from_b64(salt_str)
+            let salt = argon2::password_hash::phc::SaltString::from_b64(salt_str)
                 .map_err(|e| CryptorError::PasswordHash(e.to_string()))?;
 
             // Extract nonce
@@ -429,7 +429,7 @@ impl PqcKeyfile {
 /// A 32-byte hybrid key suitable for AES-256-GCM encryption.
 pub fn derive_hybrid_key(
     password: &str,
-    salt: &argon2::password_hash::SaltString,
+    salt: &argon2::password_hash::phc::SaltString,
     keyfile: &PqcKeyfile,
     pqc_ciphertext: &[u8],
 ) -> Result<Zeroizing<[u8; 32]>> {

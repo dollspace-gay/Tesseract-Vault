@@ -53,7 +53,7 @@
 //! - **Both Directions**: Protects against both overflow and underflow
 //! - **Page Aligned**: Uses OS-level page protection for maximum security
 
-use rand::Rng;
+use rand::RngExt;
 use std::ptr::NonNull;
 use thiserror::Error;
 use zeroize::Zeroize;

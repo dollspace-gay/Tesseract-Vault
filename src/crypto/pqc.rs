@@ -10,10 +10,6 @@ use ml_kem::kem::{Decapsulate, Encapsulate};
 use ml_kem::{Ciphertext, EncodedSizeUser, KemCore, MlKem1024};
 use zeroize::{Zeroize, Zeroizing};
 
-// Import rand 0.9 for ML-KEM compatibility
-// ml-kem 0.3.0-pre.2 uses rand_core 0.9.3 which is compatible with rand 0.9
-use rand09 as rand_compat;
-
 /// ML-KEM-1024 public key size in bytes.
 pub const PUBLIC_KEY_SIZE: usize = 1568;
 
@@ -180,13 +176,12 @@ impl MlKemKeyPair {
     /// let keypair = MlKemKeyPair::generate();
     /// ```
     pub fn generate() -> Self {
-        // Use rng() from rand 0.9 (compatible with ml-kem 0.3.0-pre.2)
-        let mut rng = rand_compat::rng();
+        let mut rng = rand::rng();
         let (dk, ek) = MlKem1024::generate(&mut rng);
 
         Self {
-            encapsulation_key: ek.as_bytes().to_vec(),
-            decapsulation_key: dk.as_bytes().to_vec(),
+            encapsulation_key: ek.to_encoded_bytes().to_vec(),
+            decapsulation_key: dk.to_encoded_bytes().to_vec(),
         }
     }
 
@@ -234,7 +229,7 @@ impl MlKemKeyPair {
 
         // Use type alias to simplify
         type DK = <MlKem1024 as KemCore>::DecapsulationKey;
-        let dk = DK::from_bytes(dk_array.into());
+        let dk = DK::from_encoded_bytes(dk_array.into()).expect("Invalid decapsulation key encoding");
 
         // Parse the ciphertext
         let ct_array: &[u8; CIPHERTEXT_SIZE] = ciphertext
@@ -243,7 +238,7 @@ impl MlKemKeyPair {
         let ct = Ciphertext::<MlKem1024>::from(*ct_array);
 
         // Decapsulate the shared secret (never fails - returns Result<_, Infallible>)
-        let ss = dk.decapsulate(&ct).expect("Decapsulation is infallible");
+        let ss = dk.decapsulate(&ct);
 
         // Copy to zeroizing array
         let mut result = Zeroizing::new([0u8; SHARED_SECRET_SIZE]);
@@ -336,21 +331,18 @@ pub(crate) fn encapsulate_unchecked(
 
     // Use type alias to simplify
     type EK = <MlKem1024 as KemCore>::EncapsulationKey;
-    let ek = EK::from_bytes(ek_array.into());
+    let ek = EK::from_encoded_bytes(ek_array.into()).expect("Invalid encapsulation key encoding");
 
-    // Use rng() from rand 0.9 (compatible with ml-kem 0.3.0-pre.2)
-    let mut rng = rand_compat::rng();
+    let mut rng = rand::rng();
 
-    // Encapsulate to get ciphertext and shared secret (never fails - returns Result<_, Infallible>)
-    let (ct, ss) = ek
-        .encapsulate(&mut rng)
-        .expect("Encapsulation is infallible");
+    // Encapsulate to get ciphertext and shared secret
+    let (ct, ss): (Ciphertext<MlKem1024>, _) = ek.encapsulate_with_rng(&mut rng);
 
     // Copy to zeroizing array
     let mut secret_array = Zeroizing::new([0u8; SHARED_SECRET_SIZE]);
     secret_array.copy_from_slice(&ss);
 
-    Ok((ct.to_vec(), secret_array))
+    Ok((ct.as_slice().to_vec(), secret_array))
 }
 
 /// Decapsulate a shared secret using a decapsulation key and ciphertext.
@@ -399,11 +391,11 @@ pub fn decapsulate(
 
     // Use type alias to simplify
     type DK = <MlKem1024 as KemCore>::DecapsulationKey;
-    let dk = DK::from_bytes(dk_array.into());
+    let dk = DK::from_encoded_bytes(dk_array.into()).expect("Invalid decapsulation key encoding");
     let ct = Ciphertext::<MlKem1024>::from(*ct_array);
 
     // Decapsulate to get shared secret (never fails - returns Result<_, Infallible>)
-    let ss = dk.decapsulate(&ct).expect("Decapsulation is infallible");
+    let ss = dk.decapsulate(&ct);
 
     // Copy to zeroizing array
     let mut secret_array = Zeroizing::new([0u8; SHARED_SECRET_SIZE]);

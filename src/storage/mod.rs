@@ -135,7 +135,7 @@ where
 pub mod format {
     use crate::config::{MAGIC_BYTES, MAX_SALT_LEN, NONCE_LEN};
     use crate::error::{CryptorError, Result};
-    use argon2::password_hash::SaltString;
+    use argon2::password_hash::phc::SaltString;
     use std::fs::File;
     use std::io::{Read, Write};
 
@@ -153,7 +153,7 @@ pub mod format {
         nonce: &[u8],
         ciphertext: &[u8],
     ) -> Result<()> {
-        let salt_str = salt.as_str();
+        let salt_str = salt.as_ref();
 
         // Validate salt length fits in u8 to prevent truncation (CWE-197)
         if salt_str.len() > MAX_SALT_LEN {
@@ -310,7 +310,7 @@ mod tests {
 
             let header = read_encrypted_header(temp_file.as_file_mut()).unwrap();
 
-            assert_eq!(header.salt.as_str(), salt.as_str());
+            assert_eq!(header.salt.as_ref(), salt.as_ref());
             assert_eq!(header.nonce, nonce);
         }
 
@@ -369,7 +369,7 @@ mod tests {
                 nonce: vec![1, 2, 3, 4, 5],
             };
             let cloned = header.clone();
-            assert_eq!(cloned.salt.as_str(), header.salt.as_str());
+            assert_eq!(cloned.salt.as_ref(), header.salt.as_ref());
             assert_eq!(cloned.nonce, header.nonce);
         }
 
@@ -387,7 +387,7 @@ mod tests {
             // Verify file size is correct
             let metadata = temp_file.as_file().metadata().unwrap();
             let expected_size =
-                MAGIC_BYTES.len() + 1 + salt.as_str().len() + NONCE_LEN + ciphertext.len();
+                MAGIC_BYTES.len() + 1 + salt.as_ref().len() + NONCE_LEN + ciphertext.len();
             assert_eq!(metadata.len() as usize, expected_size);
         }
     }

@@ -35,7 +35,7 @@ use super::LockedMemory;
 use crate::error::{CryptorError, Result};
 use chacha20::cipher::{KeyIvInit, StreamCipher};
 use chacha20::ChaCha20;
-use rand::RngCore;
+use rand_core::Rng;
 use std::sync::{Arc, Mutex};
 use zeroize::{Zeroize, Zeroizing};
 

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Bump ml-dsa 0.1.0-rc.2 → 0.1.0-rc.4** — fixes signature malleability vulnerability where duplicate hint indices were incorrectly accepted (`<=` instead of `<` in monotonic check). Affects all ML-DSA security levels. (RUSTSEC advisory, severity: Medium)
+
+### Changed
+- Bump ml-dsa from 0.1.0-rc.2 to 0.1.0-rc.4 (security fix: signature malleability) (#265)
+- Upgrade RustCrypto dependency ecosystem for ml-dsa compatibility:
+  - `ml-dsa` 0.1.0-rc.2 → 0.1.0-rc.4
+  - `ml-kem` 0.3.0-pre.2 → 0.3.0-pre.5 (now uses rand_core 0.10; removes rand 0.9 compat shim)
+  - `rand` 0.10.0-rc.5 → 0.10.0-rc.8 (`OsRng` → `SysRng`, `os_rng` → `sys_rng`)
+  - `rand_core` 0.10.0-rc-2 → 0.10.0-rc-6 (`TryRngCore` → `TryRng`, `RngCore` → `Rng`)
+  - `chacha20` 0.10.0-rc.5 → 0.10.0-rc.9
+  - `argon2` 0.6.0-rc.2 → 0.6.0-rc.6 (`SaltString`/`Salt` moved to `phc` submodule)
+
 ### Added
 - **GUI Keyfile Generator** - integrated keyfile generation window in GUI for creating ML-KEM-1024 quantum-resistant keyfiles (.tkf) with optional password protection
 - **Dead Man's Switch** - automatic key destruction after configurable inactivity period:

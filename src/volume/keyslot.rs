@@ -18,7 +18,7 @@ use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
-use rand::RngCore;
+use rand_core::Rng;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use thiserror::Error;

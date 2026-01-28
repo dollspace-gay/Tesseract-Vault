@@ -222,8 +222,8 @@ pub fn generate_pq_metadata(password_key: &[u8; 32]) -> Result<(PqMetadata, Zero
     use crate::crypto::pqc::{encapsulate, MlKemKeyPair};
     use crate::crypto::Encryptor;
     use base64::Engine;
-    use rand::rngs::OsRng;
-    use rand_core::TryRngCore;
+    use rand::rngs::SysRng;
+    use rand_core::TryRng;
 
     // Generate ML-KEM-1024 keypair
     let keypair = MlKemKeyPair::generate();
@@ -234,7 +234,7 @@ pub fn generate_pq_metadata(password_key: &[u8; 32]) -> Result<(PqMetadata, Zero
     // Serialize and encrypt the decapsulation key with password-derived key
     let dk_bytes = keypair.decapsulation_key();
     let mut nonce = [0u8; NONCE_LEN];
-    OsRng
+    SysRng
         .try_fill_bytes(&mut nonce)
         .map_err(|e| CryptorError::Cryptography(format!("Failed to generate nonce: {}", e)))?;
 
@@ -907,8 +907,8 @@ impl Iterator for ChunkedReader {
 /// # use std::path::Path;
 /// # use std::fs::File;
 /// # use zeroize::Zeroizing;
-/// # use rand::rngs::OsRng;
-/// # use rand_core::TryRngCore;
+/// # use rand::rngs::SysRng;
+/// # use rand_core::TryRng;
 /// # use tesseract_lib::config::NONCE_LEN;
 /// let config = StreamConfig::default();
 /// let reader = ChunkedReader::open(Path::new("large_file.dat"), config).unwrap();
@@ -918,7 +918,7 @@ impl Iterator for ChunkedReader {
 /// let key = kdf.derive_key(b"password", &salt).unwrap();
 ///
 /// let mut base_nonce = [0u8; NONCE_LEN];
-/// OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+/// SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 ///
 /// let mut encryptor = ChunkedEncryptor::new(
 ///     reader,
@@ -1778,8 +1778,8 @@ mod tests {
     fn test_chunked_encryptor_basic() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1795,7 +1795,7 @@ mod tests {
 
         let key = Zeroizing::new([1u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
         let salt = "test_salt_string".to_string();
 
         let encryptor = ChunkedEncryptor::new(
@@ -1819,8 +1819,8 @@ mod tests {
     fn test_chunked_encryptor_with_metadata() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1834,7 +1834,7 @@ mod tests {
 
         let key = Zeroizing::new([5u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let metadata = r#"{"filename":"test.dat","timestamp":1234567890}"#.to_string();
 
@@ -1860,8 +1860,8 @@ mod tests {
     fn test_chunked_encryptor_multiple_chunks() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1876,7 +1876,7 @@ mod tests {
 
         let key = Zeroizing::new([9u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -1901,8 +1901,8 @@ mod tests {
     fn test_chunked_encryptor_partial_last_chunk() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1917,7 +1917,7 @@ mod tests {
 
         let key = Zeroizing::new([11u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -1940,8 +1940,8 @@ mod tests {
     #[test]
     fn test_chunked_encryptor_empty_file() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1953,7 +1953,7 @@ mod tests {
 
         let key = Zeroizing::new([13u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -1977,8 +1977,8 @@ mod tests {
     fn test_chunked_encryptor_single_chunk() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -1993,7 +1993,7 @@ mod tests {
 
         let key = Zeroizing::new([17u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -2017,8 +2017,8 @@ mod tests {
     fn test_chunked_decryptor_basic() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2033,7 +2033,7 @@ mod tests {
 
         let key = Zeroizing::new([1u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
         let salt = "test_salt".to_string();
 
         let encryptor = ChunkedEncryptor::new(
@@ -2065,8 +2065,8 @@ mod tests {
     fn test_encrypt_decrypt_roundtrip() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2081,7 +2081,7 @@ mod tests {
 
         let key = Zeroizing::new([99u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -2112,8 +2112,8 @@ mod tests {
     fn test_decrypt_with_metadata() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2127,7 +2127,7 @@ mod tests {
 
         let key = Zeroizing::new([55u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let metadata = r#"{"filename":"test.bin","timestamp":9876543210}"#.to_string();
 
@@ -2159,8 +2159,8 @@ mod tests {
     fn test_decrypt_wrong_key() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2174,7 +2174,7 @@ mod tests {
 
         let key = Zeroizing::new([22u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -2203,8 +2203,8 @@ mod tests {
     #[test]
     fn test_decrypt_empty_file() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2215,7 +2215,7 @@ mod tests {
 
         let key = Zeroizing::new([44u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -2247,8 +2247,8 @@ mod tests {
     fn test_decrypt_progress_tracking() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2262,7 +2262,7 @@ mod tests {
 
         let key = Zeroizing::new([66u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -2296,8 +2296,8 @@ mod tests {
     fn test_parallel_encryption() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2312,7 +2312,7 @@ mod tests {
 
         let key = Zeroizing::new([77u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -2334,8 +2334,8 @@ mod tests {
     fn test_parallel_decryption() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2350,7 +2350,7 @@ mod tests {
 
         let key = Zeroizing::new([99u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -2382,8 +2382,8 @@ mod tests {
     fn test_parallel_roundtrip() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2398,7 +2398,7 @@ mod tests {
 
         let key = Zeroizing::new([200u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         // Parallel encryption
         let encryptor = ChunkedEncryptor::new(
@@ -2479,8 +2479,8 @@ mod tests {
     fn test_compression_roundtrip() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2498,7 +2498,7 @@ mod tests {
 
         let key = Zeroizing::new([123u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -2529,8 +2529,8 @@ mod tests {
     fn test_compression_reduces_size() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2542,7 +2542,7 @@ mod tests {
 
         let key = Zeroizing::new([99u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         // Encrypt WITHOUT compression
         let config1 = StreamConfig::new(MIN_CHUNK_SIZE).unwrap();
@@ -2591,15 +2591,15 @@ mod tests {
     fn test_compression_with_incompressible_data() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
         // Create test file with random (incompressible) data
         let mut input_file = NamedTempFile::new().unwrap();
         let mut test_data = vec![0u8; MIN_CHUNK_SIZE * 2];
-        OsRng.try_fill_bytes(&mut test_data).unwrap();
+        SysRng.try_fill_bytes(&mut test_data).unwrap();
         input_file.write_all(&test_data).unwrap();
         input_file.flush().unwrap();
 
@@ -2611,7 +2611,7 @@ mod tests {
 
         let key = Zeroizing::new([55u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -2640,8 +2640,8 @@ mod tests {
     fn test_compression_parallel_roundtrip() {
         use crate::crypto::aes_gcm::AesGcmEncryptor;
         use ::std::io::Write;
-        use rand::rngs::OsRng;
-        use rand_core::TryRngCore;
+        use rand::rngs::SysRng;
+        use rand_core::TryRng;
         use tempfile::NamedTempFile;
         use zeroize::Zeroizing;
 
@@ -2659,7 +2659,7 @@ mod tests {
 
         let key = Zeroizing::new([200u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,

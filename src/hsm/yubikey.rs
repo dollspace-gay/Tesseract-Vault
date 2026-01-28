@@ -226,7 +226,7 @@ impl YubiKey {
 
     /// Generate a secure backup key
     pub fn generate_backup_key() -> Zeroizing<Vec<u8>> {
-        use rand::RngCore;
+        use rand_core::Rng;
         let mut key = vec![0u8; 32];
         rand::rng().fill_bytes(&mut key);
         Zeroizing::new(key)

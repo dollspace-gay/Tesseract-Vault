@@ -21,7 +21,7 @@
 //! - **PowerOfTwo**: Pad to next power of two
 //! - **Fixed**: Add a fixed amount of padding
 
-use rand::Rng;
+use rand::RngExt;
 use thiserror::Error;
 
 /// Errors that can occur during padding operations.
@@ -238,7 +238,7 @@ impl PaddingGenerator {
 /// A vector of random bytes.
 pub fn generate_padding(size: usize) -> Vec<u8> {
     let mut padding = vec![0u8; size];
-    rand::RngCore::fill_bytes(&mut rand::rng(), &mut padding);
+    rand_core::Rng::fill_bytes(&mut rand::rng(), &mut padding);
     padding
 }
 

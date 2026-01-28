@@ -486,7 +486,7 @@ fn encrypt_file_with_keyfile(
 
     // Derive classical key from password
     let kdf = Argon2Kdf::default();
-    let classical_key = kdf.derive_key(password.as_bytes(), salt.as_str().as_bytes())?;
+    let classical_key = kdf.derive_key(password.as_bytes(), salt.as_ref().as_bytes())?;
 
     // Encapsulate to get PQC shared secret and ciphertext
     let (pqc_ciphertext, pqc_shared_secret) = keyfile.encapsulate()?;
@@ -503,8 +503,8 @@ fn encrypt_file_with_keyfile(
 
     let encryptor = AesGcmEncryptor::new();
     let mut nonce = [0u8; 12];
-    use rand_core::TryRngCore;
-    rand::rngs::OsRng
+    use rand_core::TryRng;
+    rand::rngs::SysRng
         .try_fill_bytes(&mut nonce)
         .map_err(|e| CryptorError::Cryptography(format!("Failed to generate nonce: {}", e)))?;
 
@@ -519,7 +519,7 @@ fn encrypt_file_with_keyfile(
     output.write_all(b"TESSPQE1").map_err(CryptorError::Io)?;
 
     // Salt as base64 string (padded to 32 bytes)
-    let salt_bytes = salt.as_str().as_bytes();
+    let salt_bytes = salt.as_ref().as_bytes();
     let mut salt_padded = [0u8; 32];
     let copy_len = salt_bytes.len().min(32);
     salt_padded[..copy_len].copy_from_slice(&salt_bytes[..copy_len]);

@@ -1,0 +1,11 @@
+name: "Tesseract-Vault CodeQL Config"
+
+paths-ignore:
+  - tests
+  - fuzz
+  - benches
+  - docker
+
+query-filters:
+  - exclude:
+      id: rust/hard-coded-cryptographic-value

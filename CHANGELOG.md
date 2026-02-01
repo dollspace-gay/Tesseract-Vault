@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bump ml-dsa 0.1.0-rc.2 → 0.1.0-rc.4** — fixes signature malleability vulnerability where duplicate hint indices were incorrectly accepted (`<=` instead of `<` in monotonic check). Affects all ML-DSA security levels. (RUSTSEC advisory, severity: Medium)
 
 ### Changed
+- Add CodeQL config to exclude test paths from code scanning (#266)
 - Bump ml-dsa from 0.1.0-rc.2 to 0.1.0-rc.4 (security fix: signature malleability) (#265)
 - Upgrade RustCrypto dependency ecosystem for ml-dsa compatibility:
   - `ml-dsa` 0.1.0-rc.2 → 0.1.0-rc.4

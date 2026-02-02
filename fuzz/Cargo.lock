@@ -1092,13 +1092,13 @@ dependencies = [
 
 [[package]]
 name = "ml-dsa"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99af2bc975dc617bd29382b6bfac09d3a6ecdb75fc5abbbbd5d869f8a790aea7"
+checksum = "eed6d04ae9d99afd84a7e2e2c90dd65d31e2ddf988f0940a5f571fe4ca53c02e"
 dependencies = [
  "const-oid",
  "hybrid-array",
- "num-traits",
+ "module-lattice",
  "pkcs8",
  "rand_core 0.10.0-rc-6",
  "sha3",
@@ -1117,6 +1117,17 @@ dependencies = [
  "rand_core 0.10.0-rc-6",
  "sha3",
  "subtle",
+]
+
+[[package]]
+name = "module-lattice"
+version = "0.1.0-rc.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b58fe0672f0701f5c1180c3e5c3d00b08dd9b207e545a38f3174d5363e2ae9e"
+dependencies = [
+ "hybrid-array",
+ "num-traits",
+ "zeroize",
 ]
 
 [[package]]

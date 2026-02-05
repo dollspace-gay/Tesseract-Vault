@@ -221,4 +221,48 @@ mod tests {
             "Generated salt strings should be unique"
         );
     }
+
+    #[test]
+    fn test_derive_key_empty_password() {
+        let kdf = Argon2Kdf::default();
+        let salt = b"test_salt_123456";
+
+        // Empty password should still produce a valid key (not error)
+        let key = kdf.derive_key(b"", salt).unwrap();
+        assert_eq!(key.len(), 32);
+
+        // Empty password should differ from non-empty password
+        let key2 = kdf.derive_key(b"notempty", salt).unwrap();
+        assert_ne!(*key, *key2, "Empty password must derive different key from non-empty");
+    }
+
+    #[test]
+    fn test_derive_key_long_password() {
+        let kdf = Argon2Kdf::default();
+        let salt = b"test_salt_123456";
+        let long_password = vec![b'A'; 10_000];
+
+        let key = kdf.derive_key(&long_password, salt).unwrap();
+        assert_eq!(key.len(), 32);
+
+        // Longer password should differ from shorter
+        let short_key = kdf.derive_key(b"A", salt).unwrap();
+        assert_ne!(*key, *short_key);
+    }
+
+    #[test]
+    fn test_generate_salt_sufficient_length() {
+        let kdf = Argon2Kdf::default();
+        let salt = kdf.generate_salt();
+        // Salt must be at least 16 bytes for Argon2 security
+        assert!(salt.len() >= 16, "Salt must be at least 16 bytes, got {}", salt.len());
+    }
+
+    #[test]
+    fn test_try_generate_salt_string() {
+        let result = try_generate_salt_string();
+        assert!(result.is_ok(), "try_generate_salt_string should succeed");
+        let salt = result.unwrap();
+        assert!(!salt.as_ref().is_empty());
+    }
 }

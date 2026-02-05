@@ -92,15 +92,35 @@ pub trait KeyDerivation: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::aes_gcm::AesGcmEncryptor;
+    use crate::crypto::kdf::Argon2Kdf;
 
-    // Test that traits are object-safe
+    /// Verify Encryptor can be used as a trait object and roundtrips correctly.
     #[test]
-    fn test_encryptor_object_safe() {
-        let _: Option<Box<dyn Encryptor>> = None;
+    fn test_encryptor_as_trait_object() {
+        let encryptor: Box<dyn Encryptor> = Box::new(AesGcmEncryptor::new());
+        let key = [0u8; 32];
+        let nonce = [1u8; 12];
+        let plaintext = b"trait object test";
+
+        let ciphertext = encryptor.encrypt(&key, &nonce, plaintext).unwrap();
+        assert_ne!(ciphertext.as_slice(), plaintext.as_slice());
+
+        let decrypted = encryptor.decrypt(&key, &nonce, &ciphertext).unwrap();
+        assert_eq!(decrypted.as_slice(), plaintext.as_slice());
     }
 
+    /// Verify KeyDerivation can be used as a trait object and is deterministic.
     #[test]
-    fn test_kdf_object_safe() {
-        let _: Option<Box<dyn KeyDerivation>> = None;
+    fn test_kdf_as_trait_object() {
+        let kdf: Box<dyn KeyDerivation> = Box::new(Argon2Kdf::default());
+        let password = b"test_password";
+        let salt = b"test_salt_123456";
+
+        let key = kdf.derive_key(password, salt).unwrap();
+        assert_eq!(key.len(), 32);
+
+        let key2 = kdf.derive_key(password, salt).unwrap();
+        assert_eq!(*key, *key2);
     }
 }

@@ -1085,11 +1085,22 @@ mod tests {
     fn test_detect_capabilities() {
         let caps = detect_capabilities();
 
-        // Should always be able to detect something
-        println!("Detected capabilities:\n{}", caps);
+        // Detection should be deterministic
+        let caps2 = detect_capabilities();
+        assert_eq!(caps.vendor, caps2.vendor, "vendor detection should be deterministic");
+        assert_eq!(caps.aes_ni, caps2.aes_ni, "AES-NI detection should be deterministic");
+        assert_eq!(caps.avx2, caps2.avx2, "AVX2 detection should be deterministic");
 
-        // Basic sanity checks
-        assert!(!caps.cpu_brand.is_empty() || caps.vendor == CpuVendor::Unknown);
+        // On x86_64, we should always detect a known vendor and non-empty brand
+        #[cfg(target_arch = "x86_64")]
+        {
+            assert!(
+                caps.vendor == CpuVendor::Intel || caps.vendor == CpuVendor::Amd,
+                "x86_64 should detect Intel or AMD, got {:?}",
+                caps.vendor
+            );
+            assert!(!caps.cpu_brand.is_empty(), "x86_64 should have non-empty CPU brand");
+        }
     }
 
     #[test]
@@ -1100,12 +1111,29 @@ mod tests {
         // Score should be between 0 and 100
         assert!(assessment.score <= 100);
 
-        println!(
-            "Security assessment: {} ({}/100)",
-            assessment.level, assessment.score
-        );
-        for rec in &assessment.recommendations {
-            println!("  - {}", rec);
+        // Level should be consistent with score
+        match assessment.level {
+            SecurityLevel::Basic => assert!(assessment.score <= 30),
+            SecurityLevel::Good => assert!(assessment.score > 30 && assessment.score <= 60),
+            SecurityLevel::Excellent => assert!(assessment.score > 60 && assessment.score <= 85),
+            SecurityLevel::Optimal => assert!(assessment.score > 85),
+        }
+
+        // If we have AES-NI, score should be at least Good
+        if caps.has_aes_ni() && caps.has_gcm_acceleration() {
+            assert!(
+                assessment.score > 30,
+                "AES-NI + CLMUL should give at least Good score, got {}",
+                assessment.score
+            );
+        }
+
+        // Systems without hardware acceleration should have recommendations
+        if !caps.has_aes_ni() {
+            assert!(
+                !assessment.recommendations.is_empty(),
+                "No AES-NI should produce recommendations"
+            );
         }
     }
 
@@ -1114,7 +1142,16 @@ mod tests {
         let caps = detect_capabilities();
         let throughput = caps.estimated_aes_gcm_throughput();
 
-        println!("Estimated throughput: {}", throughput);
+        // Verify throughput estimate is consistent with detected features
+        if caps.has_vaes() && caps.has_avx512() {
+            assert_eq!(throughput, ThroughputEstimate::VeryHigh);
+        } else if caps.has_aes_ni() && caps.has_avx2() {
+            assert_eq!(throughput, ThroughputEstimate::High);
+        } else if caps.has_aes_ni() {
+            assert!(matches!(throughput, ThroughputEstimate::Medium | ThroughputEstimate::High));
+        }
+        // Verify Display doesn't return empty
+        assert!(!format!("{}", throughput).is_empty());
     }
 
     #[test]
@@ -1122,9 +1159,17 @@ mod tests {
         let caps = detect_capabilities();
         let features = caps.available_features();
 
-        println!("Available features ({}):", features.len());
-        for feature in &features {
-            println!("  - {}", feature);
+        // Verify feature list is consistent with capability flags
+        if caps.has_aes_ni() {
+            // Must report at least one AES-related feature
+            assert!(
+                features.iter().any(|f| f.contains("AES")),
+                "AES capability detected but not in feature list"
+            );
+        }
+        if features.is_empty() {
+            // No features means no hardware acceleration
+            assert!(!caps.has_aes_ni(), "AES-NI set but feature list is empty");
         }
     }
 
@@ -1140,8 +1185,12 @@ mod tests {
     #[test]
     fn test_has_hardware_acceleration() {
         let result = has_hardware_acceleration();
-        println!("Has hardware acceleration: {}", result);
-        // Can't assert true/false as it depends on the machine
+        // Verify the function returns a consistent result (not random)
+        let result2 = has_hardware_acceleration();
+        assert_eq!(result, result2, "has_hardware_acceleration should be deterministic");
+        // Verify it agrees with the detailed capability detection
+        let caps = detect_capabilities();
+        assert_eq!(result, caps.has_aes_ni(), "should match detailed capability check");
     }
 
     #[test]
@@ -1459,17 +1508,17 @@ mod tests {
 
     #[test]
     fn test_benchmark_zero_duration_edge_case() {
-        // This tests the throughput calculation doesn't divide by zero
-        // In practice, duration_ns should never be 0 for real benchmarks
+        // Verify zero-duration benchmark doesn't panic and displays correctly
         let result = BenchmarkResult {
             name: "Zero Duration".to_string(),
             bytes_processed: 1024,
-            duration_ns: 0, // Edge case
+            duration_ns: 0,
             throughput_mbps: 0.0,
             iterations: 1,
         };
-        // Should not panic when displaying
-        let _ = format!("{}", result);
+        let display = format!("{}", result);
+        assert!(display.contains("Zero Duration"), "Should contain benchmark name");
+        assert!(display.contains("0.00 MB/s"), "Zero duration should show 0 MB/s throughput");
     }
 
     #[test]

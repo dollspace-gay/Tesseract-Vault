@@ -491,7 +491,7 @@ mod tests {
         let bytes = resp.to_bytes().unwrap();
         let decoded = DaemonResponse::from_bytes(&bytes).unwrap();
 
-        matches!(decoded, DaemonResponse::Success);
+        assert!(matches!(decoded, DaemonResponse::Success));
     }
 
     #[test]
@@ -601,6 +601,79 @@ mod tests {
                 assert!(mounts[0].read_only);
             }
             _ => panic!("Expected MountList variant"),
+        }
+    }
+
+    #[test]
+    fn test_command_from_invalid_bytes() {
+        // Empty bytes should fail
+        assert!(DaemonCommand::from_bytes(&[]).is_err());
+
+        // Random garbage should fail
+        assert!(DaemonCommand::from_bytes(&[0xFF, 0xFE, 0xFD]).is_err());
+
+        // Truncated valid message should fail
+        let cmd = DaemonCommand::Ping;
+        let bytes = cmd.to_bytes().unwrap();
+        if bytes.len() > 1 {
+            assert!(DaemonCommand::from_bytes(&bytes[..bytes.len() - 1]).is_err());
+        }
+    }
+
+    #[test]
+    fn test_response_from_invalid_bytes() {
+        // Empty bytes should fail
+        assert!(DaemonResponse::from_bytes(&[]).is_err());
+
+        // Random garbage should fail
+        assert!(DaemonResponse::from_bytes(&[0xFF, 0xFE, 0xFD]).is_err());
+    }
+
+    #[test]
+    fn test_response_error_serialization_roundtrip() {
+        let resp = DaemonResponse::error("detailed error message");
+        let bytes = resp.to_bytes().unwrap();
+        let decoded = DaemonResponse::from_bytes(&bytes).unwrap();
+
+        match decoded {
+            DaemonResponse::Error { message } => {
+                assert_eq!(message, "detailed error message");
+            }
+            _ => panic!("Expected Error variant"),
+        }
+    }
+
+    #[test]
+    fn test_mount_command_preserves_all_fields() {
+        let cmd = DaemonCommand::Mount {
+            container_path: PathBuf::from("/path/to/volume.crypt"),
+            mount_point: PathBuf::from("/mnt/decrypted"),
+            password: "s3cret!Pass".to_string(),
+            read_only: true,
+            hidden_offset: Some(1024),
+            hidden_password: Some("hidden_pass".to_string()),
+        };
+
+        let bytes = cmd.to_bytes().unwrap();
+        let decoded = DaemonCommand::from_bytes(&bytes).unwrap();
+
+        match decoded {
+            DaemonCommand::Mount {
+                container_path,
+                mount_point,
+                password,
+                read_only,
+                hidden_offset,
+                hidden_password,
+            } => {
+                assert_eq!(container_path, PathBuf::from("/path/to/volume.crypt"));
+                assert_eq!(mount_point, PathBuf::from("/mnt/decrypted"));
+                assert_eq!(password, "s3cret!Pass");
+                assert!(read_only);
+                assert_eq!(hidden_offset, Some(1024));
+                assert_eq!(hidden_password, Some("hidden_pass".to_string()));
+            }
+            _ => panic!("Wrong command type"),
         }
     }
 }

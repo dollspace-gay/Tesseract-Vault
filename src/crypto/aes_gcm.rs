@@ -176,4 +176,95 @@ mod tests {
             "Tampered ciphertext should fail authentication"
         );
     }
+
+    #[test]
+    fn test_encrypt_empty_plaintext() {
+        let encryptor = AesGcmEncryptor::new();
+        let key = [0u8; 32];
+        let nonce = [1u8; 12];
+
+        let ciphertext = encryptor.encrypt(&key, &nonce, &[]).unwrap();
+        // Empty plaintext should still produce auth tag (16 bytes)
+        assert_eq!(ciphertext.len(), 16, "Empty plaintext should produce 16-byte auth tag");
+
+        let decrypted = encryptor.decrypt(&key, &nonce, &ciphertext).unwrap();
+        assert!(decrypted.is_empty(), "Decrypted empty plaintext should be empty");
+    }
+
+    #[test]
+    fn test_ciphertext_size_property() {
+        let encryptor = AesGcmEncryptor::new();
+        let key = [0u8; 32];
+        let nonce = [1u8; 12];
+
+        // AES-GCM ciphertext should be plaintext + 16 bytes (auth tag)
+        for size in [1, 15, 16, 17, 256, 4096] {
+            let plaintext = vec![0x42u8; size];
+            let ciphertext = encryptor.encrypt(&key, &nonce, &plaintext).unwrap();
+            assert_eq!(
+                ciphertext.len(),
+                size + 16,
+                "Ciphertext should be plaintext_len + 16 for size {}",
+                size
+            );
+        }
+    }
+
+    #[test]
+    fn test_different_keys_different_ciphertexts() {
+        let encryptor = AesGcmEncryptor::new();
+        let key1 = [0u8; 32];
+        let key2 = [1u8; 32];
+        let nonce = [1u8; 12];
+        let plaintext = b"Same plaintext";
+
+        let ct1 = encryptor.encrypt(&key1, &nonce, plaintext).unwrap();
+        let ct2 = encryptor.encrypt(&key2, &nonce, plaintext).unwrap();
+        assert_ne!(ct1, ct2, "Different keys must produce different ciphertexts");
+    }
+
+    #[test]
+    fn test_decrypt_invalid_nonce_length() {
+        let encryptor = AesGcmEncryptor::new();
+        let key = [0u8; 32];
+        let nonce = [1u8; 12];
+        let plaintext = b"Test data";
+
+        let ciphertext = encryptor.encrypt(&key, &nonce, plaintext).unwrap();
+
+        // Decrypting with wrong nonce length should fail
+        let result = encryptor.decrypt(&key, &[1u8; 10], &ciphertext);
+        assert!(result.is_err(), "Decrypt with invalid nonce length should fail");
+
+        let result = encryptor.decrypt(&key, &[1u8; 16], &ciphertext);
+        assert!(result.is_err(), "Decrypt with 16-byte nonce should fail");
+
+        let result = encryptor.decrypt(&key, &[], &ciphertext);
+        assert!(result.is_err(), "Decrypt with empty nonce should fail");
+    }
+
+    #[test]
+    fn test_decrypt_empty_ciphertext() {
+        let encryptor = AesGcmEncryptor::new();
+        let key = [0u8; 32];
+        let nonce = [1u8; 12];
+
+        // Empty ciphertext (no auth tag) should fail
+        let result = encryptor.decrypt(&key, &nonce, &[]);
+        assert!(result.is_err(), "Empty ciphertext should fail decryption");
+    }
+
+    #[test]
+    fn test_decrypt_truncated_ciphertext() {
+        let encryptor = AesGcmEncryptor::new();
+        let key = [0u8; 32];
+        let nonce = [1u8; 12];
+        let plaintext = b"Some data to encrypt";
+
+        let ciphertext = encryptor.encrypt(&key, &nonce, plaintext).unwrap();
+
+        // Truncate to less than auth tag size
+        let result = encryptor.decrypt(&key, &nonce, &ciphertext[..10]);
+        assert!(result.is_err(), "Truncated ciphertext should fail");
+    }
 }

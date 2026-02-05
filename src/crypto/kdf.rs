@@ -233,7 +233,10 @@ mod tests {
 
         // Empty password should differ from non-empty password
         let key2 = kdf.derive_key(b"notempty", salt).unwrap();
-        assert_ne!(*key, *key2, "Empty password must derive different key from non-empty");
+        assert_ne!(
+            *key, *key2,
+            "Empty password must derive different key from non-empty"
+        );
     }
 
     #[test]
@@ -255,7 +258,11 @@ mod tests {
         let kdf = Argon2Kdf::default();
         let salt = kdf.generate_salt();
         // Salt must be at least 16 bytes for Argon2 security
-        assert!(salt.len() >= 16, "Salt must be at least 16 bytes, got {}", salt.len());
+        assert!(
+            salt.len() >= 16,
+            "Salt must be at least 16 bytes, got {}",
+            salt.len()
+        );
     }
 
     #[test]

@@ -1087,9 +1087,18 @@ mod tests {
 
         // Detection should be deterministic
         let caps2 = detect_capabilities();
-        assert_eq!(caps.vendor, caps2.vendor, "vendor detection should be deterministic");
-        assert_eq!(caps.aes_ni, caps2.aes_ni, "AES-NI detection should be deterministic");
-        assert_eq!(caps.avx2, caps2.avx2, "AVX2 detection should be deterministic");
+        assert_eq!(
+            caps.vendor, caps2.vendor,
+            "vendor detection should be deterministic"
+        );
+        assert_eq!(
+            caps.aes_ni, caps2.aes_ni,
+            "AES-NI detection should be deterministic"
+        );
+        assert_eq!(
+            caps.avx2, caps2.avx2,
+            "AVX2 detection should be deterministic"
+        );
 
         // On x86_64, we should always detect a known vendor and non-empty brand
         #[cfg(target_arch = "x86_64")]
@@ -1099,7 +1108,10 @@ mod tests {
                 "x86_64 should detect Intel or AMD, got {:?}",
                 caps.vendor
             );
-            assert!(!caps.cpu_brand.is_empty(), "x86_64 should have non-empty CPU brand");
+            assert!(
+                !caps.cpu_brand.is_empty(),
+                "x86_64 should have non-empty CPU brand"
+            );
         }
     }
 
@@ -1148,7 +1160,10 @@ mod tests {
         } else if caps.has_aes_ni() && caps.has_avx2() {
             assert_eq!(throughput, ThroughputEstimate::High);
         } else if caps.has_aes_ni() {
-            assert!(matches!(throughput, ThroughputEstimate::Medium | ThroughputEstimate::High));
+            assert!(matches!(
+                throughput,
+                ThroughputEstimate::Medium | ThroughputEstimate::High
+            ));
         }
         // Verify Display doesn't return empty
         assert!(!format!("{}", throughput).is_empty());
@@ -1187,10 +1202,17 @@ mod tests {
         let result = has_hardware_acceleration();
         // Verify the function returns a consistent result (not random)
         let result2 = has_hardware_acceleration();
-        assert_eq!(result, result2, "has_hardware_acceleration should be deterministic");
+        assert_eq!(
+            result, result2,
+            "has_hardware_acceleration should be deterministic"
+        );
         // Verify it agrees with the detailed capability detection
         let caps = detect_capabilities();
-        assert_eq!(result, caps.has_aes_ni(), "should match detailed capability check");
+        assert_eq!(
+            result,
+            caps.has_aes_ni(),
+            "should match detailed capability check"
+        );
     }
 
     #[test]
@@ -1517,8 +1539,14 @@ mod tests {
             iterations: 1,
         };
         let display = format!("{}", result);
-        assert!(display.contains("Zero Duration"), "Should contain benchmark name");
-        assert!(display.contains("0.00 MB/s"), "Zero duration should show 0 MB/s throughput");
+        assert!(
+            display.contains("Zero Duration"),
+            "Should contain benchmark name"
+        );
+        assert!(
+            display.contains("0.00 MB/s"),
+            "Zero duration should show 0 MB/s throughput"
+        );
     }
 
     #[test]

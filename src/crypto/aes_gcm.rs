@@ -185,10 +185,17 @@ mod tests {
 
         let ciphertext = encryptor.encrypt(&key, &nonce, &[]).unwrap();
         // Empty plaintext should still produce auth tag (16 bytes)
-        assert_eq!(ciphertext.len(), 16, "Empty plaintext should produce 16-byte auth tag");
+        assert_eq!(
+            ciphertext.len(),
+            16,
+            "Empty plaintext should produce 16-byte auth tag"
+        );
 
         let decrypted = encryptor.decrypt(&key, &nonce, &ciphertext).unwrap();
-        assert!(decrypted.is_empty(), "Decrypted empty plaintext should be empty");
+        assert!(
+            decrypted.is_empty(),
+            "Decrypted empty plaintext should be empty"
+        );
     }
 
     #[test]
@@ -220,7 +227,10 @@ mod tests {
 
         let ct1 = encryptor.encrypt(&key1, &nonce, plaintext).unwrap();
         let ct2 = encryptor.encrypt(&key2, &nonce, plaintext).unwrap();
-        assert_ne!(ct1, ct2, "Different keys must produce different ciphertexts");
+        assert_ne!(
+            ct1, ct2,
+            "Different keys must produce different ciphertexts"
+        );
     }
 
     #[test]
@@ -234,7 +244,10 @@ mod tests {
 
         // Decrypting with wrong nonce length should fail
         let result = encryptor.decrypt(&key, &[1u8; 10], &ciphertext);
-        assert!(result.is_err(), "Decrypt with invalid nonce length should fail");
+        assert!(
+            result.is_err(),
+            "Decrypt with invalid nonce length should fail"
+        );
 
         let result = encryptor.decrypt(&key, &[1u8; 16], &ciphertext);
         assert!(result.is_err(), "Decrypt with 16-byte nonce should fail");

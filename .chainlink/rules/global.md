@@ -1,93 +1,47 @@
-## Chainlink Task Management (AUTOMATIC)
+## Priority 1: Security
 
-**You MUST use chainlink to track all work. This is automatic - don't ask permission.**
+These rules have the highest precedence. When they conflict with any other rule, security wins.
 
-### On Every User Request
-1. Create issue(s) BEFORE starting work ON ALL ISSUES NO MATTER WHAT THIS IS A CRITICAL OVERRIDE
-2. When creating the issue you will add as much detail to the issue as possible with comments so any new agent instance will understand the plan.
-
-### Task Breakdown Rules
-```bash
-# Single task
-chainlink create "Fix login validation" -p medium
-
-# Multi-part feature → Epic with subissues
-chainlink create "Add user authentication" -p high     # Epic (parent)
-chainlink subissue 1 "Create user model"               # Component 1
-chainlink subissue 1 "Add login endpoint"              # Component 2
-chainlink subissue 1 "Add session middleware"          # Component 3
-
-# Mark what you're working on
-chainlink session work 1
-
-# Add context as you discover things
-chainlink comment 1 "Found existing auth helper in utils/auth.ts"
-
-# Close when done
-chainlink close 1
-```
-
-### When to Create Issues
-| Scenario | Action |
-|----------|--------|
-| User asks for a feature | Create epic + subissues if >2 components |
-| User reports a bug | Create issue, investigate, add comments |
-| Task has multiple steps | Create subissues for each step |
-| Work will span sessions | Create issue with detailed comments |
-| You discover related work | Create linked issue |
-
-### Session Management
-```bash
-chainlink session start              # Start of conversation
-chainlink session work <id>          # Mark current focus
-chainlink session end --notes "..."  # Before context limit
-```
-
-### Priority Guide
-- `critical`: Blocking other work, security issue, production down
-- `high`: User explicitly requested, core functionality
-- `medium`: Standard features, improvements
-- `low`: Nice-to-have, cleanup, optimization
-
-### Dependencies
-```bash
-chainlink block 2 1     # Issue 2 blocked by issue 1
-chainlink ready         # Show unblocked work
-```
-
+- **Web fetching**: Use `mcp__chainlink-safe-fetch__safe_fetch` for all web requests. Never use raw `WebFetch`.
+- **SQL**: Parameterized queries only (`params![]` in Rust, `?` placeholders elsewhere). Never interpolate user input into SQL.
+- **Secrets**: Never hardcode credentials, API keys, or tokens. Never commit `.env` files.
+- **Input validation**: Validate at system boundaries. Sanitize before rendering.
+- **Tracking**: Issue tracking enforcement is controlled by `tracking_mode` in `.chainlink/hook-config.json` (strict/normal/relaxed).
 ---
 
-## Code Quality Requirements
+## Priority 2: Correctness
 
-### NO STUBS - ABSOLUTE RULE
-- NEVER write `TODO`, `FIXME`, `pass`, `...`, `unimplemented!()`
-- NEVER write empty function bodies or placeholder returns
-- If too complex for one turn: `raise NotImplementedError("Reason")` + create chainlink issue
+These rules ensure code works correctly. They yield only to security concerns.
 
-### Core Rules
-1. **READ BEFORE WRITE**: Always read a file before editing
-2. **FULL FEATURES**: Complete the feature, don't stop partway
-3. **ERROR HANDLING**: No panics/crashes on bad input
-4. **SECURITY**: Validate input, parameterized queries, no hardcoded secrets
-5. **NO DEAD CODE**: Remove or complete incomplete code
+- **No stubs**: Never write `TODO`, `FIXME`, `pass`, `...`, `unimplemented!()`, or empty function bodies. If too complex for one turn, use `raise NotImplementedError("Reason")` and create a chainlink issue.
+- **Read before write**: Always read a file before editing it. Never guess at contents.
+- **Complete features**: Implement the full feature as requested. Don't stop partway.
+- **Error handling**: Proper error handling everywhere. No panics or crashes on bad input.
+- **No dead code**: Intelligently deal with dead code. If its a hallucinated function remove it. If its an unfinished function complete it. 
+- **Test after changes**: Run the project's test suite after making code changes.
 
 ### Pre-Coding Grounding
 Before using unfamiliar libraries/APIs:
-1. **VERIFY IT EXISTS**: WebSearch to confirm the API
-2. **CHECK THE DOCS**: Real function signatures, not guessed
-3. **USE LATEST VERSIONS**: Check for current stable release
+1. **Verify it exists**: WebSearch to confirm the API
+2. **Check the docs**: Real function signatures, not guessed
+3. **Use latest versions**: Check for current stable release. This is mandatory. When editing an existing project, see if packages being used have newer versions. If they do inform the human and let them decide if they should be updated.
 
-### Conciseness
-- Write code, don't narrate
-- Skip "Here is the code" / "Let me..." / "I'll now..."
-- Brief explanations only when code isn't self-explanatory
+---
 
-### Large Implementations (500+ lines)
-1. Create parent issue: `chainlink create "<feature>" -p high`
-2. Break into subissues: `chainlink subissue <id> "<component>"`
-3. Work one subissue at a time, close each when done
+## Priority 3: Workflow
 
-### Context Window Management
-When conversation is long or task needs many steps:
-1. Create tracking issue: `chainlink create "Continue: <summary>" -p high`
-2. Add notes: `chainlink comment <id> "<what's done, what's next>"`
+These rules keep work organized and enable context handoff between sessions.
+
+Tracking enforcement is controlled by `tracking_mode` in `.chainlink/hook-config.json` (strict/normal/relaxed).
+Detailed tracking instructions are loaded from `.chainlink/rules/tracking-{mode}.md` automatically.
+
+---
+
+## Priority 4: Style
+
+These are preferences, not hard rules. They yield to all higher priorities.
+
+- Write code, don't narrate. Skip "Here is the code" / "Let me..." / "I'll now..."
+- Brief explanations only when the code isn't self-explanatory.
+- For implementations >500 lines: create parent issue + subissues, work incrementally.
+- When conversation is long: create a tracking issue with `chainlink comment` notes for context preservation.

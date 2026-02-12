@@ -373,7 +373,7 @@ def get_dependencies(max_deps=30):
     return ""
 
 
-def build_reminder(languages, project_tree, dependencies, language_rules, global_rules, project_rules):
+def build_reminder(languages, project_tree, dependencies, language_rules, global_rules, project_rules, tracking_mode="strict", chainlink_dir=None):
     """Build the full reminder context."""
     lang_section = get_language_section(languages, language_rules)
     lang_list = ", ".join(languages) if languages else "this project"
@@ -400,6 +400,7 @@ def build_reminder(languages, project_tree, dependencies, language_rules, global
 """
 
     # Build global rules section (from .chainlink/rules/global.md)
+    # Then append/replace the tracking section based on tracking_mode
     global_section = ""
     if global_rules:
         global_section = f"\n{global_rules}\n"
@@ -466,6 +467,10 @@ If the conversation is getting long OR the task requires many more steps:
 Use `chainlink session work <id>` to mark what you're working on.
 """
 
+    # Inject tracking rules from per-mode markdown file
+    tracking_rules = load_tracking_rules(chainlink_dir, tracking_mode) if chainlink_dir else ""
+    tracking_section = f"\n{tracking_rules}\n" if tracking_rules else ""
+
     # Build project rules section (from .chainlink/rules/project.md)
     project_section = ""
     if project_rules:
@@ -475,10 +480,115 @@ Use `chainlink session work <id>` to mark what you're working on.
 ## Code Quality Requirements
 
 You are working on a {lang_list} project. Follow these requirements strictly:
-{tree_section}{deps_section}{global_section}{lang_section}{project_section}
+{tree_section}{deps_section}{global_section}{tracking_section}{lang_section}{project_section}
 </chainlink-behavioral-guard>"""
 
     return reminder
+
+
+def get_guard_marker_path(chainlink_dir):
+    """Get the path to the guard-full-sent marker file."""
+    if not chainlink_dir:
+        return None
+    cache_dir = os.path.join(chainlink_dir, '.cache')
+    return os.path.join(cache_dir, 'guard-full-sent')
+
+
+def should_send_full_guard(chainlink_dir):
+    """Check if this is the first prompt (no marker) or marker is stale."""
+    marker = get_guard_marker_path(chainlink_dir)
+    if not marker:
+        return True
+    if not os.path.exists(marker):
+        return True
+    # Re-send full guard if marker is older than 4 hours (new session likely)
+    try:
+        age = datetime.now().timestamp() - os.path.getmtime(marker)
+        if age > 4 * 3600:
+            return True
+    except OSError:
+        return True
+    return False
+
+
+def mark_full_guard_sent(chainlink_dir):
+    """Create marker file indicating full guard has been sent this session."""
+    marker = get_guard_marker_path(chainlink_dir)
+    if not marker:
+        return
+    try:
+        cache_dir = os.path.dirname(marker)
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(marker, 'w') as f:
+            f.write(str(datetime.now().timestamp()))
+    except OSError:
+        pass
+
+
+def load_tracking_mode(chainlink_dir):
+    """Read tracking_mode from .chainlink/hook-config.json. Defaults to 'strict'."""
+    if not chainlink_dir:
+        return "strict"
+    config_path = os.path.join(chainlink_dir, "hook-config.json")
+    if not os.path.isfile(config_path):
+        return "strict"
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        mode = config.get("tracking_mode", "strict")
+        if mode in ("strict", "normal", "relaxed"):
+            return mode
+    except (json.JSONDecodeError, OSError):
+        pass
+    return "strict"
+
+
+def load_tracking_rules(chainlink_dir, tracking_mode):
+    """Load the tracking rules markdown file for the given mode."""
+    if not chainlink_dir:
+        return ""
+    rules_dir = os.path.join(chainlink_dir, "rules")
+    filename = f"tracking-{tracking_mode}.md"
+    path = os.path.join(rules_dir, filename)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except (OSError, IOError):
+        return ""
+
+
+# Condensed reminders kept short — these don't need full markdown files
+CONDENSED_REMINDERS = {
+    "strict": (
+        "- **MANDATORY — Chainlink Issue Tracking**: You MUST create a chainlink issue BEFORE writing ANY code. "
+        "NO EXCEPTIONS. Use `chainlink quick \"title\" -p <priority> -l <label>` BEFORE your first Write/Edit/Bash. "
+        "If you skip this, the PreToolUse hook WILL block you. Do NOT treat this as optional.\n"
+        "- **Session**: ALWAYS use `chainlink session work <id>` to mark focus. "
+        "End with `chainlink session end --notes \"...\"`. This is NOT optional."
+    ),
+    "normal": (
+        "- **Chainlink**: Create issues before work. Use `chainlink quick` for create+label+work. Close with `chainlink close`.\n"
+        "- **Session**: Use `chainlink session work <id>`. End with `chainlink session end --notes \"...\"`."
+    ),
+    "relaxed": "",
+}
+
+
+def build_condensed_reminder(languages, tracking_mode):
+    """Build a short reminder for subsequent prompts (after full guard already sent)."""
+    lang_list = ", ".join(languages) if languages else "this project"
+    tracking_lines = CONDENSED_REMINDERS.get(tracking_mode, "")
+
+    return f"""<chainlink-behavioral-guard>
+## Quick Reminder ({lang_list})
+
+{tracking_lines}
+- **Security**: Use `mcp__chainlink-safe-fetch__safe_fetch` for web requests. Parameterized queries only.
+- **Quality**: No stubs/TODOs. Read before write. Complete features fully. Proper error handling.
+- **Testing**: Run tests after changes. Fix warnings, don't suppress them.
+
+Full rules were injected on first prompt. Use `chainlink list -s open` to see current issues.
+</chainlink-behavioral-guard>"""
 
 
 def main():
@@ -493,6 +603,14 @@ def main():
 
     # Find chainlink directory and load rules
     chainlink_dir = find_chainlink_dir()
+    tracking_mode = load_tracking_mode(chainlink_dir)
+
+    # Check if we should send full or condensed guard
+    if not should_send_full_guard(chainlink_dir):
+        languages = detect_languages()
+        print(build_condensed_reminder(languages, tracking_mode))
+        sys.exit(0)
+
     language_rules, global_rules, project_rules = load_all_rules(chainlink_dir)
 
     # Detect languages in the project
@@ -504,8 +622,11 @@ def main():
     # Get installed dependencies to prevent version hallucinations
     dependencies = get_dependencies()
 
-    # Output the reminder as plain text (gets injected as context)
-    print(build_reminder(languages, project_tree, dependencies, language_rules, global_rules, project_rules))
+    # Output the full reminder
+    print(build_reminder(languages, project_tree, dependencies, language_rules, global_rules, project_rules, tracking_mode, chainlink_dir))
+
+    # Mark that we've sent the full guard this session
+    mark_full_guard_sent(chainlink_dir)
     sys.exit(0)
 
 

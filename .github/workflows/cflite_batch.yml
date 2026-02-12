@@ -21,6 +21,11 @@ jobs:
         sanitizer: [address]
 
     steps:
+      - name: Configure Docker API compatibility
+        run: |
+          echo '{"min-api-version": "1.41"}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
       - name: Build Fuzzers (${{ matrix.sanitizer }})
         id: build
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1

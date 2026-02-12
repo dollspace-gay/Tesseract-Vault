@@ -15,6 +15,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Configure Docker API compatibility
+        run: |
+          echo '{"min-api-version": "1.41"}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
       - name: Build Fuzzers
         id: build
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1
@@ -37,6 +42,11 @@ jobs:
     needs: corpus-pruning
 
     steps:
+      - name: Configure Docker API compatibility
+        run: |
+          echo '{"min-api-version": "1.41"}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
       - name: Build Fuzzers (Coverage)
         id: build
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1

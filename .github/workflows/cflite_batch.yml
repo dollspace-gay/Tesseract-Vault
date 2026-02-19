@@ -23,7 +23,9 @@ jobs:
     steps:
       - name: Configure Docker API compatibility
         run: |
-          echo '{"min-api-version": "1.41"}' | sudo tee /etc/docker/daemon.json
+          sudo mkdir -p /etc/systemd/system/docker.service.d
+          printf '[Service]\nEnvironment="DOCKER_MIN_API_VERSION=1.41"\n' | sudo tee /etc/systemd/system/docker.service.d/api-compat.conf
+          sudo systemctl daemon-reload
           sudo systemctl restart docker
 
       - name: Build Fuzzers (${{ matrix.sanitizer }})

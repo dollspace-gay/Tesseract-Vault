@@ -336,12 +336,19 @@ impl Container {
         let mut key_slots = KeySlots::new();
         key_slots.add_slot_with_derived_key(&master_key, &hybrid_key)?;
 
-        // Create the container file
+        // Create the container file (create_new is the atomic existence check)
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .create_new(true)
-            .open(&path)?;
+            .open(&path)
+            .map_err(|e| {
+                if e.kind() == io::ErrorKind::AlreadyExists {
+                    ContainerError::AlreadyExists(path.clone())
+                } else {
+                    ContainerError::Io(e)
+                }
+            })?;
 
         // Write header
         header.write_to(&mut file)?;
@@ -531,12 +538,19 @@ impl Container {
         let mut key_slots = KeySlots::new();
         key_slots.add_slot_with_derived_key(&master_key, &hybrid_key)?;
 
-        // Create the container file
+        // Create the container file (create_new is the atomic existence check)
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .create_new(true)
-            .open(&path)?;
+            .open(&path)
+            .map_err(|e| {
+                if e.kind() == io::ErrorKind::AlreadyExists {
+                    ContainerError::AlreadyExists(path.clone())
+                } else {
+                    ContainerError::Io(e)
+                }
+            })?;
 
         // Write header
         header.write_to(&mut file)?;

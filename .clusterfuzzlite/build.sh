@@ -4,6 +4,9 @@
 
 cd $SRC/tesseract-vault
 
+# Ensure output directory exists (needed for DinD path mapping)
+mkdir -p "$OUT"
+
 # Build all fuzz targets in release mode with optimizations
 # -O enables release mode for faster fuzzing
 cargo fuzz build -O

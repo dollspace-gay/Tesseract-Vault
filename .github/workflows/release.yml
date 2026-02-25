@@ -81,6 +81,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
+          retention-days: 1
           path: |
             ${{ matrix.asset_name }}
             ${{ matrix.asset_name }}.sha256
@@ -118,6 +119,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: signed-artifacts
+          retention-days: 1
           path: artifacts/
 
   release:

@@ -74,7 +74,7 @@ jobs:
         with:
           name: crash-${{ matrix.target }}
           path: fuzz/artifacts/${{ matrix.target }}/
-          retention-days: 30
+          retention-days: 1
 
   fuzz-summary:
     name: Fuzzing Summary

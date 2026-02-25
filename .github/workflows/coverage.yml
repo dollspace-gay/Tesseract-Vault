@@ -65,4 +65,4 @@ jobs:
         with:
           name: coverage-report
           path: coverage-html/
-          retention-days: 30
+          retention-days: 1

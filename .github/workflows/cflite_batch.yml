@@ -14,7 +14,7 @@ permissions:
 jobs:
   batch-fuzzing:
     name: Batch Fuzzing
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     strategy:
       fail-fast: false
       matrix:

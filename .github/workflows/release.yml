@@ -26,12 +26,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: self-hosted
+          - os: [self-hosted, Linux]
             target: x86_64-unknown-linux-gnu
             artifact_name: tesseract-vault
             asset_name: tesseract-vault-linux-x86_64
             container: rust:latest
-          - os: self-hosted
+          - os: [self-hosted, Windows]
             target: x86_64-pc-windows-msvc
             artifact_name: tesseract-vault.exe
             asset_name: tesseract-vault-windows-x86_64.exe
@@ -89,7 +89,7 @@ jobs:
   sign:
     name: Sign artifacts with Sigstore
     needs: build
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
     steps:
       - name: Download all artifacts
@@ -125,7 +125,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: sign
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
     steps:
       - name: Checkout repository

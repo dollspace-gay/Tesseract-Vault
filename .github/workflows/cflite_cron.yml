@@ -12,7 +12,7 @@ permissions:
 jobs:
   corpus-pruning:
     name: Corpus Pruning
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
 
     steps:
       - name: Configure Docker API compatibility
@@ -46,7 +46,7 @@ jobs:
 
   coverage:
     name: Coverage Report
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     needs: corpus-pruning
 
     steps:

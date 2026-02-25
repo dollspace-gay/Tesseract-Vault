@@ -16,7 +16,7 @@ env:
 jobs:
   miri:
     name: Miri UB Detection
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 360
 
     steps:

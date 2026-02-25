@@ -15,7 +15,7 @@ env:
 jobs:
   rustfmt:
     name: Format Check
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
 
     steps:
@@ -32,7 +32,7 @@ jobs:
 
   clippy:
     name: Clippy Lint
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
 
     steps:
@@ -62,7 +62,7 @@ jobs:
 
   clippy-windows:
     name: Clippy Lint (Windows)
-    runs-on: self-hosted
+    runs-on: [self-hosted, Windows]
 
     steps:
       - name: Checkout repository

@@ -19,7 +19,7 @@ env:
 jobs:
   proptest:
     name: Proptest Property-Based Tests
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
 
     steps:
@@ -60,7 +60,7 @@ jobs:
 
   proptest-windows:
     name: Proptest (Windows)
-    runs-on: self-hosted
+    runs-on: [self-hosted, Windows]
 
     steps:
       - name: Checkout repository

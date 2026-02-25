@@ -16,7 +16,7 @@ env:
 jobs:
   kani-config:
     name: Config & Constants
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 360
 
     steps:
@@ -40,7 +40,7 @@ jobs:
 
   kani-nonce:
     name: Nonce Safety (Critical)
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 360
 
     steps:
@@ -61,7 +61,7 @@ jobs:
 
   kani-memory:
     name: Memory Protection
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 360
 
     steps:
@@ -85,7 +85,7 @@ jobs:
 
   kani-volume:
     name: Volume Header
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 360
 
     steps:
@@ -114,7 +114,7 @@ jobs:
 
   kani-daemon:
     name: Daemon IPC Protocol
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 360
 
     steps:
@@ -149,7 +149,7 @@ jobs:
 
   kani-keyslot:
     name: Key Slot Management
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 360
 
     steps:

@@ -19,7 +19,7 @@ env:
 jobs:
   dudect:
     name: DudeCT Timing Analysis
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
 
     steps:
@@ -62,7 +62,7 @@ jobs:
 
   dudect-windows:
     name: DudeCT (Windows)
-    runs-on: self-hosted
+    runs-on: [self-hosted, Windows]
 
     steps:
       - name: Checkout repository
@@ -84,9 +84,11 @@ jobs:
 
       - name: Run DudeCT timing analysis
         run: |
-          # Run with timeout on Windows
+          # Run with timeout on Windows (300s max)
           # Use --no-default-features for consistency (no GUI needed for timing tests)
           $proc = Start-Process -FilePath "cargo" -ArgumentList "bench --bench constant_time --no-default-features" -PassThru -NoNewWindow
           Start-Sleep -Seconds 300
           if (!$proc.HasExited) { $proc.Kill() }
         shell: powershell
+        env:
+          DUDECT_TIMEOUT_SECS: 30

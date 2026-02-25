@@ -19,7 +19,7 @@ env:
 jobs:
   fuzz:
     name: Fuzz Testing
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
 
     strategy:
@@ -78,7 +78,7 @@ jobs:
 
   fuzz-summary:
     name: Fuzzing Summary
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
     needs: fuzz
     if: always()

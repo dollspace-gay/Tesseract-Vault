@@ -16,7 +16,7 @@ env:
 jobs:
   nist-cavp-verify:
     name: NIST CAVP Test Vectors
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
     timeout-minutes: 30
 

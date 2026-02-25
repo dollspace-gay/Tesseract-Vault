@@ -16,7 +16,7 @@ env:
 jobs:
   loom:
     name: Loom Concurrency Tests
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
     timeout-minutes: 30
 

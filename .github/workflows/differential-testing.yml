@@ -19,7 +19,7 @@ env:
 jobs:
   differential-tests:
     name: Differential Tests
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     container: rust:latest
 
     steps:
@@ -59,7 +59,7 @@ jobs:
 
   differential-tests-windows:
     name: Differential Tests (Windows)
-    runs-on: self-hosted
+    runs-on: [self-hosted, Windows]
 
     steps:
       - name: Checkout repository

@@ -96,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unused `bincode` dependency from fuzz crate
 
 ### Fixed
+- Move GitHub Actions workflows from hosted to self-hosted runners (#271)
 - Fix ClusterFuzzLite Docker API compat workaround (daemon.json approach failed) (#270)
 - Fix ClusterFuzzLite Docker API version mismatch in CI workflows (#269)
 - Race condition in concurrent filesystem operations - added inode table lock to protect read-modify-write cycles on shared inode blocks (32 inodes per 4KB block)

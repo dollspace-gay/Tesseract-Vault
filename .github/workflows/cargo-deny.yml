@@ -18,7 +18,7 @@ env:
 jobs:
   cargo-deny:
     name: Supply Chain Security
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     strategy:
       matrix:
@@ -41,7 +41,7 @@ jobs:
   # Run all checks together for a quick summary
   cargo-deny-all:
     name: All Checks Summary
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Checkout repository

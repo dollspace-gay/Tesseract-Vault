@@ -19,7 +19,7 @@ env:
 jobs:
   proptest:
     name: Proptest Property-Based Tests
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Checkout repository
@@ -59,7 +59,7 @@ jobs:
 
   proptest-windows:
     name: Proptest (Windows)
-    runs-on: windows-latest
+    runs-on: self-hosted
 
     steps:
       - name: Checkout repository

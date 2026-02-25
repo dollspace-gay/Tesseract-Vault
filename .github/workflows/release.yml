@@ -25,11 +25,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: self-hosted
             target: x86_64-unknown-linux-gnu
             artifact_name: tesseract-vault
             asset_name: tesseract-vault-linux-x86_64
-          - os: windows-latest
+          - os: self-hosted
             target: x86_64-pc-windows-msvc
             artifact_name: tesseract-vault.exe
             asset_name: tesseract-vault-windows-x86_64.exe
@@ -41,7 +41,7 @@ jobs:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -62,13 +62,13 @@ jobs:
         run: cargo build --release --bin tesseract-vault --target ${{ matrix.target }}
 
       - name: Prepare artifact (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
           sha256sum ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
 
       - name: Prepare artifact (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.target == 'x86_64-pc-windows-msvc'
         shell: pwsh
         run: |
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" "${{ matrix.asset_name }}"

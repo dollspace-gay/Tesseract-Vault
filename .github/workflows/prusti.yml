@@ -16,7 +16,7 @@ env:
 jobs:
   prusti-verify:
     name: Prusti Deductive Verification
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 60
     continue-on-error: true  # Prusti is still being integrated
 

@@ -16,6 +16,7 @@ jobs:
   security-audit:
     name: Supply Chain Security Audit
     runs-on: self-hosted
+    container: rust:latest
     timeout-minutes: 10
 
     steps:

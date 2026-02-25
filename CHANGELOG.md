@@ -96,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unused `bincode` dependency from fuzz crate
 
 ### Fixed
+- Verify workflow YAML validity and local build (#272)
 - Move GitHub Actions workflows from hosted to self-hosted runners (#271)
 - Fix ClusterFuzzLite Docker API compat workaround (daemon.json approach failed) (#270)
 - Fix ClusterFuzzLite Docker API version mismatch in CI workflows (#269)

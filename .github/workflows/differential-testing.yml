@@ -20,6 +20,7 @@ jobs:
   differential-tests:
     name: Differential Tests
     runs-on: self-hosted
+    container: rust:latest
 
     steps:
       - name: Checkout repository

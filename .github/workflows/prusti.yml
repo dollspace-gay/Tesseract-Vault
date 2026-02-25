@@ -17,6 +17,7 @@ jobs:
   prusti-verify:
     name: Prusti Deductive Verification
     runs-on: self-hosted
+    container: rust:latest
     timeout-minutes: 60
     continue-on-error: true  # Prusti is still being integrated
 
@@ -26,8 +27,8 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libglib2.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libcairo2-dev libpango1.0-dev libxdo-dev
+          apt-get update
+          apt-get install -y libgtk-3-dev libglib2.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libcairo2-dev libpango1.0-dev libxdo-dev
 
       - name: Install Rust nightly toolchain
         uses: dtolnay/rust-toolchain@nightly

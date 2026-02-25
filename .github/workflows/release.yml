@@ -22,6 +22,7 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     strategy:
       matrix:
         include:
@@ -29,6 +30,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: tesseract-vault
             asset_name: tesseract-vault-linux-x86_64
+            container: rust:latest
           - os: self-hosted
             target: x86_64-pc-windows-msvc
             artifact_name: tesseract-vault.exe
@@ -43,8 +45,8 @@ jobs:
       - name: Install Linux dependencies
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          apt-get update
+          apt-get install -y \
             pkg-config \
             libfuse3-dev \
             libglib2.0-dev \
@@ -87,6 +89,7 @@ jobs:
     name: Sign artifacts with Sigstore
     needs: build
     runs-on: self-hosted
+    container: rust:latest
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -121,6 +124,7 @@ jobs:
     name: Create GitHub Release
     needs: sign
     runs-on: self-hosted
+    container: rust:latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

@@ -20,6 +20,7 @@ jobs:
   proptest:
     name: Proptest Property-Based Tests
     runs-on: self-hosted
+    container: rust:latest
 
     steps:
       - name: Checkout repository

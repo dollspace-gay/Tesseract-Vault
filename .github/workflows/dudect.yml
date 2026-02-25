@@ -20,6 +20,7 @@ jobs:
   dudect:
     name: DudeCT Timing Analysis
     runs-on: self-hosted
+    container: rust:latest
 
     steps:
       - name: Checkout repository

@@ -16,6 +16,7 @@ jobs:
   coverage:
     name: Generate Coverage Report
     runs-on: self-hosted
+    container: rust:latest
 
     steps:
       - name: Checkout repository

@@ -12,6 +12,7 @@ jobs:
   dco-check:
     name: DCO Sign-Off Check
     runs-on: self-hosted
+    container: rust:latest
 
     steps:
       - name: Checkout repository

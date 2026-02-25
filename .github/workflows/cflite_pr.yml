@@ -24,6 +24,15 @@ jobs:
           sudo systemctl daemon-reload
           sudo systemctl restart docker
 
+      - name: Fix DinD workspace path
+        run: |
+          # CFL Docker action maps workspace to /github/workspace internally,
+          # but inner compile container mounts from HOST via Docker socket.
+          # Create symlink so /github/workspace on HOST points to real workspace.
+          sudo rm -rf /github/workspace
+          sudo mkdir -p /github
+          sudo ln -sfn "$GITHUB_WORKSPACE" /github/workspace
+
       - name: Build Fuzzers (${{ matrix.sanitizer }})
         id: build
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1

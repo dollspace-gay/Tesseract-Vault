@@ -22,6 +22,12 @@ jobs:
           sudo systemctl daemon-reload
           sudo systemctl restart docker
 
+      - name: Fix DinD workspace path
+        run: |
+          sudo rm -rf /github/workspace
+          sudo mkdir -p /github
+          sudo ln -sfn "$GITHUB_WORKSPACE" /github/workspace
+
       - name: Build Fuzzers
         id: build
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1
@@ -50,6 +56,12 @@ jobs:
           printf '[Service]\nEnvironment="DOCKER_MIN_API_VERSION=1.41"\n' | sudo tee /etc/systemd/system/docker.service.d/api-compat.conf
           sudo systemctl daemon-reload
           sudo systemctl restart docker
+
+      - name: Fix DinD workspace path
+        run: |
+          sudo rm -rf /github/workspace
+          sudo mkdir -p /github
+          sudo ln -sfn "$GITHUB_WORKSPACE" /github/workspace
 
       - name: Build Fuzzers (Coverage)
         id: build

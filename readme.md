@@ -680,3 +680,4 @@ Found a bug or security issue?
 ---
 
 **⚠️ Disclaimer**: This software is provided "as is" without warranty. Always maintain backups of important data. While Tesseract uses industry-standard cryptography, no encryption is absolutely unbreakable.
+Does anyone actually read this?

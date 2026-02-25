@@ -32,6 +32,9 @@ jobs:
           sudo rm -rf /github/workspace
           sudo mkdir -p /github
           sudo ln -sfn "$GITHUB_WORKSPACE" /github/workspace
+          # Pre-create build-out dir so the compile script can cp into it
+          # before our build.sh runs
+          mkdir -p /github/workspace/build-out
 
       - name: Build Fuzzers (${{ matrix.sanitizer }})
         id: build

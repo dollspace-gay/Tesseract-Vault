@@ -66,14 +66,19 @@ jobs:
     defaults:
       run:
         shell: cmd
+    env:
+      CARGO_HOME: C:\cargo
+      RUSTUP_HOME: C:\rustup
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Add Git Bash to PATH
+      - name: Add Git Bash and Cargo to PATH
         shell: cmd
-        run: echo C:\Program Files\Git\bin>>"%GITHUB_PATH%"
+        run: |
+          echo C:\Program Files\Git\bin>>"%GITHUB_PATH%"
+          echo C:\cargo\bin>>"%GITHUB_PATH%"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

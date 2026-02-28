@@ -55,10 +55,19 @@ jobs:
             libdbus-1-dev \
             libsecret-1-dev
 
-      - name: Add Git Bash to PATH (Windows)
+      - name: Add Git Bash and Cargo to PATH (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: echo C:\Program Files\Git\bin>>"%GITHUB_PATH%"
+        run: |
+          echo C:\Program Files\Git\bin>>"%GITHUB_PATH%"
+          echo C:\cargo\bin>>"%GITHUB_PATH%"
+
+      - name: Set Rust env (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          echo CARGO_HOME=C:\cargo>> "%GITHUB_ENV%"
+          echo RUSTUP_HOME=C:\rustup>> "%GITHUB_ENV%"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

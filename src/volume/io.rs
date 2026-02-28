@@ -49,11 +49,12 @@
 //! - On write: Modify chunk in cache, mark as dirty
 //! - Dirty chunks are encrypted and written back on flush or eviction
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
 use std::pin::Pin;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use lru::LruCache;
 use thiserror::Error;
@@ -422,6 +423,12 @@ pub struct VolumeIO {
     /// LRU cache for decrypted chunks
     cache: RwLock<LruCache<u64, CachedChunk>>,
 
+    /// Per-chunk locks for atomic read-modify-write operations.
+    /// Without this, two threads writing to different offsets within the same
+    /// chunk would race: both read the chunk, modify their portion locally,
+    /// then overwrite each other's changes on put_chunk_dirty.
+    chunk_locks: RwLock<HashMap<u64, Arc<Mutex<()>>>>,
+
     /// Volume size in bytes
     volume_size: u64,
 
@@ -483,10 +490,32 @@ impl VolumeIO {
             cipher,
             backend: Arc::new(RwLock::new(backend)),
             cache: RwLock::new(LruCache::new(capacity)),
+            chunk_locks: RwLock::new(HashMap::new()),
             volume_size,
             chunk_size,
             sector_size,
         })
+    }
+
+    /// Returns a per-chunk mutex for serializing read-modify-write operations.
+    ///
+    /// Multiple filesystem blocks can map to the same volume chunk. Without
+    /// per-chunk locking, concurrent writes to different blocks within the same
+    /// chunk race: both read the chunk, modify their portion, then overwrite
+    /// each other's changes.
+    fn chunk_lock(&self, chunk_id: u64) -> Arc<Mutex<()>> {
+        // Fast path: check if lock already exists
+        if let Ok(locks) = self.chunk_locks.read() {
+            if let Some(lock) = locks.get(&chunk_id) {
+                return Arc::clone(lock);
+            }
+        }
+        // Slow path: create new lock
+        let mut locks = self
+            .chunk_locks
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        Arc::clone(locks.entry(chunk_id).or_insert_with(|| Arc::new(Mutex::new(()))))
     }
 
     /// Reads data from the volume at the given offset
@@ -574,7 +603,12 @@ impl VolumeIO {
 
         // Write to each chunk in the range
         for chunk_id in range.chunk_ids() {
-            // Get chunk (read-modify-write pattern)
+            // Lock this chunk to make the read-modify-write atomic.
+            // Without this, two threads writing to different offsets in the
+            // same chunk would race and lose each other's updates.
+            let lock = self.chunk_lock(chunk_id);
+            let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+
             let mut chunk_data = self.get_chunk(chunk_id)?;
 
             // Calculate the portion of this chunk to write

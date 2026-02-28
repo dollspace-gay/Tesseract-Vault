@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bump ml-dsa 0.1.0-rc.2 → 0.1.0-rc.4** — fixes signature malleability vulnerability where duplicate hint indices were incorrectly accepted (`<=` instead of `<` in monotonic check). Affects all ML-DSA security levels. (RUSTSEC advisory, severity: Medium)
 
 ### Changed
+- Fix coverage workflow hashFiles failure (#281)
 - Set CARGO_HOME/RUSTUP_HOME for Windows runner (#280)
 - Set default shell to cmd for Windows jobs (#279)
 - Fix pwsh not found - use powershell shell (#278)

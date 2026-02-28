@@ -19,6 +19,9 @@ jobs:
     container: rust:latest
 
     steps:
+      - name: Fix workspace permissions
+        run: chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE || true
+
       - name: Checkout repository
         uses: actions/checkout@v4
 

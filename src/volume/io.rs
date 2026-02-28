@@ -511,11 +511,12 @@ impl VolumeIO {
             }
         }
         // Slow path: create new lock
-        let mut locks = self
-            .chunk_locks
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
-        Arc::clone(locks.entry(chunk_id).or_insert_with(|| Arc::new(Mutex::new(()))))
+        let mut locks = self.chunk_locks.write().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(
+            locks
+                .entry(chunk_id)
+                .or_insert_with(|| Arc::new(Mutex::new(()))),
+        )
     }
 
     /// Reads data from the volume at the given offset

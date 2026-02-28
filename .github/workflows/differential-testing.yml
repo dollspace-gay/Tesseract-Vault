@@ -91,12 +91,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-diff-
 
-      # Windows DLL locking issues - ensure clean build
-      - name: Clean target directory
-        run: cargo clean
-        continue-on-error: true
+      - name: Build differential tests
+        run: cargo test --test differential_tests --release --no-default-features --features "post-quantum compression ctrlc" --no-run
+        env:
+          RUST_BACKTRACE: 1
 
       - name: Run differential tests
         run: cargo test --test differential_tests --release --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
         env:
           PROPTEST_CASES: 50
+          RUST_BACKTRACE: 1

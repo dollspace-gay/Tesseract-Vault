@@ -92,12 +92,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-proptest-
 
-      # Windows DLL locking issues - ensure clean build
-      - name: Clean target directory
-        run: cargo clean
-        continue-on-error: true
+      - name: Build proptest encryption tests
+        run: cargo test --test proptest_encryption --release --no-default-features --features "post-quantum compression ctrlc" --no-run
+        env:
+          RUST_BACKTRACE: 1
 
       - name: Run proptest encryption tests
         run: cargo test --test proptest_encryption --release --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
         env:
           PROPTEST_CASES: 100
+          RUST_BACKTRACE: 1

@@ -2765,7 +2765,7 @@ mod tests {
 
     #[test]
     fn test_container_already_exists() {
-        let path = temp_path("already_exists");
+        let path = temp_path("container_already_exists");
         cleanup(&path);
 
         // Create first container

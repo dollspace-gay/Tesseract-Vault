@@ -3,6 +3,12 @@
 
 FROM gcr.io/oss-fuzz-base/base-builder-rust
 
+# Patch compile script to create $OUT directory before copying into it.
+# The base image compile script does `cp llvm-symbolizer $OUT/` before
+# running our build.sh, which fails in ClusterFuzzLite DinD setups where
+# $OUT is a volume-mounted path that doesn't exist yet.
+RUN sed -i '1a mkdir -p "${OUT:-/out}"' /usr/local/bin/compile
+
 # Copy project source
 COPY . $SRC/tesseract-vault
 

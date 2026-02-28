@@ -69,8 +69,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Add Git Bash to PATH
-        shell: pwsh
-        run: echo "C:\Program Files\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: cmd
+        run: echo C:\Program Files\Git\bin>>"%GITHUB_PATH%"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

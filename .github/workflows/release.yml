@@ -65,7 +65,13 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build release binary
+      - name: Build release binary (Linux)
+        if: runner.os == 'Linux'
+        run: cargo build --release --bin tesseract-vault --target ${{ matrix.target }}
+
+      - name: Build release binary (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
         run: cargo build --release --bin tesseract-vault --target ${{ matrix.target }}
 
       - name: Prepare artifact (Linux)
@@ -76,11 +82,10 @@ jobs:
 
       - name: Prepare artifact (Windows)
         if: matrix.target == 'x86_64-pc-windows-msvc'
-        shell: pwsh
+        shell: cmd
         run: |
-          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" "${{ matrix.asset_name }}"
-          $hash = (Get-FileHash -Algorithm SHA256 "${{ matrix.asset_name }}").Hash.ToLower()
-          "$hash  ${{ matrix.asset_name }}" | Out-File -Encoding utf8 "${{ matrix.asset_name }}.sha256"
+          copy "target\${{ matrix.target }}\release\${{ matrix.artifact_name }}" "${{ matrix.asset_name }}"
+          certutil -hashfile "${{ matrix.asset_name }}" SHA256 | findstr /v "hash" > "${{ matrix.asset_name }}.sha256"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

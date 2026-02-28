@@ -63,6 +63,9 @@ jobs:
   clippy-windows:
     name: Clippy Lint (Windows)
     runs-on: [self-hosted, Windows]
+    defaults:
+      run:
+        shell: cmd
 
     steps:
       - name: Checkout repository
@@ -89,6 +92,4 @@ jobs:
             ${{ runner.os }}-cargo-lint-
 
       - name: Run Clippy
-        run: |
-          # Run clippy with warnings as errors (includes GUI on Windows)
-          cargo clippy --no-default-features --features "post-quantum compression ctrlc" -- -D warnings
+        run: cargo clippy --no-default-features --features "post-quantum compression ctrlc" -- -D warnings

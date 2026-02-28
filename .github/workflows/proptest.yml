@@ -61,6 +61,9 @@ jobs:
   proptest-windows:
     name: Proptest (Windows)
     runs-on: [self-hosted, Windows]
+    defaults:
+      run:
+        shell: cmd
 
     steps:
       - name: Checkout repository
@@ -90,9 +93,6 @@ jobs:
         continue-on-error: true
 
       - name: Run proptest encryption tests
-        run: |
-          # Enable core features but skip GUI (requires Windows SDK setup)
-          # post-quantum, compression, ctrlc needed for binary to compile
-          cargo test --test proptest_encryption --release --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
+        run: cargo test --test proptest_encryption --release --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
         env:
           PROPTEST_CASES: 100

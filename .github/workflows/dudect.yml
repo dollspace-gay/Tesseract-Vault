@@ -63,6 +63,9 @@ jobs:
   dudect-windows:
     name: DudeCT (Windows)
     runs-on: [self-hosted, Windows]
+    defaults:
+      run:
+        shell: cmd
 
     steps:
       - name: Checkout repository
@@ -88,11 +91,10 @@ jobs:
 
       - name: Run DudeCT timing analysis
         run: |
-          # Run with timeout on Windows (300s max)
-          # Use --no-default-features for consistency (no GUI needed for timing tests)
-          $proc = Start-Process -FilePath "cargo" -ArgumentList "bench --bench constant_time --no-default-features" -PassThru -NoNewWindow
-          Start-Sleep -Seconds 300
-          if (!$proc.HasExited) { $proc.Kill() }
-        shell: powershell
+          REM Run with timeout on Windows (300s max)
+          REM Use --no-default-features for consistency (no GUI needed for timing tests)
+          start /B cargo bench --bench constant_time --no-default-features
+          timeout /t 300 /nobreak >nul
+          taskkill /F /IM cargo.exe >nul 2>&1
         env:
           DUDECT_TIMEOUT_SECS: 30

@@ -11,6 +11,12 @@ on:
 permissions:
   contents: read
 
+# All CFL workflows share a host-global /github/workspace symlink.
+# Concurrent runs on different self-hosted runners clobber each other.
+concurrency:
+  group: clusterfuzzlite
+  cancel-in-progress: false
+
 jobs:
   batch-fuzzing:
     name: Batch Fuzzing

@@ -11,6 +11,10 @@ mkdir -p "$OUT"
 # -O enables release mode for faster fuzzing
 cargo fuzz build -O
 
+# Re-ensure output directory exists after long cargo build
+# (DinD volume mounts can be disrupted by concurrent runner symlink changes)
+mkdir -p "$OUT"
+
 # Copy all built fuzz targets to the output directory
 FUZZ_TARGET_OUTPUT_DIR=fuzz/target/x86_64-unknown-linux-gnu/release
 for f in fuzz/fuzz_targets/*.rs; do

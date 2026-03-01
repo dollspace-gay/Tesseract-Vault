@@ -16,41 +16,16 @@ on:
 permissions:
   contents: read
 
-# All CFL workflows share a host-global /github/workspace symlink.
-# Concurrent runs on different self-hosted runners clobber each other.
-concurrency:
-  group: clusterfuzzlite
-  cancel-in-progress: false
-
 jobs:
   batch-fuzzing:
     name: Batch Fuzzing
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         sanitizer: [address]
 
     steps:
-      - name: Configure Docker API compatibility
-        run: |
-          sudo mkdir -p /etc/systemd/system/docker.service.d
-          printf '[Service]\nEnvironment="DOCKER_MIN_API_VERSION=1.41"\n' | sudo tee /etc/systemd/system/docker.service.d/api-compat.conf
-          sudo systemctl daemon-reload
-          sudo systemctl restart docker
-
-      - name: Fix DinD workspace path
-        run: |
-          # CFL Docker action maps workspace to /github/workspace internally,
-          # but inner compile container mounts from HOST via Docker socket.
-          # Create symlink so /github/workspace on HOST points to real workspace.
-          sudo rm -rf /github/workspace
-          sudo mkdir -p /github
-          sudo ln -sfn "$GITHUB_WORKSPACE" /github/workspace
-          # Pre-create build-out dir so the compile script can cp into it
-          # before our build.sh runs
-          mkdir -p /github/workspace/build-out
-
       - name: Build Fuzzers (${{ matrix.sanitizer }})
         id: build
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1

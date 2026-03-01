@@ -102,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unused `bincode` dependency from fuzz crate
 
 ### Fixed
+- Fix coverage workflow by removing hashFiles from cache key (#290)
 - Fix coverage hashFiles by restoring chmod after checkout (#289)
 - Revert security audit workflow to GitHub-hosted runner (#288)
 - Revert CFL batch fuzzing workflow to GitHub-hosted runner (#287)

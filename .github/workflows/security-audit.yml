@@ -15,7 +15,7 @@ permissions:
 jobs:
   security-audit:
     name: Supply Chain Security Audit
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     container: rust:latest
     timeout-minutes: 10
 

@@ -24,6 +24,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Fix workspace permissions for host runner
+        run: chmod -R a+rX $GITHUB_WORKSPACE || true
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 

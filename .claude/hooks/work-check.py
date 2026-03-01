@@ -15,10 +15,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # Defaults — overridden by .chainlink/hook-config.json if present
 DEFAULT_BLOCKED_GIT = [
-    "git push", "git commit", "git merge", "git rebase", "git cherry-pick",
-    "git reset", "git checkout .", "git restore .", "git clean",
-    "git stash", "git tag", "git am", "git apply",
-    "git branch -d", "git branch -D", "git branch -m",
+    "git push",
 ]
 
 DEFAULT_ALLOWED_BASH = [

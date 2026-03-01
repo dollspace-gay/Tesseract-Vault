@@ -5,3 +5,4 @@ target/
 # Test vector directories (downloaded from external sources)
 tests/wycheproof/
 tests/nist_cavp/
+.chainlink/issues.db

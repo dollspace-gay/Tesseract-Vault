@@ -19,11 +19,11 @@ jobs:
     container: rust:latest
 
     steps:
-      - name: Fix workspace permissions
-        run: chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE || true
-
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Fix workspace permissions for host runner
+        run: chmod -R a+rX $GITHUB_WORKSPACE || true
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

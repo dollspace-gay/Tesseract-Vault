@@ -3,6 +3,11 @@ name: ClusterFuzzLite Batch Fuzzing
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'fuzz/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
   schedule:
     # Run every 6 hours for continuous corpus building
     - cron: '0 */6 * * *'

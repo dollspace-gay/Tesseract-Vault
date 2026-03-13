@@ -150,9 +150,7 @@ mod tests {
             let r_stopper = Arc::clone(&running);
 
             // Monitor thread: read flag
-            let monitor = thread::spawn(move || {
-                r_monitor.load(Ordering::Acquire)
-            });
+            let monitor = thread::spawn(move || r_monitor.load(Ordering::Acquire));
 
             // Stopper thread: set flag to false
             let stopper = thread::spawn(move || {
@@ -372,7 +370,11 @@ mod tests {
 
             // active is 0 or 1 (never negative due to saturating_sub)
             // It can't be > 1 because at most 1 allocation happened
-            assert!(active <= 1, "active_allocations must be <= 1, got {}", active);
+            assert!(
+                active <= 1,
+                "active_allocations must be <= 1, got {}",
+                active
+            );
         });
     }
 }
@@ -400,7 +402,9 @@ mod regular_tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         let alloc = AtomicU64::new(5);
         let dealloc = AtomicU64::new(3);
-        let active = alloc.load(Ordering::Relaxed).saturating_sub(dealloc.load(Ordering::Relaxed));
+        let active = alloc
+            .load(Ordering::Relaxed)
+            .saturating_sub(dealloc.load(Ordering::Relaxed));
         assert_eq!(active, 2);
     }
 }

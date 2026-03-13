@@ -26,6 +26,7 @@ pub mod io;
 pub mod keyslot;
 #[cfg(kani)]
 mod keyslot_kani;
+mod loom_tests;
 pub mod manager;
 #[cfg(feature = "post-quantum")]
 pub mod migration;
@@ -34,7 +35,6 @@ pub mod operations;
 pub mod remote_wipe;
 pub mod sector;
 pub mod volumeio_fs;
-mod loom_tests;
 
 pub use automount::{
     AutoMountAuth, AutoMountConfig, AutoMountService, VolumeConfig, VolumeConfigBuilder,

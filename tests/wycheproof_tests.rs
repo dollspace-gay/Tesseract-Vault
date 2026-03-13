@@ -14,9 +14,7 @@ use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
 
 // ML-KEM imports — route through project's crypto::pqc wrappers
 #[cfg(feature = "post-quantum")]
-use tesseract_lib::crypto::pqc::{
-    decapsulate, encapsulate, validate_encapsulation_key,
-};
+use tesseract_lib::crypto::pqc::{decapsulate, encapsulate, validate_encapsulation_key};
 
 /// Wycheproof test group structure
 #[derive(Debug, Deserialize)]
@@ -632,20 +630,18 @@ fn test_mlkem_1024_decaps_validation_wycheproof() {
             let decaps_result = decapsulate(&dk_bytes, &ct_bytes);
 
             match test.result {
-                TestResult::Valid => {
-                    match decaps_result {
-                        Ok(_ss) => {
-                            passed += 1;
-                        }
-                        Err(e) => {
-                            println!(
-                                "Test {} FAILED: Valid decapsulation failed: {}",
-                                test.tc_id, e
-                            );
-                            failed += 1;
-                        }
+                TestResult::Valid => match decaps_result {
+                    Ok(_ss) => {
+                        passed += 1;
                     }
-                }
+                    Err(e) => {
+                        println!(
+                            "Test {} FAILED: Valid decapsulation failed: {}",
+                            test.tc_id, e
+                        );
+                        failed += 1;
+                    }
+                },
                 TestResult::Invalid => {
                     // ML-KEM decapsulation uses implicit rejection — it never fails
                     // for correctly-sized inputs. Invalid ciphertexts return a

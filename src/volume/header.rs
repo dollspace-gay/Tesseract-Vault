@@ -605,11 +605,7 @@ impl VolumeHeader {
 /// NOT for checksum verification.
 #[cfg(kani)]
 impl VolumeHeader {
-    pub(crate) fn kani_new(
-        pq_algorithm: PqAlgorithm,
-        pq_metadata_size: u32,
-        flags: u8,
-    ) -> Self {
+    pub(crate) fn kani_new(pq_algorithm: PqAlgorithm, pq_metadata_size: u32, flags: u8) -> Self {
         Self {
             magic: MAGIC,
             version: VERSION,

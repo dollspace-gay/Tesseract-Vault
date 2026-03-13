@@ -325,7 +325,11 @@ fn test_nist_cavp_aes_gcm_encrypt_256() {
             total_tests += 1;
 
             // Convert key to fixed-size array
-            let key_array: &[u8; 32] = test.key.as_slice().try_into().expect("Key must be 32 bytes");
+            let key_array: &[u8; 32] = test
+                .key
+                .as_slice()
+                .try_into()
+                .expect("Key must be 32 bytes");
 
             // Encrypt through project encryptor
             let result = if test.aad.is_empty() {
@@ -425,7 +429,11 @@ fn test_nist_cavp_aes_gcm_decrypt_256() {
             total_tests += 1;
 
             // Convert key to fixed-size array
-            let key_array: &[u8; 32] = test.key.as_slice().try_into().expect("Key must be 32 bytes");
+            let key_array: &[u8; 32] = test
+                .key
+                .as_slice()
+                .try_into()
+                .expect("Key must be 32 bytes");
 
             // Combine CT and Tag for decryption
             let mut ciphertext_with_tag = test.ct.clone();
@@ -442,9 +450,12 @@ fn test_nist_cavp_aes_gcm_decrypt_256() {
                 // Expected valid, got valid
                 (Some(expected_pt), Ok(plaintext)) => {
                     assert_eq!(
-                        plaintext.as_slice(), expected_pt.as_slice(),
+                        plaintext.as_slice(),
+                        expected_pt.as_slice(),
                         "Test {} (PTlen={}, AADlen={}): Plaintext mismatch",
-                        test.count, section.ptlen, section.aadlen
+                        test.count,
+                        section.ptlen,
+                        section.aadlen
                     );
                     passed_tests += 1;
                     valid_tests += 1;

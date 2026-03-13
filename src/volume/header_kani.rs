@@ -25,7 +25,7 @@
 #![cfg(kani)]
 
 use super::{
-    CipherAlgorithm, PqAlgorithm, PqVolumeMetadata, VolumeHeader, HEADER_SIZE,
+    PqAlgorithm, PqVolumeMetadata, VolumeHeader, HEADER_SIZE,
     MAX_PQC_METADATA_SIZE, PQC_PADDING_SIZE, PQ_METADATA_SIZE,
 };
 

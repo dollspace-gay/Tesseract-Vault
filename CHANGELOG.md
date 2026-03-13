@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bump ml-dsa 0.1.0-rc.2 → 0.1.0-rc.4** — fixes signature malleability vulnerability where duplicate hint indices were incorrectly accepted (`<=` instead of `<` in monotonic check). Affects all ML-DSA security levels. (RUSTSEC advisory, severity: Medium)
 
 ### Changed
+- Sync kani.yml workflow with actual harness names after audit (#303)
+- Remove unused CipherAlgorithm import in header_kani.rs (#302)
 - Remove Prusti dependency and badge (#301)
 - Fix test harnesses (#299)
 - Fix wycheproof submodule in .gitmodules (#282)

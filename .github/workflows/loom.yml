@@ -50,7 +50,7 @@ jobs:
 
       # Run Loom tests with the loom cfg flag
       # Loom tests are gated behind #[cfg(loom)] to avoid polluting regular tests
-      - name: Run Loom concurrency tests
+      - name: Run Loom daemon concurrency tests
         run: |
           echo "::group::Loom - Daemon Concurrency Tests"
           RUSTFLAGS='--cfg loom' cargo test \
@@ -58,17 +58,39 @@ jobs:
             --no-default-features \
             daemon::loom_tests \
             -- --test-threads=1 \
-            2>&1 || echo "Loom tests completed"
+            2>&1 || echo "Loom daemon tests completed"
+          echo "::endgroup::"
+
+      - name: Run Loom memory concurrency tests
+        run: |
+          echo "::group::Loom - Memory Concurrency Tests"
+          RUSTFLAGS='--cfg loom' cargo test \
+            --lib \
+            --no-default-features \
+            memory::loom_tests \
+            -- --test-threads=1 \
+            2>&1 || echo "Loom memory tests completed"
+          echo "::endgroup::"
+
+      - name: Run Loom volume concurrency tests
+        run: |
+          echo "::group::Loom - Volume Concurrency Tests"
+          RUSTFLAGS='--cfg loom' cargo test \
+            --lib \
+            --no-default-features \
+            volume::loom_tests \
+            -- --test-threads=1 \
+            2>&1 || echo "Loom volume tests completed"
           echo "::endgroup::"
 
       # Run with increased iterations for thorough testing
       - name: Run Loom with extended iterations
         run: |
-          echo "::group::Loom - Extended Iterations"
+          echo "::group::Loom - Extended Iterations (all modules)"
           LOOM_MAX_PREEMPTIONS=3 RUSTFLAGS='--cfg loom' cargo test \
             --lib \
             --no-default-features \
-            daemon::loom_tests \
+            loom_tests \
             -- --test-threads=1 \
             2>&1 || echo "Extended Loom tests completed"
           echo "::endgroup::"

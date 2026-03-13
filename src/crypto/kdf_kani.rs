@@ -192,7 +192,7 @@ fn verify_config_validity() {
 ///
 /// Property: All arithmetic is safe from overflow
 #[kani::proof]
-fn verify_no_overflow() {
+fn verify_kdf_no_overflow() {
     let mem_cost: u32 = kani::any();
     kani::assume(mem_cost >= 8 && mem_cost <= 1048576);
 

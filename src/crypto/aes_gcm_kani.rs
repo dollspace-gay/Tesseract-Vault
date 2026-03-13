@@ -199,7 +199,7 @@ fn verify_nonce_len() {
 ///
 /// Property: All length arithmetic is safe from overflow
 #[kani::proof]
-fn verify_no_overflow() {
+fn verify_aes_gcm_no_overflow() {
     let encryptor = AesGcmEncryptor::new();
     let key: [u8; 32] = kani::any();
     let nonce: [u8; NONCE_LEN] = kani::any();

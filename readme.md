@@ -4,7 +4,6 @@
 [![Wycheproof Tests](https://github.com/dollspace-gay/Tesseract/actions/workflows/wycheproof.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/wycheproof.yml)
 [![NIST CAVP Tests](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml)
 [![Security Audit](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/security-audit.yml)
-[![Prusti Verification](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml)
 [![Property Testing](https://github.com/dollspace-gay/Tesseract/actions/workflows/proptest.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/proptest.yml)
 [![Timing Safety](https://github.com/dollspace-gay/Tesseract/actions/workflows/dudect.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/dudect.yml)
 [![Supply Chain](https://github.com/dollspace-gay/Tesseract/actions/workflows/cargo-deny.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/cargo-deny.yml)
@@ -598,7 +597,6 @@ Tesseract employs multiple layers of verification to ensure correctness:
 | Method | Purpose | CI Badge |
 |--------|---------|----------|
 | **Kani** | Formal verification of memory safety and panic-freedom | [![Kani](https://github.com/dollspace-gay/Tesseract/actions/workflows/kani.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/kani.yml) |
-| **Prusti** | Formal verification with pre/post conditions | [![Prusti](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/prusti.yml) |
 | **Wycheproof** | Google's cryptographic edge-case test vectors | [![Wycheproof](https://github.com/dollspace-gay/Tesseract/actions/workflows/wycheproof.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/wycheproof.yml) |
 | **NIST CAVP** | Official NIST cryptographic algorithm validation | [![NIST CAVP](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/nist-cavp.yml) |
 | **Proptest** | Property-based testing for encrypt/decrypt roundtrips | [![Proptest](https://github.com/dollspace-gay/Tesseract/actions/workflows/proptest.yml/badge.svg)](https://github.com/dollspace-gay/Tesseract/actions/workflows/proptest.yml) |
@@ -652,7 +650,7 @@ Tesseract builds upon excellent work from the Rust cryptography community:
 - **zxcvbn**: Dropbox's intelligent password strength estimator
 - **WinFsp/FUSE**: Virtual filesystem frameworks
 - **egui**: Immediate mode GUI framework
-- **Kani/Prusti**: Formal verification tools for Rust
+- **Kani**: Formal verification tool for Rust
 
 ## 🤝 Contributing
 

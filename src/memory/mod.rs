@@ -17,6 +17,8 @@ pub mod allocator;
 pub mod debugger;
 pub mod dump_protection;
 pub mod guard;
+#[cfg(any(test, feature = "loom"))]
+mod loom_tests;
 #[cfg(kani)]
 mod memory_kani;
 #[cfg(feature = "post-quantum")]

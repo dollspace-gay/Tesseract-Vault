@@ -28,6 +28,81 @@ impl AesGcmEncryptor {
     pub fn new() -> Self {
         Self
     }
+
+    /// Encrypts plaintext with additional authenticated data (AAD).
+    ///
+    /// AAD is authenticated but not encrypted — it protects metadata integrity
+    /// without hiding its contents. The same AAD must be provided for decryption.
+    ///
+    /// Property: On success, |ciphertext| = |plaintext| + 16 (authentication tag size)
+    pub fn encrypt_with_aad(
+        &self,
+        key: &[u8; 32],
+        nonce_bytes: &[u8],
+        plaintext: &[u8],
+        aad: &[u8],
+    ) -> Result<Vec<u8>> {
+        if nonce_bytes.len() != NONCE_LEN {
+            return Err(CryptorError::Cryptography(format!(
+                "Invalid nonce length: expected {}, got {}",
+                NONCE_LEN,
+                nonce_bytes.len()
+            )));
+        }
+
+        let cipher = Aes256Gcm::new(key.into());
+        let nonce_array: &[u8; NONCE_LEN] = nonce_bytes.try_into().map_err(|_| {
+            CryptorError::Cryptography("Invalid nonce length for array conversion".to_string())
+        })?;
+        let nonce = Nonce::from(*nonce_array);
+
+        let payload = aes_gcm::aead::Payload {
+            msg: plaintext,
+            aad,
+        };
+
+        cipher
+            .encrypt(&nonce, payload)
+            .map_err(|e| CryptorError::Cryptography(e.to_string()))
+    }
+
+    /// Decrypts ciphertext with additional authenticated data (AAD).
+    ///
+    /// The AAD must match exactly what was provided during encryption,
+    /// otherwise authentication will fail.
+    ///
+    /// Precondition: ciphertext.len() >= 16 (must contain at least the auth tag)
+    pub fn decrypt_with_aad(
+        &self,
+        key: &[u8; 32],
+        nonce_bytes: &[u8],
+        ciphertext: &[u8],
+        aad: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>> {
+        if nonce_bytes.len() != NONCE_LEN {
+            return Err(CryptorError::Cryptography(format!(
+                "Invalid nonce length: expected {}, got {}",
+                NONCE_LEN,
+                nonce_bytes.len()
+            )));
+        }
+
+        let cipher = Aes256Gcm::new(key.into());
+        let nonce_array: &[u8; NONCE_LEN] = nonce_bytes.try_into().map_err(|_| {
+            CryptorError::Cryptography("Invalid nonce length for array conversion".to_string())
+        })?;
+        let nonce = Nonce::from(*nonce_array);
+
+        let payload = aes_gcm::aead::Payload {
+            msg: ciphertext,
+            aad,
+        };
+
+        cipher
+            .decrypt(&nonce, payload)
+            .map(Zeroizing::new)
+            .map_err(|_| CryptorError::Decryption)
+    }
 }
 
 impl Default for AesGcmEncryptor {

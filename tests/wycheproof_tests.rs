@@ -7,26 +7,16 @@
 //!
 //! Test vectors repository: https://github.com/C2SP/wycheproof
 
-use aes_gcm::{
-    aead::{Aead, KeyInit, Payload},
-    Aes256Gcm, Nonce,
-};
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
+use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
 
-// ML-KEM imports (only when post-quantum feature is enabled)
+// ML-KEM imports — route through project's crypto::pqc wrappers
 #[cfg(feature = "post-quantum")]
-use ml_kem::{
-    kem::{Decapsulate, Encapsulate},
-    Ciphertext, EncodedSizeUser, KemCore, MlKem1024,
+use tesseract_lib::crypto::pqc::{
+    decapsulate, encapsulate, validate_encapsulation_key,
 };
-
-// Use rand 0.9 for ML-KEM compatibility (ml-kem uses rand_core 0.9)
-#[cfg(feature = "post-quantum")]
-// Import our validated encapsulation function
-#[cfg(feature = "post-quantum")]
-use tesseract_lib::crypto::pqc::validate_encapsulation_key;
 
 /// Wycheproof test group structure
 #[derive(Debug, Deserialize)]
@@ -99,9 +89,12 @@ fn test_aes_gcm_wycheproof() {
         serde_json::from_str(&test_data).expect("Failed to parse Wycheproof test JSON");
 
     println!(
-        "Running {} AES-GCM tests from Wycheproof",
+        "Running {} AES-GCM tests from Wycheproof via AesGcmEncryptor",
         test_file.number_of_tests
     );
+
+    // All tests route through Tesseract's AesGcmEncryptor, not the raw aes_gcm crate
+    let encryptor = AesGcmEncryptor::new();
 
     let mut passed = 0;
     let mut failed = 0;
@@ -184,27 +177,11 @@ fn test_aes_gcm_wycheproof() {
             }
             key_array.copy_from_slice(&key);
 
-            // Create cipher
-            let cipher = Aes256Gcm::new(&key_array.into());
-            let nonce_array: [u8; 12] = match nonce.as_slice().try_into() {
-                Ok(n) => n,
-                Err(_) => {
-                    skipped += 1;
-                    continue;
-                }
-            };
-            let gcm_nonce = Nonce::from(nonce_array);
-
-            // Test encryption and decryption
+            // Test encryption and decryption through Tesseract's AesGcmEncryptor
             match test.result {
                 TestResult::Valid => {
-                    // Should encrypt successfully
-                    let payload = Payload {
-                        msg: &msg,
-                        aad: &aad,
-                    };
-
-                    match cipher.encrypt(&gcm_nonce, payload) {
+                    // Encrypt through project encryptor (with AAD support)
+                    match encryptor.encrypt_with_aad(&key_array, &nonce, &msg, &aad) {
                         Ok(ciphertext) => {
                             // Expected ciphertext is ct || tag
                             let mut expected = ct.clone();
@@ -227,20 +204,13 @@ fn test_aes_gcm_wycheproof() {
                         }
                     }
 
-                    // Test decryption
+                    // Test decryption through project encryptor
                     let mut full_ciphertext = ct.clone();
                     full_ciphertext.extend_from_slice(&tag);
 
-                    let decrypt_payload = Payload {
-                        msg: &full_ciphertext,
-                        aad: &aad,
-                    };
-
-                    match cipher.decrypt(&gcm_nonce, decrypt_payload) {
+                    match encryptor.decrypt_with_aad(&key_array, &nonce, &full_ciphertext, &aad) {
                         Ok(plaintext) => {
-                            if plaintext == msg {
-                                // Already counted in encryption pass
-                            } else {
+                            if plaintext.as_slice() != msg.as_slice() {
                                 println!(
                                     "Test {} FAILED: Decryption plaintext mismatch",
                                     test.tc_id
@@ -261,12 +231,7 @@ fn test_aes_gcm_wycheproof() {
                     let mut full_ciphertext = ct.clone();
                     full_ciphertext.extend_from_slice(&tag);
 
-                    let decrypt_payload = Payload {
-                        msg: &full_ciphertext,
-                        aad: &aad,
-                    };
-
-                    match cipher.decrypt(&gcm_nonce, decrypt_payload) {
+                    match encryptor.decrypt_with_aad(&key_array, &nonce, &full_ciphertext, &aad) {
                         Ok(_) => {
                             println!(
                                 "Test {} FAILED: Invalid ciphertext was accepted",
@@ -291,7 +256,7 @@ fn test_aes_gcm_wycheproof() {
         }
     }
 
-    println!("\nWycheproof AES-GCM Test Results:");
+    println!("\nWycheproof AES-GCM Test Results (via AesGcmEncryptor):");
     println!("  Passed:  {}", passed);
     println!("  Failed:  {}", failed);
     println!("  Skipped: {}", skipped);
@@ -493,20 +458,7 @@ fn test_mlkem_1024_encaps_wycheproof() {
                 continue;
             }
 
-            // Try to parse and use the encapsulation key
-            let ek_array: &[u8; MLKEM_1024_PUBLIC_KEY_SIZE] = match ek_bytes.as_slice().try_into() {
-                Ok(arr) => arr,
-                Err(_) => {
-                    if test.result == TestResult::Invalid {
-                        passed += 1;
-                    } else {
-                        failed += 1;
-                    }
-                    continue;
-                }
-            };
-
-            // First, validate the encapsulation key using our ModulusOverflow check
+            // Validate the encapsulation key using our ModulusOverflow check
             let validation_result = validate_encapsulation_key(&ek_bytes);
 
             match test.result {
@@ -515,15 +467,13 @@ fn test_mlkem_1024_encaps_wycheproof() {
                     match validation_result {
                         Ok(()) => {
                             // Validation passed, now test actual encapsulation
-                            type EK = <MlKem1024 as KemCore>::EncapsulationKey;
-                            match EK::from_encoded_bytes(ek_array.into()) {
-                                Ok(ek) => {
-                                    let mut rng = rand::rng();
-                                    let (_ct, _ss) = ek.encapsulate_with_rng(&mut rng);
+                            // through the project's crypto::pqc::encapsulate() wrapper
+                            match encapsulate(&ek_bytes) {
+                                Ok((_ct, _ss)) => {
                                     passed += 1;
                                 }
-                                Err(_) => {
-                                    println!("Test {} FAILED: Valid key passed validation but encoding was invalid", test.tc_id);
+                                Err(e) => {
+                                    println!("Test {} FAILED: Valid key passed validation but encapsulate() failed: {}", test.tc_id, e);
                                     failed += 1;
                                 }
                             }
@@ -676,59 +626,40 @@ fn test_mlkem_1024_decaps_validation_wycheproof() {
                 continue;
             }
 
-            // Parse decapsulation key
-            let dk_array: &[u8; MLKEM_1024_SECRET_KEY_SIZE] = match dk_bytes.as_slice().try_into() {
-                Ok(arr) => arr,
-                Err(_) => {
-                    if test.result == TestResult::Invalid {
-                        passed += 1;
-                    } else {
-                        failed += 1;
-                    }
-                    continue;
-                }
-            };
-
-            // Parse ciphertext
-            let ct_array: &[u8; MLKEM_1024_CIPHERTEXT_SIZE] = match ct_bytes.as_slice().try_into() {
-                Ok(arr) => arr,
-                Err(_) => {
-                    if test.result == TestResult::Invalid {
-                        passed += 1;
-                    } else {
-                        failed += 1;
-                    }
-                    continue;
-                }
-            };
-
-            type DK = <MlKem1024 as KemCore>::DecapsulationKey;
-            let dk = match DK::from_encoded_bytes(dk_array.into()) {
-                Ok(dk) => dk,
-                Err(e) => {
-                    println!(
-                        "Test {} SKIPPED: Could not parse decapsulation key: {:?}",
-                        test.tc_id, e
-                    );
-                    skipped += 1;
-                    continue;
-                }
-            };
-            let ct = Ciphertext::<MlKem1024>::from(*ct_array);
-
-            // Decapsulation in ML-KEM is designed to never fail (implicit rejection)
-            // It always returns a shared secret, but the secret will be random/wrong
-            // if the ciphertext is invalid
-            let _ss = dk.decapsulate(&ct);
+            // Decapsulate through the project's crypto::pqc::decapsulate() wrapper.
+            // This tests the full project code path including size validation,
+            // key parsing, and the actual ML-KEM decapsulation.
+            let decaps_result = decapsulate(&dk_bytes, &ct_bytes);
 
             match test.result {
                 TestResult::Valid => {
-                    passed += 1;
+                    match decaps_result {
+                        Ok(_ss) => {
+                            passed += 1;
+                        }
+                        Err(e) => {
+                            println!(
+                                "Test {} FAILED: Valid decapsulation failed: {}",
+                                test.tc_id, e
+                            );
+                            failed += 1;
+                        }
+                    }
                 }
                 TestResult::Invalid => {
-                    // ML-KEM decapsulation never fails - it uses implicit rejection
-                    // Invalid ciphertexts return a pseudorandom shared secret
-                    passed += 1;
+                    // ML-KEM decapsulation uses implicit rejection — it never fails
+                    // for correctly-sized inputs. Invalid ciphertexts return a
+                    // pseudorandom shared secret (not an error).
+                    match decaps_result {
+                        Ok(_ss) => {
+                            // Expected: decapsulation succeeds but returns wrong secret
+                            passed += 1;
+                        }
+                        Err(_) => {
+                            // Also acceptable: project wrapper rejected the input
+                            passed += 1;
+                        }
+                    }
                 }
                 TestResult::Acceptable => {
                     skipped += 1;

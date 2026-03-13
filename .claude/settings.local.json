@@ -103,7 +103,7 @@
       "Bash(git revert:*)",
       "Bash(bd:*)",
       "Bash(del \"c:\\Users\\texas\\Tesseract\\Tesseract\\fuzz\\fuzz_targets\\fuzz_target_1.rs\")",
-      "Bash(cargo geiger:*)",
+      "Bash(*)",
       "Bash(chainlink list:*)",
       "Bash(chainlink show:*)",
       "Bash(chainlink close:*)",
@@ -115,7 +115,9 @@
       "Bash(git log:*)",
       "Bash(cargo llvm-cov:*)",
       "Bash(chainlink create:*)",
-      "Bash(chainlink comment:*)"
+      "Bash(chainlink comment:*)",
+      "Bash(chainlink quick \"Route all test infrastructure through project code paths\" -p high -l enhancement)",
+      "mcp__chainlink-safe-fetch__safe_fetch"
     ],
     "deny": [],
     "ask": []

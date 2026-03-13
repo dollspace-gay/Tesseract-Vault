@@ -4920,21 +4920,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "prusti-contracts"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c6e618695ddeec4c85c216d887ef958f2706c6fbafe824ba39ac260466c3043"
-dependencies = [
- "prusti-contracts-proc-macros",
-]
-
-[[package]]
-name = "prusti-contracts-proc-macros"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f4d18a93d2e7feb85b057978063c3abd0848a63c1b8386046f52e66e796a99e"
-
-[[package]]
 name = "pxfm"
 version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6092,7 +6077,6 @@ dependencies = [
  "notify-rust",
  "postcard",
  "proptest",
- "prusti-contracts",
  "qrcode",
  "quickcheck",
  "rand 0.10.0-rc.8",

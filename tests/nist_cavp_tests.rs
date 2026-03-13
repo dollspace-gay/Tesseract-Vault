@@ -8,12 +8,10 @@
 //! Test vectors source: https://csrc.nist.gov/Projects/Cryptographic-Algorithm-Validation-Program
 //! Download: https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/mac/gcmtestvectors.zip
 
-use aes_gcm::{
-    aead::{Aead, KeyInit, Payload},
-    Aes256Gcm, Nonce,
-};
 use std::fs;
 use std::path::Path;
+use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
+use tesseract_lib::crypto::Encryptor;
 
 /// NIST CAVP test section parameters
 #[derive(Debug, Default, Clone)]
@@ -310,6 +308,9 @@ fn test_nist_cavp_aes_gcm_encrypt_256() {
     let mut passed_tests = 0;
     let mut skipped_tests = 0;
 
+    // All tests route through Tesseract's AesGcmEncryptor, not the raw aes_gcm crate
+    let encryptor = AesGcmEncryptor::new();
+
     for (section, tests) in &sections {
         // We only support:
         // - 256-bit keys
@@ -323,23 +324,14 @@ fn test_nist_cavp_aes_gcm_encrypt_256() {
         for test in tests {
             total_tests += 1;
 
-            // Create cipher
-            let cipher = Aes256Gcm::new_from_slice(&test.key).expect("Failed to create cipher");
+            // Convert key to fixed-size array
+            let key_array: &[u8; 32] = test.key.as_slice().try_into().expect("Key must be 32 bytes");
 
-            // Create nonce
-            let nonce = Nonce::from_slice(&test.iv);
-
-            // Encrypt
+            // Encrypt through project encryptor
             let result = if test.aad.is_empty() {
-                cipher.encrypt(nonce, test.pt.as_slice())
+                encryptor.encrypt(key_array, &test.iv, &test.pt)
             } else {
-                cipher.encrypt(
-                    nonce,
-                    Payload {
-                        msg: &test.pt,
-                        aad: &test.aad,
-                    },
-                )
+                encryptor.encrypt_with_aad(key_array, &test.iv, &test.pt, &test.aad)
             };
 
             match result {
@@ -387,7 +379,7 @@ fn test_nist_cavp_aes_gcm_encrypt_256() {
         }
     }
 
-    println!("\nNIST CAVP AES-256-GCM Encrypt Results:");
+    println!("\nNIST CAVP AES-256-GCM Encrypt Results (via AesGcmEncryptor):");
     println!("  Passed: {}", passed_tests);
     println!("  Skipped (non-256/96/128): {}", skipped_tests);
     println!("  Total processed: {}", total_tests);
@@ -416,6 +408,9 @@ fn test_nist_cavp_aes_gcm_decrypt_256() {
     let mut valid_tests = 0;
     let mut invalid_tests = 0;
 
+    // All tests route through Tesseract's AesGcmEncryptor, not the raw aes_gcm crate
+    let encryptor = AesGcmEncryptor::new();
+
     for (section, tests) in &sections {
         // We only support:
         // - 256-bit keys
@@ -429,34 +424,25 @@ fn test_nist_cavp_aes_gcm_decrypt_256() {
         for test in tests {
             total_tests += 1;
 
-            // Create cipher
-            let cipher = Aes256Gcm::new_from_slice(&test.key).expect("Failed to create cipher");
-
-            // Create nonce
-            let nonce = Nonce::from_slice(&test.iv);
+            // Convert key to fixed-size array
+            let key_array: &[u8; 32] = test.key.as_slice().try_into().expect("Key must be 32 bytes");
 
             // Combine CT and Tag for decryption
             let mut ciphertext_with_tag = test.ct.clone();
             ciphertext_with_tag.extend_from_slice(&test.tag);
 
-            // Decrypt
+            // Decrypt through project encryptor
             let result = if test.aad.is_empty() {
-                cipher.decrypt(nonce, ciphertext_with_tag.as_slice())
+                encryptor.decrypt(key_array, &test.iv, &ciphertext_with_tag)
             } else {
-                cipher.decrypt(
-                    nonce,
-                    Payload {
-                        msg: &ciphertext_with_tag,
-                        aad: &test.aad,
-                    },
-                )
+                encryptor.decrypt_with_aad(key_array, &test.iv, &ciphertext_with_tag, &test.aad)
             };
 
             match (&test.pt, result) {
                 // Expected valid, got valid
                 (Some(expected_pt), Ok(plaintext)) => {
                     assert_eq!(
-                        plaintext, *expected_pt,
+                        plaintext.as_slice(), expected_pt.as_slice(),
                         "Test {} (PTlen={}, AADlen={}): Plaintext mismatch",
                         test.count, section.ptlen, section.aadlen
                     );
@@ -486,7 +472,7 @@ fn test_nist_cavp_aes_gcm_decrypt_256() {
         }
     }
 
-    println!("\nNIST CAVP AES-256-GCM Decrypt Results:");
+    println!("\nNIST CAVP AES-256-GCM Decrypt Results (via AesGcmEncryptor):");
     println!(
         "  Passed: {} (valid: {}, rejected invalid: {})",
         passed_tests, valid_tests, invalid_tests

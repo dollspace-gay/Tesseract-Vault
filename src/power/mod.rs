@@ -13,6 +13,8 @@ pub mod windows;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+mod loom_tests;
+
 /// Power events that can trigger callbacks
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PowerEvent {

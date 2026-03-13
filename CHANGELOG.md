@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bump ml-dsa 0.1.0-rc.2 → 0.1.0-rc.4** — fixes signature malleability vulnerability where duplicate hint indices were incorrectly accepted (`<=` instead of `<` in monotonic check). Affects all ML-DSA security levels. (RUSTSEC advisory, severity: Medium)
 
 ### Changed
+- Remove Prusti dependency and badge (#301)
+- Fix test harnesses (#299)
 - Fix wycheproof submodule in .gitmodules (#282)
 - Fix coverage workflow hashFiles failure (#281)
 - Set CARGO_HOME/RUSTUP_HOME for Windows runner (#280)
@@ -30,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `argon2` 0.6.0-rc.2 → 0.6.0-rc.6 (`SaltString`/`Salt` moved to `phc` submodule)
 
 ### Added
+- Route all test infrastructure through project code paths (#300)
 - **GUI Keyfile Generator** - integrated keyfile generation window in GUI for creating ML-KEM-1024 quantum-resistant keyfiles (.tkf) with optional password protection
 - **Dead Man's Switch** - automatic key destruction after configurable inactivity period:
   - Configurable timeout (default 30 days), warning period (7 days), and grace period (3 days)

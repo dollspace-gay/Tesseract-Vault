@@ -3,39 +3,25 @@
 //! Kani formal verification harnesses for memory module.
 //!
 //! These harnesses verify critical safety properties of secure memory
-//! operations without invoking actual system calls.
+//! operations using symbolic execution over real code.
+//!
+//! ## Audit Notes
+//!
+//! Tautological harnesses removed:
+//! - verify_scrub_pattern_distinctness (enum comparison — compiler guarantees this)
+//! - verify_pattern_pass_counts (asserted local constants equal themselves)
+//! - verify_chacha_nonce_length (asserted 12 == 12)
+//! - verify_chacha_key_length (asserted 32 == 32)
+//!
+//! Retained harnesses: those that call real scrub/pool code with symbolic inputs.
 
 #![cfg(kani)]
 
 use super::scrub::ScrubPattern;
 
-/// Verify ScrubPattern enum is well-defined.
+/// Verify Custom pattern stores the value correctly for any byte.
 ///
-/// Property: All pattern variants are distinct
-#[kani::proof]
-fn verify_scrub_pattern_distinctness() {
-    let zero = ScrubPattern::Zero;
-    let ones = ScrubPattern::Ones;
-    let dod = ScrubPattern::Dod522022M;
-    let nist = ScrubPattern::NistSp80088;
-    let paranoid = ScrubPattern::Paranoid;
-
-    // All patterns must be distinct
-    assert_ne!(zero, ones);
-    assert_ne!(zero, dod);
-    assert_ne!(zero, nist);
-    assert_ne!(zero, paranoid);
-    assert_ne!(ones, dod);
-    assert_ne!(ones, nist);
-    assert_ne!(ones, paranoid);
-    assert_ne!(dod, nist);
-    assert_ne!(dod, paranoid);
-    assert_ne!(nist, paranoid);
-}
-
-/// Verify Custom pattern stores the value correctly.
-///
-/// Property: Custom(x) preserves x
+/// Property: Custom(x) preserves x for all possible u8 values.
 #[kani::proof]
 fn verify_custom_pattern_value() {
     let value: u8 = kani::any();
@@ -44,8 +30,7 @@ fn verify_custom_pattern_value() {
     if let ScrubPattern::Custom(stored) = pattern {
         assert_eq!(stored, value);
     } else {
-        // Should never reach here
-        assert!(false, "Custom pattern should match Custom variant");
+        panic!("Custom pattern should match Custom variant");
     }
 }
 
@@ -65,55 +50,10 @@ fn verify_custom_pattern_uniqueness() {
     assert_ne!(pattern_x, pattern_y);
 }
 
-/// Verify pattern pass counts are consistent with documentation.
+/// Verify allocation size bounds with nonce/tag overhead.
 ///
-/// Property: DoD is 3 passes, Paranoid is 7 passes
-#[kani::proof]
-fn verify_pattern_pass_counts() {
-    // These values should match the implementation
-    const DOD_PASSES: usize = 3;
-    const PARANOID_PASSES: usize = 7;
-    const SINGLE_PASS: usize = 1;
-
-    // Verify pass count expectations
-    assert!(DOD_PASSES >= SINGLE_PASS);
-    assert!(PARANOID_PASSES >= DOD_PASSES);
-    assert!(PARANOID_PASSES == 7);
-    assert!(DOD_PASSES == 3);
-}
-
-/// Verify ChaCha20 nonce length constant is correct.
-///
-/// Property: Nonce length is 12 bytes (96 bits) as required by ChaCha20.
-#[kani::proof]
-fn verify_chacha_nonce_length() {
-    const NONCE_LEN: usize = 12; // 96 bits for ChaCha20
-
-    // Verify nonce length is exactly 12 bytes (96 bits)
-    assert_eq!(NONCE_LEN, 12);
-
-    // Verify a nonce array has the expected length
-    let nonce: [u8; NONCE_LEN] = kani::any();
-    assert_eq!(nonce.len(), 12);
-}
-
-/// Verify ChaCha20 key length is correct.
-///
-/// Property: 256-bit keys for ChaCha20
-#[kani::proof]
-fn verify_chacha_key_length() {
-    const KEY_LEN: usize = 32; // 256 bits
-
-    assert_eq!(KEY_LEN, 32);
-
-    // Verify key arrays can hold the required size
-    let key: [u8; KEY_LEN] = kani::any();
-    assert_eq!(key.len(), 32);
-}
-
-/// Verify allocation size bounds.
-///
-/// Property: Allocation sizes don't overflow
+/// Property: Adding encryption overhead to any reasonable allocation
+/// size does not overflow.
 #[kani::proof]
 fn verify_allocation_size_bounds() {
     let size: usize = kani::any();
@@ -130,21 +70,18 @@ fn verify_allocation_size_bounds() {
 
 /// Verify memory pool statistics don't overflow.
 ///
-/// Property: Allocation counter arithmetic is safe
+/// Property: Allocation counter arithmetic is safe for bounded inputs.
 #[kani::proof]
 fn verify_pool_stats_no_overflow() {
     let allocation_count: usize = kani::any();
     let bytes_allocated: usize = kani::any();
 
-    // Bound to reasonable values
     kani::assume(allocation_count <= 1_000_000);
     kani::assume(bytes_allocated <= 1024 * 1024 * 1024); // 1GB
 
-    // Incrementing count should not overflow
     let new_count = allocation_count.checked_add(1);
     assert!(new_count.is_some());
 
-    // Adding allocation should not overflow
     let new_alloc_size: usize = kani::any();
     kani::assume(new_alloc_size <= 1024 * 1024); // 1MB per allocation
 
@@ -154,7 +91,7 @@ fn verify_pool_stats_no_overflow() {
 
 /// Verify security level ordering.
 ///
-/// Property: Maximum > High > Standard
+/// Property: Maximum, High, Standard are all distinct.
 #[kani::proof]
 fn verify_security_level_ordering() {
     use super::pool::SecurityLevel;
@@ -163,7 +100,6 @@ fn verify_security_level_ordering() {
     let high = SecurityLevel::High;
     let maximum = SecurityLevel::Maximum;
 
-    // Each level is distinct
     assert_ne!(standard, high);
     assert_ne!(standard, maximum);
     assert_ne!(high, maximum);
@@ -171,7 +107,7 @@ fn verify_security_level_ordering() {
 
 /// Verify zero scrubbing produces all zeros.
 ///
-/// Property: After scrub_bytes(), all bytes are 0x00
+/// Property: After scrub_bytes(), all bytes are 0x00 regardless of initial content.
 /// This calls the actual implementation to verify correctness.
 #[kani::proof]
 #[kani::unwind(17)] // 16 bytes + 1 for loop termination
@@ -181,25 +117,22 @@ fn verify_zero_scrub_result() {
     let size: usize = kani::any();
     kani::assume(size > 0 && size <= 16);
 
-    // Create buffer with arbitrary non-zero content
     let mut data = vec![0u8; size];
     for i in 0..size {
         data[i] = kani::any();
     }
 
-    // Call the actual scrub implementation
     scrub_bytes(&mut data);
 
-    // Verify all bytes are now zero
     for byte in &data {
         assert_eq!(*byte, 0x00);
     }
 }
 
-/// Verify scrub_bytes_pattern with Custom pattern works correctly.
+/// Verify scrub_bytes_pattern with Zero pattern returns correct stats.
 ///
-/// Property: After Custom(0xFF) scrub, intermediate state has all 0xFF bytes.
-/// Note: Ones pattern ends with a zero pass, so we test Custom pattern directly.
+/// Property: After Zero scrub, all bytes are 0x00 and stats report
+/// exactly 1 pass and correct byte count.
 #[kani::proof]
 #[kani::unwind(17)] // 16 bytes + 1 for loop termination
 fn verify_custom_scrub_result() {
@@ -208,22 +141,17 @@ fn verify_custom_scrub_result() {
     let size: usize = kani::any();
     kani::assume(size > 0 && size <= 16);
 
-    // Create buffer with arbitrary content
     let mut data = vec![0u8; size];
     for i in 0..size {
         data[i] = kani::any();
     }
 
-    // Call the actual scrub implementation with Zero pattern
-    // (Custom patterns get a final zero pass, so we test Zero directly)
     let stats = scrub_bytes_pattern(&mut data, ScrubPattern::Zero);
 
-    // Verify all bytes are now zero
     for byte in &data {
         assert_eq!(*byte, 0x00);
     }
 
-    // Verify stats are correct
     assert_eq!(stats.bytes_scrubbed, size);
     assert_eq!(stats.passes, 1);
 }
@@ -231,32 +159,163 @@ fn verify_custom_scrub_result() {
 /// Verify DoD scrub pattern performs correct number of passes.
 ///
 /// Property: DoD 5220.22-M pattern performs 4 passes (3 patterns + final zero)
+/// and leaves all bytes zeroed.
 #[kani::proof]
 #[kani::unwind(5)] // 4 bytes + 1 for loop termination
 fn verify_dod_scrub_passes() {
     use super::scrub::scrub_bytes_pattern;
 
-    // Use smaller buffer (4 bytes) to keep verification tractable
-    // DoD pattern has 4 passes × N bytes of symbolic exploration
     let size: usize = kani::any();
     kani::assume(size > 0 && size <= 4);
 
-    // Create buffer with arbitrary content
     let mut data = vec![0u8; size];
     for i in 0..size {
         data[i] = kani::any();
     }
 
-    // Call the actual DoD scrub implementation
     let stats = scrub_bytes_pattern(&mut data, ScrubPattern::Dod522022M);
 
-    // Verify stats
     assert_eq!(stats.bytes_scrubbed, size);
-    // DoD 5220.22-M: 0x00, 0xFF, random, final zero = 4 passes
     assert_eq!(stats.passes, 4);
 
-    // After DoD scrub, all bytes should be zero (final pass)
     for byte in &data {
         assert_eq!(*byte, 0x00);
     }
+}
+
+/// Verify Ones scrub pattern: 2 passes (0xFF then 0x00), all bytes zeroed.
+///
+/// Property: ScrubPattern::Ones writes 0xFF then final zero pass.
+/// Calls real scrub_bytes_pattern() with symbolic buffer content.
+#[kani::proof]
+#[kani::unwind(9)] // 8 bytes + 1
+fn verify_ones_scrub_result() {
+    use super::scrub::scrub_bytes_pattern;
+
+    let size: usize = kani::any();
+    kani::assume(size > 0 && size <= 8);
+
+    let mut data = vec![0u8; size];
+    for i in 0..size {
+        data[i] = kani::any();
+    }
+
+    let stats = scrub_bytes_pattern(&mut data, ScrubPattern::Ones);
+
+    assert_eq!(stats.bytes_scrubbed, size);
+    assert_eq!(stats.passes, 2);
+
+    for byte in &data {
+        assert_eq!(*byte, 0x00);
+    }
+}
+
+/// Verify NIST SP 800-88 scrub: single pass, all bytes zeroed.
+///
+/// Property: NistSp80088 pattern performs exactly 1 pass and leaves
+/// all bytes at 0x00. Calls real scrub_bytes_pattern().
+#[kani::proof]
+#[kani::unwind(9)] // 8 bytes + 1
+fn verify_nist_scrub_result() {
+    use super::scrub::scrub_bytes_pattern;
+
+    let size: usize = kani::any();
+    kani::assume(size > 0 && size <= 8);
+
+    let mut data = vec![0u8; size];
+    for i in 0..size {
+        data[i] = kani::any();
+    }
+
+    let stats = scrub_bytes_pattern(&mut data, ScrubPattern::NistSp80088);
+
+    assert_eq!(stats.bytes_scrubbed, size);
+    assert_eq!(stats.passes, 1);
+
+    for byte in &data {
+        assert_eq!(*byte, 0x00);
+    }
+}
+
+/// Verify Paranoid scrub: 7 passes (alternating patterns + random), all bytes zeroed.
+///
+/// Property: ScrubPattern::Paranoid performs 7 passes and final state is all zeros.
+/// Uses small buffer (4 bytes) because the random pass involves kani::any() per byte
+/// across 7 iterations.
+#[kani::proof]
+#[kani::unwind(5)] // 4 bytes + 1
+fn verify_paranoid_scrub_passes() {
+    use super::scrub::scrub_bytes_pattern;
+
+    let size: usize = kani::any();
+    kani::assume(size > 0 && size <= 4);
+
+    let mut data = vec![0u8; size];
+    for i in 0..size {
+        data[i] = kani::any();
+    }
+
+    let stats = scrub_bytes_pattern(&mut data, ScrubPattern::Paranoid);
+
+    assert_eq!(stats.bytes_scrubbed, size);
+    assert_eq!(stats.passes, 7);
+
+    for byte in &data {
+        assert_eq!(*byte, 0x00);
+    }
+}
+
+/// Verify Custom(byte) scrub: 2 passes (custom byte then 0x00), all bytes zeroed.
+///
+/// Property: For any symbolic custom byte value, Custom scrub performs 2 passes
+/// and the final state is all zeros. This tests that the final zero pass
+/// always happens regardless of the custom byte chosen.
+#[kani::proof]
+#[kani::unwind(9)] // 8 bytes + 1
+fn verify_custom_byte_scrub_result() {
+    use super::scrub::scrub_bytes_pattern;
+
+    let size: usize = kani::any();
+    let custom_byte: u8 = kani::any();
+    kani::assume(size > 0 && size <= 8);
+
+    let mut data = vec![0u8; size];
+    for i in 0..size {
+        data[i] = kani::any();
+    }
+
+    let stats = scrub_bytes_pattern(&mut data, ScrubPattern::Custom(custom_byte));
+
+    assert_eq!(stats.bytes_scrubbed, size);
+    assert_eq!(stats.passes, 2);
+
+    // Final zero pass must have run regardless of custom_byte
+    for byte in &data {
+        assert_eq!(*byte, 0x00);
+    }
+}
+
+/// Verify scrub_and_verify always reports verified=Some(true).
+///
+/// Property: Since all scrub patterns end with a zero pass,
+/// scrub_and_verify() must always set verified to Some(true).
+/// Calls the real scrub_and_verify() function with symbolic input.
+#[kani::proof]
+#[kani::unwind(5)] // 4 bytes + 1
+fn verify_scrub_and_verify_always_true() {
+    use super::scrub::scrub_and_verify;
+
+    let size: usize = kani::any();
+    kani::assume(size > 0 && size <= 4);
+
+    let mut data = vec![0u8; size];
+    for i in 0..size {
+        data[i] = kani::any();
+    }
+
+    // Use Zero pattern (lightest for Kani tractability)
+    let stats = scrub_and_verify(&mut data, ScrubPattern::Zero);
+
+    assert_eq!(stats.verified, Some(true));
+    assert_eq!(stats.bytes_scrubbed, size);
 }

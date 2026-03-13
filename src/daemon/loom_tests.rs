@@ -196,6 +196,108 @@ mod tests {
             assert_eq!(guard.iter().filter(|&s| s == "volume1").count(), 1);
         });
     }
+
+    /// Test connection counter TOCTOU under concurrent accept.
+    ///
+    /// Mirrors DaemonServer::run() where `active_connections.load(Relaxed)`
+    /// is checked against MAX_CONCURRENT_CONNECTIONS, then
+    /// `active_connections.fetch_add(1, Relaxed)` is called.  Two threads
+    /// that both pass the check can temporarily exceed the limit by one.
+    /// Loom exhaustively explores both orderings to confirm the counter
+    /// is eventually consistent after both connections finish.
+    #[test]
+    fn test_connection_counter_toctou() {
+        use loom::sync::atomic::AtomicUsize;
+
+        const MAX: usize = 2;
+
+        loom::model(|| {
+            let counter = Arc::new(AtomicUsize::new(0));
+
+            let c1 = Arc::clone(&counter);
+            let c2 = Arc::clone(&counter);
+
+            // Two "accept" threads race through load-then-add
+            let t1 = thread::spawn(move || {
+                let cur = c1.load(Ordering::Relaxed);
+                if cur < MAX {
+                    c1.fetch_add(1, Ordering::Relaxed);
+                    true // accepted
+                } else {
+                    false // rejected
+                }
+            });
+
+            let t2 = thread::spawn(move || {
+                let cur = c2.load(Ordering::Relaxed);
+                if cur < MAX {
+                    c2.fetch_add(1, Ordering::Relaxed);
+                    true
+                } else {
+                    false
+                }
+            });
+
+            let accepted1 = t1.join().unwrap();
+            let accepted2 = t2.join().unwrap();
+
+            let final_count = counter.load(Ordering::Relaxed);
+
+            // Both should be accepted because MAX=2 and we only have 2 threads
+            assert!(accepted1 && accepted2);
+            assert_eq!(final_count, 2);
+        });
+    }
+
+    /// Test cleanup lock ordering: volume_manager then mounts.
+    ///
+    /// Mirrors DaemonServer::cleanup_on_shutdown() which acquires
+    /// `volume_manager` first, then `mounts` (to read keys), then
+    /// re-acquires `mounts` per entry to remove.  Meanwhile a client
+    /// handler may acquire `mounts` then `volume_manager`.  If both
+    /// use the same ordering (volume_manager → mounts), no deadlock
+    /// occurs.  This test verifies consistent ordering is deadlock-free.
+    #[test]
+    fn test_cleanup_lock_ordering() {
+        loom::model(|| {
+            let volume_manager = Arc::new(Mutex::new(0u32));
+            let mounts: Arc<Mutex<Vec<String>>> =
+                Arc::new(Mutex::new(vec!["vol1".into(), "vol2".into()]));
+
+            let vm_cleanup = Arc::clone(&volume_manager);
+            let m_cleanup = Arc::clone(&mounts);
+            let vm_handler = Arc::clone(&volume_manager);
+            let m_handler = Arc::clone(&mounts);
+
+            // Cleanup thread: volume_manager → mounts (same order as server)
+            let cleanup = thread::spawn(move || {
+                let mut mgr = vm_cleanup.lock().unwrap();
+                let keys: Vec<String> = {
+                    let guard = m_cleanup.lock().unwrap();
+                    guard.clone()
+                };
+                for _key in &keys {
+                    *mgr += 1; // simulate unmount work
+                }
+                // Re-acquire mounts to remove entries
+                let mut guard = m_cleanup.lock().unwrap();
+                guard.clear();
+            });
+
+            // Handler thread: same ordering — volume_manager → mounts
+            let handler = thread::spawn(move || {
+                let _mgr = vm_handler.lock().unwrap();
+                let guard = m_handler.lock().unwrap();
+                guard.len()
+            });
+
+            cleanup.join().unwrap();
+            let _len = handler.join().unwrap();
+
+            // No deadlock occurred — cleanup completed
+            assert!(mounts.lock().unwrap().is_empty());
+        });
+    }
 }
 
 // Placeholder tests for when loom feature is not enabled

@@ -596,6 +596,44 @@ impl VolumeHeader {
     }
 }
 
+/// Kani verification helper: construct a VolumeHeader without system calls.
+///
+/// `VolumeHeader::new()` calls `SystemTime::now()` which is unsupported in
+/// Kani's symbolic execution. This constructor takes all fields directly,
+/// skipping checksum computation (blake3 is too heavy for bounded model checking).
+/// Use only for harnesses that test field-reading methods (has_pqc, requires_yubikey, etc.),
+/// NOT for checksum verification.
+#[cfg(kani)]
+impl VolumeHeader {
+    pub(crate) fn kani_new(
+        pq_algorithm: PqAlgorithm,
+        pq_metadata_size: u32,
+        flags: u8,
+    ) -> Self {
+        Self {
+            magic: MAGIC,
+            version: VERSION,
+            cipher: CipherAlgorithm::Aes256Xts,
+            salt: [0u8; 32],
+            header_iv: [0u8; 12],
+            volume_size: 1024 * 1024,
+            sector_size: 4096,
+            created_at: 1_700_000_000,
+            modified_at: 1_700_000_000,
+            pq_algorithm,
+            pq_metadata_offset: if pq_algorithm != PqAlgorithm::None {
+                HEADER_SIZE as u64
+            } else {
+                0
+            },
+            pq_metadata_size,
+            checksum: [0u8; 32],
+            flags,
+            reserved: [0u8; 202],
+        }
+    }
+}
+
 /// Expected serialized size of PqVolumeMetadata with postcard
 /// With cryptographic agility padding (60KB fixed padding for future algorithms like SPHINCS+)
 /// Postcard uses compact variable-length encoding: 1 + 1568 + 1568 + 3196 + 60000 = 66333 bytes

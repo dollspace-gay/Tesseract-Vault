@@ -11,6 +11,7 @@ use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
 use tesseract_lib::crypto::kdf::Argon2Kdf;
 use tesseract_lib::crypto::Encryptor;
 use tesseract_lib::crypto::KeyDerivation;
+use tesseract_lib::volume::ChunkHash;
 use tesseract_lib::{decrypt_bytes, encrypt_bytes};
 
 // Strategy for generating arbitrary plaintext (0 bytes to 64KB)
@@ -271,37 +272,46 @@ proptest! {
     }
 }
 
-// BLAKE3 hash tests
+// BLAKE3 hash tests (via project code paths)
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(200))]
 
-    /// Property: Hash function is deterministic
+    /// Property: ChunkHash::compute() is deterministic for any input.
+    ///
+    /// Exercises Tesseract's cloud_sync::ChunkHash — the project's content hashing
+    /// path. Catches bugs like accidentally mixing random data into the hash.
     #[test]
-    fn hash_is_deterministic(data in plaintext_strategy()) {
-        let hash1 = blake3::hash(&data);
-        let hash2 = blake3::hash(&data);
+    fn chunk_hash_is_deterministic(data in plaintext_strategy()) {
+        let hash1 = ChunkHash::compute(&data);
+        let hash2 = ChunkHash::compute(&data);
 
         prop_assert_eq!(hash1.as_bytes(), hash2.as_bytes());
     }
 
-    /// Property: Different inputs produce different hashes
+    /// Property: ChunkHash::compute() produces different hashes for different inputs.
+    ///
+    /// Exercises Tesseract's content hashing. Catches bugs like truncating or
+    /// ignoring input data before hashing.
     #[test]
-    fn hash_differs_for_different_inputs(
+    fn chunk_hash_differs_for_different_inputs(
         data1 in prop::collection::vec(any::<u8>(), 1..1000),
         data2 in prop::collection::vec(any::<u8>(), 1..1000)
     ) {
         prop_assume!(data1 != data2);
 
-        let hash1 = blake3::hash(&data1);
-        let hash2 = blake3::hash(&data2);
+        let hash1 = ChunkHash::compute(&data1);
+        let hash2 = ChunkHash::compute(&data2);
 
         prop_assert_ne!(hash1.as_bytes(), hash2.as_bytes());
     }
 
-    /// Property: Hash length is always 32 bytes
+    /// Property: ChunkHash output is always exactly 32 bytes.
+    ///
+    /// Exercises ChunkHash::compute() and verifies the output size invariant
+    /// that the rest of the project depends on.
     #[test]
-    fn hash_length_is_constant(data in plaintext_strategy()) {
-        let hash = blake3::hash(&data);
+    fn chunk_hash_length_is_constant(data in plaintext_strategy()) {
+        let hash = ChunkHash::compute(&data);
         prop_assert_eq!(hash.as_bytes().len(), 32);
     }
 }

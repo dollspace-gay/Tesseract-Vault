@@ -17,6 +17,9 @@ use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
 use tesseract_lib::crypto::kdf::Argon2Kdf;
 use tesseract_lib::crypto::Encryptor;
 use tesseract_lib::crypto::KeyDerivation;
+use tesseract_lib::hsm::tpm::PcrIndex;
+use tesseract_lib::hsm::tpm_utils::compute_policy_digest;
+use tesseract_lib::volume::ChunkHash;
 use tesseract_lib::{decrypt_bytes, encrypt_bytes};
 
 /// Generate a valid password that meets requirements
@@ -265,70 +268,93 @@ proptest! {
 }
 
 // =============================================================================
-// BLAKE3 Hash Differential Tests
+// BLAKE3 Hash Differential Tests (via project code paths)
 // =============================================================================
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
 
-    /// Verify BLAKE3 is deterministic
+    /// Verify ChunkHash::compute() is deterministic for any input.
+    ///
+    /// Exercises Tesseract's cloud_sync::ChunkHash::compute() — the project's
+    /// content-hashing path used for incremental sync change detection.
+    /// Catches bugs like accidentally mixing in timestamps or random data.
     #[test]
-    fn blake3_deterministic(data in prop::collection::vec(any::<u8>(), 0..10000)) {
-        let hash1 = blake3::hash(&data);
-        let hash2 = blake3::hash(&data);
+    fn chunk_hash_deterministic(data in prop::collection::vec(any::<u8>(), 0..10000)) {
+        let hash1 = ChunkHash::compute(&data);
+        let hash2 = ChunkHash::compute(&data);
 
         prop_assert_eq!(hash1.as_bytes(), hash2.as_bytes(),
-            "BLAKE3 must be deterministic");
+            "ChunkHash::compute must be deterministic");
     }
 
-    /// Verify BLAKE3 produces unique hashes for different inputs
+    /// Verify ChunkHash::compute() produces unique hashes for different inputs.
+    ///
+    /// Exercises Tesseract's content hashing path. Catches bugs like truncating
+    /// input before hashing or using a constant seed.
     #[test]
-    fn blake3_collision_resistance(
+    fn chunk_hash_collision_resistance(
         data1 in prop::collection::vec(any::<u8>(), 1..1000),
         data2 in prop::collection::vec(any::<u8>(), 1..1000)
     ) {
         prop_assume!(data1 != data2);
 
-        let hash1 = blake3::hash(&data1);
-        let hash2 = blake3::hash(&data2);
+        let hash1 = ChunkHash::compute(&data1);
+        let hash2 = ChunkHash::compute(&data2);
 
         prop_assert_ne!(hash1.as_bytes(), hash2.as_bytes(),
-            "Different inputs must produce different hashes");
+            "Different inputs must produce different chunk hashes");
     }
 
-    /// Verify BLAKE3 incremental hashing matches single-shot
+    /// Verify compute_policy_digest() incorporates ALL PCR entries.
+    ///
+    /// Exercises Tesseract's hsm::tpm_utils::compute_policy_digest() which feeds
+    /// multiple PCR values incrementally into a BLAKE3 hasher. Catches bugs where
+    /// only the first or last PCR entry is hashed, or entries are silently dropped.
     #[test]
-    fn blake3_incremental_consistency(
-        data in prop::collection::vec(any::<u8>(), 0..10000),
-        chunk_size in 1usize..1000
+    fn policy_digest_input_completeness(
+        pcr0_data in prop::collection::vec(any::<u8>(), 1..100),
+        pcr7_data in prop::collection::vec(any::<u8>(), 1..100)
     ) {
-        // Single-shot hash
-        let single_hash = blake3::hash(&data);
+        // Single PCR entry
+        let digest_one = compute_policy_digest(
+            &[(PcrIndex::Pcr0, pcr0_data.clone())],
+            None,
+        );
 
-        // Incremental hash
-        let mut hasher = blake3::Hasher::new();
-        for chunk in data.chunks(chunk_size) {
-            hasher.update(chunk);
-        }
-        let incremental_hash = hasher.finalize();
+        // Same first entry plus a second — must produce different digest
+        let digest_two = compute_policy_digest(
+            &[(PcrIndex::Pcr0, pcr0_data), (PcrIndex::Pcr7, pcr7_data)],
+            None,
+        );
 
-        prop_assert_eq!(single_hash.as_bytes(), incremental_hash.as_bytes(),
-            "Incremental hashing must match single-shot");
+        prop_assert_ne!(digest_one, digest_two,
+            "Adding more PCR entries must change the policy digest");
     }
 
-    /// Verify BLAKE3 keyed hashing is different from unkeyed
+    /// Verify project hash functions produce different outputs for the same raw bytes.
+    ///
+    /// Tests domain separation: ChunkHash::compute() (content hashing) and
+    /// compute_policy_digest() (TPM policy) must not produce the same output
+    /// for the same raw data, because compute_policy_digest includes structural
+    /// metadata (PCR index bytes) in the hash input. Catches bugs where hash
+    /// contexts are accidentally interchangeable.
     #[test]
-    fn blake3_keyed_vs_unkeyed(
-        data in prop::collection::vec(any::<u8>(), 1..1000),
-        key in prop::collection::vec(any::<u8>(), 32..=32)
+    fn project_hash_domain_separation(
+        data in prop::collection::vec(any::<u8>(), 1..1000)
     ) {
-        let key_array: [u8; 32] = key.try_into().unwrap();
+        // ChunkHash hashes raw data directly
+        let chunk_hash = ChunkHash::compute(&data);
 
-        let unkeyed = blake3::hash(&data);
-        let keyed = blake3::keyed_hash(&key_array, &data);
+        // compute_policy_digest prefixes each value with its PCR index byte,
+        // so it hashes [Pcr0_index_byte || data] — structurally different
+        let policy_digest = compute_policy_digest(
+            &[(PcrIndex::Pcr0, data.clone())],
+            None,
+        );
 
-        prop_assert_ne!(unkeyed.as_bytes(), keyed.as_bytes(),
-            "Keyed hash must differ from unkeyed");
+        prop_assert_ne!(chunk_hash.as_bytes().as_slice(), &policy_digest[..],
+            "Content hash and policy digest must differ for same raw data");
     }
 }
 

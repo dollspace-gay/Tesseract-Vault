@@ -20,10 +20,7 @@ pub mod streaming;
 mod pqc_tests;
 
 // Kani formal verification harnesses
-#[cfg(kani)]
-mod aes_gcm_kani;
-#[cfg(kani)]
-mod kdf_kani;
+// Note: AES-GCM and KDF harnesses cannot work with Kani (inline assembly in aes-gcm/argon2 crates)
 #[cfg(kani)]
 mod streaming_kani;
 

@@ -55,50 +55,6 @@ jobs:
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_zero_index_valid
           cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_max_index_valid
 
-  kani-aes-gcm:
-    name: AES-GCM Encryption
-    runs-on: [self-hosted, Linux]
-    timeout-minutes: 360
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Verify AES-GCM properties
-        run: |
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_encrypt_length
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_encrypt_no_panic
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_encrypt_rejects_invalid_nonce
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_roundtrip
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_authentication
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_decrypt_length
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_nonce_len
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_aes_gcm_no_overflow
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_decrypt_minimum_length
-
-  kani-kdf:
-    name: Key Derivation
-    runs-on: [self-hosted, Linux]
-    timeout-minutes: 360
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Verify KDF properties
-        run: |
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_key_length
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_determinism
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_no_panic
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_salt_uniqueness
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_password_uniqueness
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_salt_generation
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_config_validity
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_kdf_no_overflow
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_empty_password
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_short_salt
-          cargo kani --lib --no-default-features --features "post-quantum,compression" --harness verify_large_inputs
-
   kani-memory:
     name: Memory Protection
     runs-on: [self-hosted, Linux]

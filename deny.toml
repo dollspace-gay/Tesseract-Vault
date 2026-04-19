@@ -53,19 +53,18 @@ allow = [
     "Zlib",
     "0BSD",
     "Unicode-3.0",
-    "Unicode-DFS-2016",
     "CC0-1.0",
     "MPL-2.0",
     "BSL-1.0",      # Boost Software License (clipboard-win, error-code)
-    "OFL-1.1",      # SIL Open Font License (epaint_default_fonts)
-    "CDLA-Permissive-2.0",  # Community Data License Agreement (webpki-roots)
 ]
 confidence-threshold = 0.8
 
 # Per-crate license exceptions
 exceptions = [
-    # epaint_default_fonts has embedded fonts with UFL license
-    { allow = ["MIT", "Apache-2.0", "OFL-1.1", "LicenseRef-UFL-1.0"], crate = "epaint_default_fonts" },
+    # epaint_default_fonts has embedded fonts with UFL license.
+    # epaint 0.34 declares the SPDX-blessed `Ubuntu-font-1.0` identifier;
+    # older releases used the non-standard `LicenseRef-UFL-1.0`.
+    { allow = ["MIT", "Apache-2.0", "OFL-1.1", "Ubuntu-font-1.0", "LicenseRef-UFL-1.0"], crate = "epaint_default_fonts" },
     # WinFsp bindings are GPL-3.0 - used for Windows filesystem mounting (optional feature)
     # The WinFsp driver itself is GPL-3.0 licensed, and the Rust bindings inherit this
     # This is acceptable as we only link dynamically at runtime on Windows

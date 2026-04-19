@@ -235,7 +235,11 @@ struct CpuidResult {
 }
 
 /// Execute CPUID instruction
+// `unused_unsafe` silences stable-rustc's complaint that __cpuid_count is no
+// longer unsafe; nightly (used by the fuzzer for -Zsanitizer) still requires
+// unsafe.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[allow(unused_unsafe)]
 fn cpuid(leaf: u32, subleaf: u32) -> Option<CpuidResult> {
     #[cfg(target_arch = "x86")]
     use core::arch::x86::__cpuid_count;
@@ -247,7 +251,7 @@ fn cpuid(leaf: u32, subleaf: u32) -> Option<CpuidResult> {
         return None;
     }
 
-    let result = __cpuid_count(leaf, subleaf);
+    let result = unsafe { __cpuid_count(leaf, subleaf) };
     Some(CpuidResult {
         eax: result.eax,
         ebx: result.ebx,

@@ -538,15 +538,16 @@ mod tests {
         // (AuthManager::load will fail)
     }
 
+    // Should be at least 1 MB
+    const _: () = assert!(MAX_RESPONSE_SIZE >= 1024 * 1024);
+    // Should be at most 100 MB to prevent DoS
+    const _: () = assert!(MAX_RESPONSE_SIZE <= 100 * 1024 * 1024);
+
     /// Test MAX_RESPONSE_SIZE constant is set appropriately
     #[test]
     fn test_max_response_size_reasonable() {
         // 16 MB is a reasonable limit for volume lists
         assert_eq!(MAX_RESPONSE_SIZE, 16 * 1024 * 1024);
-        // Should be at least 1 MB
-        assert!(MAX_RESPONSE_SIZE >= 1024 * 1024);
-        // Should be at most 100 MB to prevent DoS
-        assert!(MAX_RESPONSE_SIZE <= 100 * 1024 * 1024);
     }
 
     /// Test that DaemonClient properly zeroizes token on drop

@@ -204,7 +204,7 @@ mod tests {
         assert!(err.to_string().contains("Failed to register"));
         assert!(err.to_string().contains("test failure"));
 
-        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "io test");
+        let io_err = std::io::Error::other("io test");
         let err = PowerMonitorError::Io(io_err);
         assert!(err.to_string().contains("I/O error"));
 

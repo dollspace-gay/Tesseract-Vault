@@ -251,10 +251,11 @@ mod regular_tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
+    type Callbacks = Arc<Mutex<Vec<Box<dyn Fn() + Send + Sync>>>>;
+
     #[test]
     fn test_callback_vector_thread_safety() {
-        let callbacks: Arc<Mutex<Vec<Box<dyn Fn() + Send + Sync>>>> =
-            Arc::new(Mutex::new(Vec::new()));
+        let callbacks: Callbacks = Arc::new(Mutex::new(Vec::new()));
         let count = Arc::new(AtomicUsize::new(0));
 
         let c = Arc::clone(&count);

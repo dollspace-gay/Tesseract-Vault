@@ -2800,10 +2800,9 @@ impl CryptorApp {
                     .clicked()
                 {
                     ui.output_mut(|o| {
-                        o.commands
-                            .push(egui::OutputCommand::CopyText(
-                                self.remote_wipe_token_display.clone(),
-                            ));
+                        o.commands.push(egui::OutputCommand::CopyText(
+                            self.remote_wipe_token_display.clone(),
+                        ));
                     });
                     self.remote_wipe_status = "✓ Token copied to clipboard".to_string();
                 }

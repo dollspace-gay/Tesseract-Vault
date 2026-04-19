@@ -1453,9 +1453,11 @@ mod tests {
 
     #[test]
     fn test_sync_stats_clone() {
-        let mut stats = SyncStats::default();
-        stats.chunks_uploaded = 10;
-        stats.bytes_uploaded = 1024;
+        let stats = SyncStats {
+            chunks_uploaded: 10,
+            bytes_uploaded: 1024,
+            ..Default::default()
+        };
 
         let cloned = stats.clone();
         assert_eq!(cloned.chunks_uploaded, 10);
@@ -1590,8 +1592,10 @@ mod tests {
 
     #[test]
     fn test_sync_stats_success_rate_mixed() {
-        let mut stats = SyncStats::default();
-        stats.chunks_uploaded = 3;
+        let mut stats = SyncStats {
+            chunks_uploaded: 3,
+            ..Default::default()
+        };
         stats.errors.push((0, "err".to_string()));
 
         // 3 / 4 = 75%
@@ -1600,11 +1604,13 @@ mod tests {
 
     #[test]
     fn test_sync_stats_with_bytes_and_duration() {
-        let mut stats = SyncStats::default();
-        stats.chunks_uploaded = 5;
-        stats.chunks_skipped = 2;
-        stats.bytes_uploaded = 1024 * 1024; // 1 MB
-        stats.duration_ms = 5000; // 5 seconds
+        let stats = SyncStats {
+            chunks_uploaded: 5,
+            chunks_skipped: 2,
+            bytes_uploaded: 1024 * 1024, // 1 MB
+            duration_ms: 5000,           // 5 seconds
+            ..Default::default()
+        };
 
         assert!(stats.is_success());
         assert_eq!(stats.success_rate(), 100.0);
@@ -1831,7 +1837,7 @@ mod tests {
     #[test]
     fn test_chunk_hash_clone_trait() {
         let hash1 = ChunkHash::compute(b"test");
-        let hash2 = hash1.clone();
+        let hash2 = Clone::clone(&hash1);
         assert_eq!(hash1, hash2);
     }
 

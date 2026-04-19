@@ -281,8 +281,7 @@ mod tests {
     #[test]
     fn test_debugger_check_returns_bool() {
         // This should always return a bool, regardless of platform
-        let result = is_debugger_present();
-        assert!(result == true || result == false);
+        let _result: bool = is_debugger_present();
     }
 
     #[test]

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
-use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::alloc::{GlobalAlloc, Layout};
+use std::hint::black_box;
 use tesseract_lib::crypto::kdf::Argon2Kdf;
 use tesseract_lib::crypto::pqc::{encapsulate, MlKemKeyPair};
 use tesseract_lib::crypto::{Encryptor, KeyDerivation};
@@ -129,7 +129,7 @@ fn bench_hybrid_mode_operations(c: &mut Criterion) {
         let nonce = [0u8; 12];
 
         b.iter(|| {
-            let ciphertext = encryptor.encrypt(&*hybrid_key, &nonce, &plaintext).unwrap();
+            let ciphertext = encryptor.encrypt(&hybrid_key, &nonce, &plaintext).unwrap();
             black_box(ciphertext)
         });
     });
@@ -138,12 +138,10 @@ fn bench_hybrid_mode_operations(c: &mut Criterion) {
         let plaintext = vec![0x42u8; 1024];
         let encryptor = tesseract_lib::crypto::aes_gcm::AesGcmEncryptor::new();
         let nonce = [0u8; 12];
-        let ciphertext = encryptor.encrypt(&*hybrid_key, &nonce, &plaintext).unwrap();
+        let ciphertext = encryptor.encrypt(&hybrid_key, &nonce, &plaintext).unwrap();
 
         b.iter(|| {
-            let decrypted = encryptor
-                .decrypt(&*hybrid_key, &nonce, &ciphertext)
-                .unwrap();
+            let decrypted = encryptor.decrypt(&hybrid_key, &nonce, &ciphertext).unwrap();
             black_box(decrypted)
         });
     });
@@ -237,7 +235,7 @@ fn bench_pqc_data_sizes(c: &mut Criterion) {
             let nonce = [0u8; 12];
 
             b.iter(|| {
-                let ciphertext = encryptor.encrypt(&*hybrid_key, &nonce, &plaintext).unwrap();
+                let ciphertext = encryptor.encrypt(&hybrid_key, &nonce, &plaintext).unwrap();
                 black_box(ciphertext)
             });
         });
@@ -245,12 +243,10 @@ fn bench_pqc_data_sizes(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("decrypt", size), size, |b, &size| {
             let plaintext = vec![0x42u8; size];
             let nonce = [0u8; 12];
-            let ciphertext = encryptor.encrypt(&*hybrid_key, &nonce, &plaintext).unwrap();
+            let ciphertext = encryptor.encrypt(&hybrid_key, &nonce, &plaintext).unwrap();
 
             b.iter(|| {
-                let decrypted = encryptor
-                    .decrypt(&*hybrid_key, &nonce, &ciphertext)
-                    .unwrap();
+                let decrypted = encryptor.decrypt(&hybrid_key, &nonce, &ciphertext).unwrap();
                 black_box(decrypted)
             });
         });

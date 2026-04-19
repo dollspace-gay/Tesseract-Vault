@@ -336,7 +336,7 @@ mod tests {
 
         tracker.set_progress_callback(Arc::new(move |progress, processed, total| {
             call_count_clone.fetch_add(1, Ordering::SeqCst);
-            assert!(progress >= 0.0 && progress <= 1.0);
+            assert!((0.0..=1.0).contains(&progress));
             assert!(processed <= total);
         }));
 

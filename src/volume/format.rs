@@ -931,12 +931,12 @@ mod tests {
     #[test]
     fn test_layout_constants() {
         // Verify non-overlapping layout
-        assert!(BACKUP_SUPERBLOCK_BLOCK > SUPERBLOCK_BLOCK);
-        assert!(BLOCK_BITMAP_START > BACKUP_SUPERBLOCK_BLOCK);
-        assert!(INODE_BITMAP_START >= BLOCK_BITMAP_START + BLOCK_BITMAP_BLOCKS);
-        assert!(INODE_TABLE_START >= INODE_BITMAP_START + INODE_BITMAP_BLOCKS);
-        assert!(JOURNAL_START >= INODE_TABLE_START + INODE_TABLE_BLOCKS);
-        assert!(DATA_BLOCKS_START >= JOURNAL_START + JOURNAL_BLOCKS);
+        const _: () = assert!(BACKUP_SUPERBLOCK_BLOCK > SUPERBLOCK_BLOCK);
+        const _: () = assert!(BLOCK_BITMAP_START > BACKUP_SUPERBLOCK_BLOCK);
+        const _: () = assert!(INODE_BITMAP_START >= BLOCK_BITMAP_START + BLOCK_BITMAP_BLOCKS);
+        const _: () = assert!(INODE_TABLE_START >= INODE_BITMAP_START + INODE_BITMAP_BLOCKS);
+        const _: () = assert!(JOURNAL_START >= INODE_TABLE_START + INODE_TABLE_BLOCKS);
+        const _: () = assert!(DATA_BLOCKS_START >= JOURNAL_START + JOURNAL_BLOCKS);
     }
 
     #[test]

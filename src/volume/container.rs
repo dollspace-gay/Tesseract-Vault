@@ -2201,14 +2201,12 @@ mod tests {
     #[test]
     fn test_pq_metadata_size_within_limits() {
         // Verify that current ML-KEM-1024 PQ metadata fits within reserved space
-        use super::super::header::{PqAlgorithm, PqVolumeMetadata, PQ_METADATA_SIZE};
+        use super::super::header::{PqAlgorithm, PqVolumeMetadata};
 
         // Current PQ metadata size should be well under the 8KB limit
-        assert!(
-            PQ_METADATA_SIZE < PQ_METADATA_RESERVED,
-            "PQ metadata size ({}) should be less than reserved space ({})",
-            PQ_METADATA_SIZE,
-            PQ_METADATA_RESERVED
+        const _: () = assert!(
+            super::super::header::PQ_METADATA_SIZE < PQ_METADATA_RESERVED,
+            "PQ metadata size should be less than reserved space",
         );
 
         // Verify actual serialization fits
@@ -3068,8 +3066,8 @@ mod tests {
         // Verify layout constants are consistent
         assert_eq!(PRIMARY_HEADER_OFFSET, 0);
         assert_eq!(PQ_METADATA_OFFSET, HEADER_SIZE as u64);
-        assert!(KEYSLOTS_OFFSET > PQ_METADATA_OFFSET);
-        assert!(DATA_AREA_OFFSET > KEYSLOTS_OFFSET);
+        const _: () = assert!(KEYSLOTS_OFFSET > PQ_METADATA_OFFSET);
+        const _: () = assert!(DATA_AREA_OFFSET > KEYSLOTS_OFFSET);
         assert_eq!(METADATA_SIZE, DATA_AREA_OFFSET as usize);
     }
 

@@ -511,7 +511,7 @@ mod tests {
         // Test that Result type alias works correctly
         let ok_result: Result<u32> = Ok(42);
         assert!(ok_result.is_ok());
-        assert_eq!(ok_result.unwrap(), 42);
+        assert_eq!(ok_result.ok(), Some(42));
 
         let err_result: Result<u32> = Err(TmeError::NotSupported);
         assert!(err_result.is_err());

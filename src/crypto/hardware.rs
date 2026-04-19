@@ -1281,21 +1281,22 @@ mod tests {
 
     #[test]
     fn test_capabilities_with_x86_features() {
-        let mut caps = HardwareCapabilities::default();
-
         // Simulate a typical Intel CPU with AES-NI and AVX2
-        caps.vendor = CpuVendor::Intel;
-        caps.cpu_brand = "Test CPU".to_string();
-        caps.aes_ni = true;
-        caps.pclmulqdq = true;
-        caps.sha_ext = true;
-        caps.avx = true;
-        caps.avx2 = true;
-        caps.rdrand = true;
-        caps.rdseed = true;
-        caps.sse2 = true;
-        caps.sse41 = true;
-        caps.sse42 = true;
+        let caps = HardwareCapabilities {
+            vendor: CpuVendor::Intel,
+            cpu_brand: "Test CPU".to_string(),
+            aes_ni: true,
+            pclmulqdq: true,
+            sha_ext: true,
+            avx: true,
+            avx2: true,
+            rdrand: true,
+            rdseed: true,
+            sse2: true,
+            sse41: true,
+            sse42: true,
+            ..Default::default()
+        };
 
         assert!(caps.has_aes_ni());
         assert!(caps.has_gcm_acceleration());
@@ -1320,17 +1321,18 @@ mod tests {
 
     #[test]
     fn test_capabilities_with_arm_features() {
-        let mut caps = HardwareCapabilities::default();
-
         // Simulate an ARM CPU
-        caps.vendor = CpuVendor::Arm;
-        caps.arm_aes = true;
-        caps.arm_sha1 = true;
-        caps.arm_sha2 = true;
-        caps.arm_sha3 = true;
-        caps.arm_pmull = true;
-        caps.arm_neon = true;
-        caps.arm_crc32 = true;
+        let caps = HardwareCapabilities {
+            vendor: CpuVendor::Arm,
+            arm_aes: true,
+            arm_sha1: true,
+            arm_sha2: true,
+            arm_sha3: true,
+            arm_pmull: true,
+            arm_neon: true,
+            arm_crc32: true,
+            ..Default::default()
+        };
 
         assert!(caps.has_aes_ni()); // ARM AES counts as AES acceleration
         assert!(caps.has_gcm_acceleration()); // ARM AES + PMULL
@@ -1349,19 +1351,20 @@ mod tests {
 
     #[test]
     fn test_capabilities_with_avx512_vaes() {
-        let mut caps = HardwareCapabilities::default();
-
-        caps.aes_ni = true;
-        caps.pclmulqdq = true;
-        caps.avx = true;
-        caps.avx2 = true;
-        caps.avx512f = true;
-        caps.avx512vl = true;
-        caps.vaes = true;
-        caps.vpclmulqdq = true;
-        caps.bmi1 = true;
-        caps.bmi2 = true;
-        caps.adx = true;
+        let caps = HardwareCapabilities {
+            aes_ni: true,
+            pclmulqdq: true,
+            avx: true,
+            avx2: true,
+            avx512f: true,
+            avx512vl: true,
+            vaes: true,
+            vpclmulqdq: true,
+            bmi1: true,
+            bmi2: true,
+            adx: true,
+            ..Default::default()
+        };
 
         assert!(caps.has_avx512());
         assert!(caps.has_vaes());
@@ -1436,9 +1439,11 @@ mod tests {
 
     #[test]
     fn test_throughput_estimate_arm() {
-        let mut caps = HardwareCapabilities::default();
-        caps.arm_aes = true;
-        caps.arm_pmull = true;
+        let caps = HardwareCapabilities {
+            arm_aes: true,
+            arm_pmull: true,
+            ..Default::default()
+        };
         assert_eq!(
             caps.estimated_aes_gcm_throughput(),
             ThroughputEstimate::Medium
@@ -1447,11 +1452,13 @@ mod tests {
 
     #[test]
     fn test_capabilities_display_format() {
-        let mut caps = HardwareCapabilities::default();
-        caps.vendor = CpuVendor::Intel;
-        caps.cpu_brand = "Test CPU".to_string();
-        caps.aes_ni = true;
-        caps.pclmulqdq = true;
+        let caps = HardwareCapabilities {
+            vendor: CpuVendor::Intel,
+            cpu_brand: "Test CPU".to_string(),
+            aes_ni: true,
+            pclmulqdq: true,
+            ..Default::default()
+        };
 
         let display = format!("{}", caps);
 
@@ -1464,9 +1471,11 @@ mod tests {
 
     #[test]
     fn test_capabilities_display_empty_brand() {
-        let mut caps = HardwareCapabilities::default();
-        caps.vendor = CpuVendor::Unknown;
-        caps.cpu_brand = String::new();
+        let caps = HardwareCapabilities {
+            vendor: CpuVendor::Unknown,
+            cpu_brand: String::new(),
+            ..Default::default()
+        };
 
         let display = format!("{}", caps);
 
@@ -1555,9 +1564,11 @@ mod tests {
 
     #[test]
     fn test_vaes_requires_avx512f() {
-        let mut caps = HardwareCapabilities::default();
-        caps.vaes = true;
-        caps.avx512f = false;
+        let mut caps = HardwareCapabilities {
+            vaes: true,
+            avx512f: false,
+            ..Default::default()
+        };
         // VAES is only useful with AVX-512F
         assert!(!caps.has_vaes());
 

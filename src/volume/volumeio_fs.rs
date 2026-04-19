@@ -3202,29 +3202,37 @@ mod tests {
 
     #[test]
     fn test_fsck_result_is_clean_false_corrupted() {
-        let mut result = FsckResult::default();
-        result.corrupted_inodes = 1;
+        let result = FsckResult {
+            corrupted_inodes: 1,
+            ..Default::default()
+        };
         assert!(!result.is_clean());
     }
 
     #[test]
     fn test_fsck_result_is_clean_false_orphaned() {
-        let mut result = FsckResult::default();
-        result.orphaned_blocks = 1;
+        let result = FsckResult {
+            orphaned_blocks: 1,
+            ..Default::default()
+        };
         assert!(!result.is_clean());
     }
 
     #[test]
     fn test_fsck_result_is_clean_false_lost() {
-        let mut result = FsckResult::default();
-        result.lost_inodes = 1;
+        let result = FsckResult {
+            lost_inodes: 1,
+            ..Default::default()
+        };
         assert!(!result.is_clean());
     }
 
     #[test]
     fn test_fsck_result_is_clean_false_bitmap() {
-        let mut result = FsckResult::default();
-        result.bitmap_errors = 1;
+        let result = FsckResult {
+            bitmap_errors: 1,
+            ..Default::default()
+        };
         assert!(!result.is_clean());
     }
 

@@ -70,7 +70,7 @@ fn test_container_create_various_sizes() {
     for (i, size) in sizes.iter().enumerate() {
         let path = container_path(&dir, &format!("size_{}.vault", i));
         let container = Container::create(&path, *size, "password", TEST_SECTOR_SIZE)
-            .expect(&format!("Failed to create {}KB container", size / 1024));
+            .unwrap_or_else(|_| panic!("Failed to create {}KB container", size / 1024));
 
         // Data size should be the configured size
         assert_eq!(container.data_size(), *size);
@@ -774,7 +774,7 @@ fn test_concurrent_file_operations() {
         for f in 0..files_per_thread {
             let name = format!("thread_{}_file_{}.txt", t, f);
             fs.create_file(ROOT_INODE, &name, 0o644)
-                .expect(&format!("Failed to create {}", name));
+                .unwrap_or_else(|_| panic!("Failed to create {}", name));
         }
     }
 

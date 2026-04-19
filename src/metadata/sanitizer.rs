@@ -409,7 +409,7 @@ mod tests {
 
         for _ in 0..100 {
             let ts = sanitizer.generate_timestamp();
-            assert!(ts >= 1000 && ts <= 2000);
+            assert!((1000..=2000).contains(&ts));
         }
     }
 
@@ -487,7 +487,7 @@ mod tests {
 
         for _ in 0..100 {
             let size = sanitizer.calculate_padding_size();
-            assert!(size >= 100 && size <= 200);
+            assert!((100..=200).contains(&size));
         }
     }
 

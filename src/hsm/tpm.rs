@@ -1724,9 +1724,10 @@ mod tests {
         let restored = SealedKeyBlob::from_bytes(&bytes).unwrap();
 
         assert_eq!(restored.pcr_values.len(), 24);
-        for i in 0..24 {
-            assert_eq!(restored.pcr_values[i].0, all_pcrs[i].0);
-            assert_eq!(restored.pcr_values[i].1, all_pcrs[i].1);
+        for (restored_pcr, expected_pcr) in restored.pcr_values.iter().zip(all_pcrs.iter()).take(24)
+        {
+            assert_eq!(restored_pcr.0, expected_pcr.0);
+            assert_eq!(restored_pcr.1, expected_pcr.1);
         }
     }
 

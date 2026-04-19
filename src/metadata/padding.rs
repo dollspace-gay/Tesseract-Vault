@@ -296,7 +296,7 @@ mod tests {
 
         for _ in 0..100 {
             let padding = gen.calculate_padding(1000).unwrap();
-            assert!(padding >= 100 && padding <= 200);
+            assert!((100..=200).contains(&padding));
         }
     }
 

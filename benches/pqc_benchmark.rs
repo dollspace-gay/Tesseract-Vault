@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::alloc::{GlobalAlloc, Layout};
 use tesseract_lib::crypto::kdf::Argon2Kdf;
 use tesseract_lib::crypto::pqc::{encapsulate, MlKemKeyPair};
@@ -124,7 +125,7 @@ fn bench_hybrid_mode_operations(c: &mut Criterion) {
 
     group.bench_function("hybrid_encryption_1kb", |b| {
         let plaintext = vec![0x42u8; 1024];
-        let encryptor = tesseract::crypto::aes_gcm::AesGcmEncryptor;
+        let encryptor = tesseract_lib::crypto::aes_gcm::AesGcmEncryptor::new();
         let nonce = [0u8; 12];
 
         b.iter(|| {
@@ -135,7 +136,7 @@ fn bench_hybrid_mode_operations(c: &mut Criterion) {
 
     group.bench_function("hybrid_decryption_1kb", |b| {
         let plaintext = vec![0x42u8; 1024];
-        let encryptor = tesseract::crypto::aes_gcm::AesGcmEncryptor;
+        let encryptor = tesseract_lib::crypto::aes_gcm::AesGcmEncryptor::new();
         let nonce = [0u8; 12];
         let ciphertext = encryptor.encrypt(&*hybrid_key, &nonce, &plaintext).unwrap();
 
@@ -228,7 +229,7 @@ fn bench_pqc_data_sizes(c: &mut Criterion) {
     let mut hybrid_key = zeroize::Zeroizing::new([0u8; 32]);
     hk.expand(&*pq_secret, &mut *hybrid_key).unwrap();
 
-    let encryptor = tesseract::crypto::aes_gcm::AesGcmEncryptor;
+    let encryptor = tesseract_lib::crypto::aes_gcm::AesGcmEncryptor::new();
 
     for size in [1024, 4096, 16384, 65536, 262144].iter() {
         group.bench_with_input(BenchmarkId::new("encrypt", size), size, |b, &size| {
@@ -290,6 +291,7 @@ fn bench_volume_header_pqc(c: &mut Criterion) {
         encapsulation_key: ek_array,
         ciphertext: ct_array,
         encrypted_decapsulation_key: edk_array,
+        reserved_padding: [0u8; tesseract_lib::volume::header::PQC_PADDING_SIZE],
     };
 
     let pq_size = pq_metadata.to_bytes().unwrap().len() as u32;

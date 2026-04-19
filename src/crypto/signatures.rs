@@ -10,6 +10,7 @@ use ml_dsa::{KeyGen, MlDsa44, MlDsa65, MlDsa87};
 use zeroize::Zeroizing;
 
 // Import signature traits from ml_dsa re-exports
+use ml_dsa::signature::Keypair as _;
 use ml_dsa::signature::{Signer, Verifier};
 
 /// ML-DSA security levels.

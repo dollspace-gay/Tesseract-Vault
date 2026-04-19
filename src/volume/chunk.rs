@@ -52,9 +52,9 @@ pub enum ChunkError {
 
     /// Invalid chunk size configuration
     #[error(
-        "Invalid chunk size: {0} (must be between {} and {} bytes)",
-        MIN_CHUNK_SIZE,
-        MAX_CHUNK_SIZE
+        "Invalid chunk size: {0} (must be between {min} and {max} bytes)",
+        min = MIN_CHUNK_SIZE,
+        max = MAX_CHUNK_SIZE
     )]
     InvalidChunkSize(u64),
 

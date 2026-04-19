@@ -590,7 +590,7 @@ fn detect_x86_vendor() -> CpuVendor {
     use std::arch::x86_64::__cpuid;
 
     // CPUID leaf 0 returns vendor string in EBX, EDX, ECX
-    let result = unsafe { __cpuid(0) };
+    let result = __cpuid(0);
 
     // Construct vendor string from registers (12 bytes)
     let mut vendor_bytes = [0u8; 12];
@@ -616,7 +616,7 @@ fn detect_x86_brand() -> String {
     use std::arch::x86_64::__cpuid;
 
     // Check if extended CPUID is supported
-    let result = unsafe { __cpuid(0x80000000) };
+    let result = __cpuid(0x80000000);
     if result.eax < 0x80000004 {
         return String::new();
     }
@@ -625,7 +625,7 @@ fn detect_x86_brand() -> String {
     let mut brand_bytes = [0u8; 48];
 
     for (i, leaf) in [0x80000002u32, 0x80000003, 0x80000004].iter().enumerate() {
-        let result = unsafe { __cpuid(*leaf) };
+        let result = __cpuid(*leaf);
         let offset = i * 16;
         brand_bytes[offset..offset + 4].copy_from_slice(&result.eax.to_le_bytes());
         brand_bytes[offset + 4..offset + 8].copy_from_slice(&result.ebx.to_le_bytes());

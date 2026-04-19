@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::io::Write;
 use tempfile::NamedTempFile;
 use tesseract_lib::crypto::aes_gcm::AesGcmEncryptor;
@@ -10,8 +11,8 @@ use tesseract_lib::crypto::streaming::{
 use tesseract_lib::encrypt_file;
 use zeroize::Zeroizing;
 
-use rand::rngs::OsRng;
-use rand_core::TryRngCore;
+use rand::rngs::SysRng;
+use rand_core::TryRng;
 use tesseract_lib::config::NONCE_LEN;
 
 /// Creates a temporary file with random data of the specified size.
@@ -43,7 +44,7 @@ fn bench_streaming_encryption(c: &mut Criterion) {
 
                     let key = Zeroizing::new([1u8; 32]);
                     let mut base_nonce = [0u8; NONCE_LEN];
-                    OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+                    SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
                     let encryptor = ChunkedEncryptor::new(
                         reader,
@@ -78,7 +79,7 @@ fn bench_streaming_decryption(c: &mut Criterion) {
 
         let key = Zeroizing::new([1u8; 32]);
         let mut base_nonce = [0u8; NONCE_LEN];
-        OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+        SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
         let encryptor = ChunkedEncryptor::new(
             reader,
@@ -145,7 +146,7 @@ fn bench_chunk_sizes(c: &mut Criterion) {
 
                     let key = Zeroizing::new([1u8; 32]);
                     let mut base_nonce = [0u8; NONCE_LEN];
-                    OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+                    SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
                     let encryptor = ChunkedEncryptor::new(
                         reader,
@@ -182,7 +183,7 @@ fn bench_streaming_vs_non_streaming(c: &mut Criterion) {
 
             let key = Zeroizing::new([1u8; 32]);
             let mut base_nonce = [0u8; NONCE_LEN];
-            OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+            SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
             let encryptor = ChunkedEncryptor::new(
                 reader,
@@ -237,7 +238,7 @@ fn bench_roundtrip(c: &mut Criterion) {
 
                     let key = Zeroizing::new([1u8; 32]);
                     let mut base_nonce = [0u8; NONCE_LEN];
-                    OsRng.try_fill_bytes(&mut base_nonce).unwrap();
+                    SysRng.try_fill_bytes(&mut base_nonce).unwrap();
 
                     let encryptor = ChunkedEncryptor::new(
                         reader,

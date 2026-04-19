@@ -247,15 +247,13 @@ fn cpuid(leaf: u32, subleaf: u32) -> Option<CpuidResult> {
         return None;
     }
 
-    unsafe {
-        let result = __cpuid_count(leaf, subleaf);
-        Some(CpuidResult {
-            eax: result.eax,
-            ebx: result.ebx,
-            ecx: result.ecx,
-            edx: result.edx,
-        })
-    }
+    let result = __cpuid_count(leaf, subleaf);
+    Some(CpuidResult {
+        eax: result.eax,
+        ebx: result.ebx,
+        ecx: result.ecx,
+        edx: result.edx,
+    })
 }
 
 /// Check if CPUID is available

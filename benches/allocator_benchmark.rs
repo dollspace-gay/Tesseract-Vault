@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2024 Tesseract Vault Contributors
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::alloc::{GlobalAlloc, Layout, System};
 use tesseract_lib::SecureAllocator;
 

@@ -6,8 +6,12 @@
 //! quantum-resistant key encapsulation.
 
 use crate::error::{CryptorError, Result};
-use ml_kem::kem::{Decapsulate, Encapsulate};
-use ml_kem::{Ciphertext, EncodedSizeUser, KemCore, MlKem1024};
+#[allow(deprecated)]
+use ml_kem::ExpandedKeyEncoding;
+use ml_kem::{
+    Ciphertext, Decapsulate, DecapsulationKey, Encapsulate, EncapsulationKey, Kem, KeyExport,
+    MlKem1024,
+};
 use zeroize::{Zeroize, Zeroizing};
 
 /// ML-KEM-1024 public key size in bytes.
@@ -177,11 +181,14 @@ impl MlKemKeyPair {
     /// ```
     pub fn generate() -> Self {
         let mut rng = rand::rng();
-        let (dk, ek) = MlKem1024::generate(&mut rng);
+        let (dk, ek) = MlKem1024::generate_keypair_from_rng(&mut rng);
+
+        #[allow(deprecated)]
+        let dk_bytes = dk.to_expanded_bytes();
 
         Self {
-            encapsulation_key: ek.to_encoded_bytes().to_vec(),
-            decapsulation_key: dk.to_encoded_bytes().to_vec(),
+            encapsulation_key: ek.to_bytes().to_vec(),
+            decapsulation_key: dk_bytes.to_vec(),
         }
     }
 
@@ -221,27 +228,23 @@ impl MlKemKeyPair {
             )));
         }
 
-        // Parse the decapsulation key using the type parameter set directly
         let dk_array: &[u8; SECRET_KEY_SIZE] =
             self.decapsulation_key.as_slice().try_into().map_err(|_| {
                 CryptorError::Cryptography("Invalid decapsulation key size".to_string())
             })?;
 
-        // Use type alias to simplify
-        type DK = <MlKem1024 as KemCore>::DecapsulationKey;
-        let dk =
-            DK::from_encoded_bytes(dk_array.into()).expect("Invalid decapsulation key encoding");
+        type Dk = DecapsulationKey<MlKem1024>;
+        #[allow(deprecated)]
+        let dk = Dk::from_expanded_bytes(dk_array.into())
+            .map_err(|_| CryptorError::Cryptography("Invalid decapsulation key".to_string()))?;
 
-        // Parse the ciphertext
         let ct_array: &[u8; CIPHERTEXT_SIZE] = ciphertext
             .try_into()
             .map_err(|_| CryptorError::Cryptography("Invalid ciphertext size".to_string()))?;
         let ct = Ciphertext::<MlKem1024>::from(*ct_array);
 
-        // Decapsulate the shared secret (never fails - returns Result<_, Infallible>)
         let ss = dk.decapsulate(&ct);
 
-        // Copy to zeroizing array
         let mut result = Zeroizing::new([0u8; SHARED_SECRET_SIZE]);
         result.copy_from_slice(&ss);
 
@@ -325,21 +328,18 @@ pub(crate) fn encapsulate_unchecked(
         )));
     }
 
-    // Parse the encapsulation key
     let ek_array: &[u8; PUBLIC_KEY_SIZE] = encapsulation_key
         .try_into()
         .map_err(|_| CryptorError::Cryptography("Invalid encapsulation key size".to_string()))?;
 
-    // Use type alias to simplify
-    type EK = <MlKem1024 as KemCore>::EncapsulationKey;
-    let ek = EK::from_encoded_bytes(ek_array.into()).expect("Invalid encapsulation key encoding");
+    type Ek = EncapsulationKey<MlKem1024>;
+    let ek = Ek::new(ek_array.into())
+        .map_err(|_| CryptorError::Cryptography("Invalid encapsulation key".to_string()))?;
 
     let mut rng = rand::rng();
 
-    // Encapsulate to get ciphertext and shared secret
-    let (ct, ss): (Ciphertext<MlKem1024>, _) = ek.encapsulate_with_rng(&mut rng);
+    let (ct, ss) = ek.encapsulate_with_rng(&mut rng);
 
-    // Copy to zeroizing array
     let mut secret_array = Zeroizing::new([0u8; SHARED_SECRET_SIZE]);
     secret_array.copy_from_slice(&ss);
 
@@ -380,25 +380,22 @@ pub fn decapsulate(
         )));
     }
 
-    // Parse the decapsulation key
     let dk_array: &[u8; SECRET_KEY_SIZE] = decapsulation_key
         .try_into()
         .map_err(|_| CryptorError::Cryptography("Invalid decapsulation key size".to_string()))?;
 
-    // Parse the ciphertext
     let ct_array: &[u8; CIPHERTEXT_SIZE] = ciphertext
         .try_into()
         .map_err(|_| CryptorError::Cryptography("Invalid ciphertext size".to_string()))?;
 
-    // Use type alias to simplify
-    type DK = <MlKem1024 as KemCore>::DecapsulationKey;
-    let dk = DK::from_encoded_bytes(dk_array.into()).expect("Invalid decapsulation key encoding");
+    type Dk = DecapsulationKey<MlKem1024>;
+    #[allow(deprecated)]
+    let dk = Dk::from_expanded_bytes(dk_array.into())
+        .map_err(|_| CryptorError::Cryptography("Invalid decapsulation key".to_string()))?;
     let ct = Ciphertext::<MlKem1024>::from(*ct_array);
 
-    // Decapsulate to get shared secret (never fails - returns Result<_, Infallible>)
     let ss = dk.decapsulate(&ct);
 
-    // Copy to zeroizing array
     let mut secret_array = Zeroizing::new([0u8; SHARED_SECRET_SIZE]);
     secret_array.copy_from_slice(&ss);
 

@@ -67,11 +67,11 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(move |cc| {
             // Set custom theme with rounded corners
-            let mut style = (*cc.egui_ctx.style()).clone();
-            style.visuals.widgets.inactive.rounding = egui::Rounding::same(20.0);
-            style.visuals.widgets.hovered.rounding = egui::Rounding::same(20.0);
-            style.visuals.widgets.active.rounding = egui::Rounding::same(20.0);
-            cc.egui_ctx.set_style(style);
+            let mut style = (*cc.egui_ctx.global_style()).clone();
+            style.visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(20);
+            style.visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(20);
+            style.visuals.widgets.active.corner_radius = egui::CornerRadius::same(20);
+            cc.egui_ctx.set_global_style(style);
 
             Ok(Box::new(CryptorApp::new(initial_file, initial_mode)))
         }),
@@ -628,8 +628,8 @@ impl CryptorApp {
                         255,
                         self.settings.panel_transparency,
                     ))
-                    .rounding(egui::Rounding::same(15.0))
-                    .inner_margin(egui::Margin::same(20.0));
+                    .corner_radius(15u8)
+                    .inner_margin(egui::Margin::same(20));
 
                 panel_frame.show(ui, |ui| {
                     ui.heading(
@@ -730,7 +730,7 @@ impl CryptorApp {
                                                     )
                                                     .fill(egui::Color32::from_rgb(245, 169, 184))
                                                     .min_size(egui::vec2(30.0, 30.0))
-                                                    .rounding(egui::Rounding::same(15.0));
+                                                    .corner_radius(15u8);
 
                                                     if ui.add(remove_btn).clicked() {
                                                         items_to_remove.push(index);
@@ -761,7 +761,7 @@ impl CryptorApp {
                         )
                         .fill(egui::Color32::from_rgb(91, 206, 250))
                         .min_size(egui::vec2(180.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0));
+                        .corner_radius(20u8);
 
                         if ui
                             .add_enabled(
@@ -782,7 +782,7 @@ impl CryptorApp {
                         )
                         .fill(egui::Color32::from_rgb(245, 169, 184))
                         .min_size(egui::vec2(150.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0));
+                        .corner_radius(20u8);
 
                         if ui
                             .add_enabled(!self.is_processing_queue, clear_btn)
@@ -800,7 +800,7 @@ impl CryptorApp {
                         )
                         .fill(egui::Color32::from_rgb(120, 120, 120))
                         .min_size(egui::vec2(100.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0));
+                        .corner_radius(20u8);
 
                         if ui.add(close_btn).clicked() {
                             self.show_queue_panel = false;
@@ -829,12 +829,12 @@ impl CryptorApp {
                 // Apply trans pride theme to settings panel
                 let panel_frame = egui::Frame::default()
                     .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, self.settings.panel_transparency))
-                    .rounding(egui::Rounding::same(15.0))
-                    .inner_margin(egui::Margin::same(25.0))
+                    .corner_radius(15u8)
+                    .inner_margin(egui::Margin::same(25))
                     .shadow(egui::epaint::Shadow {
-                        offset: egui::Vec2::new(0.0, 4.0),
-                        blur: 15.0,
-                        spread: 0.0,
+                        offset: [0, 4],
+                        blur: 15,
+                        spread: 0,
                         color: egui::Color32::from_black_alpha(40),
                     });
 
@@ -960,7 +960,7 @@ impl CryptorApp {
                         )
                         .fill(egui::Color32::from_rgb(91, 206, 250))
                         .min_size(egui::vec2(150.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0));
+                        .corner_radius(20u8);
 
                         if ui.add(close_btn).clicked() {
                             self.show_settings = false;
@@ -980,12 +980,12 @@ impl CryptorApp {
             .show(ctx, |ui| {
                 let panel_frame = egui::Frame::default()
                     .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, self.settings.panel_transparency))
-                    .rounding(egui::Rounding::same(15.0))
-                    .inner_margin(egui::Margin::same(25.0))
+                    .corner_radius(15u8)
+                    .inner_margin(egui::Margin::same(25))
                     .shadow(egui::epaint::Shadow {
-                        offset: egui::Vec2::new(0.0, 4.0),
-                        blur: 15.0,
-                        spread: 0.0,
+                        offset: [0, 4],
+                        blur: 15,
+                        spread: 0,
                         color: egui::Color32::from_black_alpha(40),
                     });
 
@@ -1100,7 +1100,7 @@ impl CryptorApp {
                             egui::Color32::from_rgb(180, 180, 180)
                         })
                         .min_size(egui::vec2(150.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0));
+                        .corner_radius(20u8);
 
                         if ui.add_enabled(can_generate, generate_btn).clicked() {
                             self.generate_keyfile();
@@ -1113,7 +1113,7 @@ impl CryptorApp {
                             egui::RichText::new("Cancel").size(16.0)
                         )
                         .min_size(egui::vec2(100.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0));
+                        .corner_radius(20u8);
 
                         if ui.add(cancel_btn).clicked() {
                             self.show_keyfile_generator = false;
@@ -1421,7 +1421,7 @@ impl CryptorApp {
                         )
                         .fill(create_color)
                         .min_size(egui::vec2(120.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0)),
+                        .corner_radius(20u8),
                     )
                     .clicked()
                 {
@@ -1439,7 +1439,7 @@ impl CryptorApp {
                         )
                         .fill(mount_color)
                         .min_size(egui::vec2(120.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0)),
+                        .corner_radius(20u8),
                     )
                     .clicked()
                 {
@@ -1457,7 +1457,7 @@ impl CryptorApp {
                         )
                         .fill(hidden_color)
                         .min_size(egui::vec2(120.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0)),
+                        .corner_radius(20u8),
                     )
                     .clicked()
                 {
@@ -1475,7 +1475,7 @@ impl CryptorApp {
                         )
                         .fill(info_color)
                         .min_size(egui::vec2(120.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0)),
+                        .corner_radius(20u8),
                     )
                     .clicked()
                 {
@@ -1493,7 +1493,7 @@ impl CryptorApp {
                         )
                         .fill(password_color)
                         .min_size(egui::vec2(120.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0)),
+                        .corner_radius(20u8),
                     )
                     .clicked()
                 {
@@ -1511,7 +1511,7 @@ impl CryptorApp {
                         )
                         .fill(security_color)
                         .min_size(egui::vec2(120.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0)),
+                        .corner_radius(20u8),
                     )
                     .clicked()
                 {
@@ -1529,7 +1529,7 @@ impl CryptorApp {
                         )
                         .fill(remote_wipe_color)
                         .min_size(egui::vec2(130.0, 40.0))
-                        .rounding(egui::Rounding::same(20.0)),
+                        .corner_radius(20u8),
                     )
                     .clicked()
                 {
@@ -1617,10 +1617,10 @@ impl CryptorApp {
                     ui.add_space(8.0);
 
                     // Warning box
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(egui::Color32::from_rgb(60, 30, 30))
-                        .rounding(egui::Rounding::same(8.0))
-                        .inner_margin(egui::Margin::same(12.0))
+                        .corner_radius(8u8)
+                        .inner_margin(egui::Margin::same(12))
                         .show(ui, |ui| {
                             ui.label(egui::RichText::new("⚠️ WARNING: If you enter the duress password when opening this volume, ALL encryption keys will be permanently destroyed. The volume will become unrecoverable.")
                                 .size(12.0)
@@ -1693,7 +1693,7 @@ impl CryptorApp {
                         egui::RichText::new("📦 Create Volume").size(16.0).color(egui::Color32::WHITE))
                         .fill(egui::Color32::from_rgb(91, 206, 250))
                         .min_size(egui::vec2(250.0, 50.0))
-                        .rounding(egui::Rounding::same(25.0))).clicked() {
+                        .corner_radius(25u8)).clicked() {
 
                         // Parse size
                         let size_result = parse_size(&self.volume_size);
@@ -1882,7 +1882,7 @@ impl CryptorApp {
                                 )
                                 .fill(egui::Color32::from_rgb(91, 206, 250))
                                 .min_size(egui::vec2(200.0, 50.0))
-                                .rounding(egui::Rounding::same(25.0)),
+                                .corner_radius(25u8),
                             )
                             .clicked()
                         {
@@ -1959,7 +1959,7 @@ impl CryptorApp {
                                 )
                                 .fill(egui::Color32::from_rgb(245, 169, 184))
                                 .min_size(egui::vec2(200.0, 50.0))
-                                .rounding(egui::Rounding::same(25.0)),
+                                .corner_radius(25u8),
                             )
                             .clicked()
                         {
@@ -2020,10 +2020,10 @@ impl CryptorApp {
                 ui.add_space(10.0);
 
                 // Info box about hidden volumes
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(egui::Color32::from_rgb(40, 40, 60))
-                    .rounding(egui::Rounding::same(8.0))
-                    .inner_margin(egui::Margin::same(12.0))
+                    .corner_radius(8u8)
+                    .inner_margin(egui::Margin::same(12))
                     .show(ui, |ui| {
                         ui.label(egui::RichText::new("🔒 Hidden volumes provide plausible deniability. They are encrypted containers within your outer volume that cannot be detected without the correct password and offset.")
                             .size(12.0)
@@ -2136,7 +2136,7 @@ impl CryptorApp {
                             )
                             .fill(egui::Color32::from_rgb(91, 206, 250))
                             .min_size(egui::vec2(250.0, 50.0))
-                            .rounding(egui::Rounding::same(25.0)),
+                            .corner_radius(25u8),
                         )
                         .clicked()
                     {
@@ -2208,10 +2208,10 @@ impl CryptorApp {
 
                 // Security warning
                 ui.add_space(30.0);
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(egui::Color32::from_rgb(60, 40, 30))
-                    .rounding(egui::Rounding::same(8.0))
-                    .inner_margin(egui::Margin::same(12.0))
+                    .corner_radius(8u8)
+                    .inner_margin(egui::Margin::same(12))
                     .show(ui, |ui| {
                         ui.label(egui::RichText::new("⚠️ IMPORTANT: Remember your offset! Without the correct offset and password, your hidden volume cannot be accessed. Fill the outer volume with decoy data for best plausible deniability.")
                             .size(12.0)
@@ -2265,7 +2265,7 @@ impl CryptorApp {
                         egui::RichText::new("ℹ️ Get Volume Info").size(16.0).color(egui::Color32::WHITE))
                         .fill(egui::Color32::from_rgb(91, 206, 250))
                         .min_size(egui::vec2(250.0, 50.0))
-                        .rounding(egui::Rounding::same(25.0))).clicked() {
+                        .corner_radius(25u8)).clicked() {
 
                         match Container::open(
                             std::path::Path::new(&self.volume_container_path),
@@ -2386,7 +2386,7 @@ impl CryptorApp {
                             )
                             .fill(egui::Color32::from_rgb(91, 206, 250))
                             .min_size(egui::vec2(250.0, 50.0))
-                            .rounding(egui::Rounding::same(25.0)),
+                            .corner_radius(25u8),
                         )
                         .clicked()
                     {
@@ -2429,10 +2429,10 @@ impl CryptorApp {
                 ui.add_space(20.0);
 
                 // Warning box
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(egui::Color32::from_rgb(80, 30, 30))
-                    .rounding(egui::Rounding::same(10.0))
-                    .inner_margin(egui::Margin::same(15.0))
+                    .corner_radius(10u8)
+                    .inner_margin(egui::Margin::same(15))
                     .show(ui, |ui| {
                         ui.label(egui::RichText::new("⚠️ DURESS PASSWORD WARNING").size(16.0).color(egui::Color32::from_rgb(255, 200, 200)));
                         ui.add_space(10.0);
@@ -2527,7 +2527,7 @@ impl CryptorApp {
                             )
                             .fill(egui::Color32::from_rgb(180, 50, 50))
                             .min_size(egui::vec2(200.0, 45.0))
-                            .rounding(egui::Rounding::same(20.0)),
+                            .corner_radius(20u8),
                         )
                         .clicked()
                     {
@@ -2571,7 +2571,7 @@ impl CryptorApp {
                             )
                             .fill(egui::Color32::from_rgb(100, 100, 100))
                             .min_size(egui::vec2(220.0, 45.0))
-                            .rounding(egui::Rounding::same(20.0)),
+                            .corner_radius(20u8),
                         )
                         .clicked()
                     {
@@ -2705,10 +2705,10 @@ impl CryptorApp {
         ui.add_space(20.0);
 
         // Info box
-        egui::Frame::none()
+        egui::Frame::NONE
             .fill(egui::Color32::from_rgb(40, 60, 80))
-            .rounding(egui::Rounding::same(10.0))
-            .inner_margin(egui::Margin::same(15.0))
+            .corner_radius(10u8)
+            .inner_margin(egui::Margin::same(15))
             .show(ui, |ui| {
                 ui.label(egui::RichText::new("📡 Remote Wipe").size(16.0).color(egui::Color32::from_rgb(91, 206, 250)));
                 ui.add_space(10.0);
@@ -2741,7 +2741,7 @@ impl CryptorApp {
                     )
                     .fill(egui::Color32::from_rgb(91, 206, 250))
                     .min_size(egui::vec2(200.0, 40.0))
-                    .rounding(egui::Rounding::same(20.0)),
+                    .corner_radius(20u8),
                 )
                 .clicked()
             {
@@ -2755,10 +2755,10 @@ impl CryptorApp {
             }
         } else {
             // Display existing token
-            egui::Frame::none()
+            egui::Frame::NONE
                 .fill(egui::Color32::from_rgb(30, 30, 30))
-                .rounding(egui::Rounding::same(8.0))
-                .inner_margin(egui::Margin::same(12.0))
+                .corner_radius(8u8)
+                .inner_margin(egui::Margin::same(12))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(
@@ -2795,11 +2795,16 @@ impl CryptorApp {
                         )
                         .fill(egui::Color32::from_rgb(100, 100, 100))
                         .min_size(egui::vec2(120.0, 30.0))
-                        .rounding(egui::Rounding::same(15.0)),
+                        .corner_radius(15u8),
                     )
                     .clicked()
                 {
-                    ui.output_mut(|o| o.copied_text = self.remote_wipe_token_display.clone());
+                    ui.output_mut(|o| {
+                        o.commands
+                            .push(egui::OutputCommand::CopyText(
+                                self.remote_wipe_token_display.clone(),
+                            ));
+                    });
                     self.remote_wipe_status = "✓ Token copied to clipboard".to_string();
                 }
 
@@ -2815,7 +2820,7 @@ impl CryptorApp {
                         )
                         .fill(egui::Color32::from_rgb(180, 100, 50))
                         .min_size(egui::vec2(120.0, 30.0))
-                        .rounding(egui::Rounding::same(15.0)),
+                        .corner_radius(15u8),
                     )
                     .clicked()
                 {
@@ -2840,7 +2845,7 @@ impl CryptorApp {
                         )
                         .fill(egui::Color32::from_rgb(180, 50, 50))
                         .min_size(egui::vec2(80.0, 30.0))
-                        .rounding(egui::Rounding::same(15.0)),
+                        .corner_radius(15u8),
                     )
                     .clicked()
                 {
@@ -2868,7 +2873,7 @@ impl CryptorApp {
                             )
                             .fill(egui::Color32::from_rgb(70, 70, 120))
                             .min_size(egui::vec2(80.0, 30.0))
-                            .rounding(egui::Rounding::same(15.0)),
+                            .corner_radius(15u8),
                         )
                         .clicked()
                     {
@@ -2882,10 +2887,10 @@ impl CryptorApp {
                 if let Some(ref texture) = self.remote_wipe_qr_texture {
                     ui.add_space(15.0);
                     ui.vertical_centered(|ui| {
-                        egui::Frame::none()
+                        egui::Frame::NONE
                             .fill(egui::Color32::WHITE)
-                            .rounding(egui::Rounding::same(8.0))
-                            .inner_margin(egui::Margin::same(10.0))
+                            .corner_radius(8u8)
+                            .inner_margin(egui::Margin::same(10))
                             .show(ui, |ui| {
                                 ui.image(egui::load::SizedTexture::new(
                                     texture.id(),
@@ -2932,10 +2937,10 @@ impl CryptorApp {
 
         // List existing paths
         if !self.remote_wipe_keyfile_paths.is_empty() {
-            egui::Frame::none()
+            egui::Frame::NONE
                 .fill(egui::Color32::from_rgb(40, 40, 40))
-                .rounding(egui::Rounding::same(8.0))
-                .inner_margin(egui::Margin::same(10.0))
+                .corner_radius(8u8)
+                .inner_margin(egui::Margin::same(10))
                 .show(ui, |ui| {
                     let mut path_to_remove: Option<usize> = None;
                     for (idx, path) in self.remote_wipe_keyfile_paths.iter().enumerate() {
@@ -3037,10 +3042,10 @@ impl CryptorApp {
         ui.add_space(20.0);
 
         // Web dashboard link
-        egui::Frame::none()
+        egui::Frame::NONE
             .fill(egui::Color32::from_rgb(50, 50, 70))
-            .rounding(egui::Rounding::same(10.0))
-            .inner_margin(egui::Margin::same(15.0))
+            .corner_radius(10u8)
+            .inner_margin(egui::Margin::same(15))
             .show(ui, |ui| {
                 ui.label(
                     egui::RichText::new("🌐 Web Dashboard")
@@ -3061,7 +3066,9 @@ impl CryptorApp {
 }
 
 impl eframe::App for CryptorApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        let ctx = &ctx;
         // Process system tray events
         if let Some(ref tray) = self.tray_manager {
             if let Some(event) = tray.process_events() {
@@ -3118,7 +3125,7 @@ impl eframe::App for CryptorApp {
 
         // Draw gradient background
         let painter = ctx.layer_painter(egui::LayerId::background());
-        let rect = ctx.screen_rect();
+        let rect = ctx.content_rect();
 
         // Trans pride gradient: blue -> pink
         let trans_blue = egui::Color32::from_rgb(135, 206, 250);
@@ -3138,13 +3145,13 @@ impl eframe::App for CryptorApp {
         painter.add(egui::Shape::mesh(mesh));
 
         // Menu bar
-        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
+        egui::Panel::top("menu_bar").show_inside(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if self.tray_manager.is_some() && ui.button("Minimize to Tray").clicked() {
                         self.window_visible = false;
                         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.button("Exit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -3157,7 +3164,7 @@ impl eframe::App for CryptorApp {
                         .clicked()
                     {
                         self.show_queue_panel = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
 
@@ -3165,20 +3172,20 @@ impl eframe::App for CryptorApp {
                 ui.menu_button("Volumes", |ui| {
                     if ui.button("📦 Manage Volumes").clicked() {
                         self.mode = Some(Mode::Volume);
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
 
                 ui.menu_button("Settings", |ui| {
                     if ui.button("⚙ Open Settings").clicked() {
                         self.show_settings = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
 
                 ui.menu_button("Help", |ui| {
                     if ui.button("About").clicked() {
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
             });
@@ -3202,8 +3209,8 @@ impl eframe::App for CryptorApp {
 
         // Main content panel
         egui::CentralPanel::default()
-            .frame(egui::Frame::none())
-            .show(ctx, |ui| {
+            .frame(egui::Frame::NONE)
+            .show_inside(ui, |ui| {
                 ui.add_space(60.0);
 
                 // Center the main panel
@@ -3215,12 +3222,12 @@ impl eframe::App for CryptorApp {
                             255,
                             self.settings.panel_transparency,
                         ))
-                        .rounding(egui::Rounding::same(20.0))
-                        .inner_margin(egui::Margin::same(50.0))
+                        .corner_radius(20u8)
+                        .inner_margin(egui::Margin::same(50))
                         .shadow(egui::epaint::Shadow {
-                            offset: egui::Vec2::new(0.0, 8.0),
-                            blur: 30.0,
-                            spread: 0.0,
+                            offset: [0, 8],
+                            blur: 30,
+                            spread: 0,
                             color: egui::Color32::from_black_alpha(60),
                         });
 
@@ -3267,7 +3274,7 @@ impl eframe::App for CryptorApp {
                                 )
                                 .fill(encrypt_color)
                                 .min_size(egui::vec2(140.0, 45.0))
-                                .rounding(egui::Rounding::same(25.0));
+                                .corner_radius(25u8);
 
                                 if ui.add_enabled(!self.is_processing, encrypt_btn).clicked() {
                                     self.mode = Some(Mode::Encrypt);
@@ -3286,7 +3293,7 @@ impl eframe::App for CryptorApp {
                                 )
                                 .fill(decrypt_color)
                                 .min_size(egui::vec2(140.0, 45.0))
-                                .rounding(egui::Rounding::same(25.0));
+                                .corner_radius(25u8);
 
                                 if ui.add_enabled(!self.is_processing, decrypt_btn).clicked() {
                                     self.mode = Some(Mode::Decrypt);
@@ -3317,7 +3324,7 @@ impl eframe::App for CryptorApp {
                                     )
                                     .fill(volume_color)
                                     .min_size(egui::vec2(140.0, 45.0))
-                                    .rounding(egui::Rounding::same(25.0));
+                                    .corner_radius(25u8);
 
                                     if ui.add_enabled(!self.is_processing, volume_btn).clicked() {
                                         self.mode = Some(Mode::Volume);
@@ -3466,7 +3473,7 @@ impl eframe::App for CryptorApp {
                                         )
                                         .fill(egui::Color32::from_rgb(100, 180, 100))
                                         .min_size(egui::vec2(180.0, 32.0))
-                                        .rounding(egui::Rounding::same(16.0));
+                                        .corner_radius(16u8);
 
                                         if ui.add_enabled(!self.is_processing, gen_btn).clicked() {
                                             self.show_keyfile_generator = true;
@@ -3530,7 +3537,7 @@ impl eframe::App for CryptorApp {
                                         )
                                         .fill(button_color)
                                         .min_size(egui::vec2(280.0, 50.0))
-                                        .rounding(egui::Rounding::same(25.0));
+                                        .corner_radius(25u8);
 
                                         if ui.add_enabled(button_enabled, action_btn).clicked() {
                                             self.process_file();
@@ -3546,7 +3553,7 @@ impl eframe::App for CryptorApp {
                                         )
                                         .fill(egui::Color32::from_rgb(245, 169, 184))
                                         .min_size(egui::vec2(200.0, 50.0))
-                                        .rounding(egui::Rounding::same(25.0));
+                                        .corner_radius(25u8);
 
                                         if ui.add_enabled(button_enabled, queue_btn).clicked() {
                                             self.add_to_queue();
@@ -3579,7 +3586,7 @@ impl eframe::App for CryptorApp {
                                         // Background
                                         ui.painter().rect_filled(
                                             rect,
-                                            egui::Rounding::same(15.0),
+                                            egui::CornerRadius::same(15),
                                             egui::Color32::from_rgb(220, 220, 220),
                                         );
 
@@ -3593,7 +3600,7 @@ impl eframe::App for CryptorApp {
                                         if fill_width > 0.0 {
                                             ui.painter().rect_filled(
                                                 fill_rect,
-                                                egui::Rounding::same(15.0),
+                                                egui::CornerRadius::same(15),
                                                 egui::Color32::from_rgb(245, 169, 184),
                                             );
                                         }
@@ -3601,11 +3608,12 @@ impl eframe::App for CryptorApp {
                                         // Border
                                         ui.painter().rect_stroke(
                                             rect,
-                                            egui::Rounding::same(15.0),
+                                            egui::CornerRadius::same(15),
                                             egui::Stroke::new(
                                                 2.0,
                                                 egui::Color32::from_rgb(91, 206, 250),
                                             ),
+                                            egui::StrokeKind::Inside,
                                         );
                                     });
 
@@ -3655,7 +3663,7 @@ impl eframe::App for CryptorApp {
                                 )
                                 .fill(egui::Color32::from_rgb(100, 180, 230))
                                 .min_size(egui::vec2(140.0, 35.0))
-                                .rounding(egui::Rounding::same(18.0));
+                                .corner_radius(18u8);
                                 ui.add_enabled(false, aes_badge);
 
                                 ui.add_space(10.0);
@@ -3668,7 +3676,7 @@ impl eframe::App for CryptorApp {
                                 )
                                 .fill(egui::Color32::from_rgb(235, 150, 170))
                                 .min_size(egui::vec2(110.0, 35.0))
-                                .rounding(egui::Rounding::same(18.0));
+                                .corner_radius(18u8);
                                 ui.add_enabled(false, argon_badge);
 
                                 ui.add_space(10.0);
@@ -3681,7 +3689,7 @@ impl eframe::App for CryptorApp {
                                 )
                                 .fill(egui::Color32::from_rgb(100, 180, 230))
                                 .min_size(egui::vec2(140.0, 35.0))
-                                .rounding(egui::Rounding::same(18.0));
+                                .corner_radius(18u8);
                                 ui.add_enabled(false, auth_badge);
 
                                 // YubiKey badge (only shown when enabled)
@@ -3694,7 +3702,7 @@ impl eframe::App for CryptorApp {
                                     )
                                     .fill(egui::Color32::from_rgb(80, 180, 80))
                                     .min_size(egui::vec2(120.0, 35.0))
-                                    .rounding(egui::Rounding::same(18.0));
+                                    .corner_radius(18u8);
                                     ui.add_enabled(false, yubikey_badge);
                                 }
                             });

@@ -108,7 +108,7 @@ getrandom = { version = "0.4", features = ["wasm_js"] }
 
 # Native (non-WASM) dependencies for binaries and platform-specific features
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rpassword = "7.4"
+rpassword = "7.5"
 zxcvbn = "3"  # Password strength estimation (entropy-based)
 clap = { version = "4.6", features = ["derive"] }
 tempfile = "3.27"

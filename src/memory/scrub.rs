@@ -95,7 +95,13 @@ pub struct ScrubStats {
 /// ```
 pub fn scrub_bytes(data: &mut [u8]) {
     // Use zeroize for the actual wiping (it handles volatile writes)
+    #[cfg(not(kani))]
     data.zeroize();
+
+    // zeroize 1.9 uses an inline-assembly optimization barrier that Kani cannot
+    // model. The verifier exercises the equivalent volatile-write path instead.
+    #[cfg(kani)]
+    overwrite_with_pattern(data, 0x00);
 
     // Compiler fence to prevent reordering
     compiler_fence(Ordering::SeqCst);

@@ -35,8 +35,7 @@
 //! disk encryption where sector sizes must be fixed. Authentication can be
 //! added at a higher layer if needed (e.g., in the filesystem).
 
-#[allow(deprecated)]
-use aes::cipher::{generic_array::GenericArray, KeyInit};
+use aes::cipher::KeyInit;
 use aes::Aes256;
 use thiserror::Error;
 use xts_mode::{get_tweak_default, Xts128};
@@ -112,10 +111,10 @@ impl SectorCipher {
         let xts_key = Self::derive_xts_key(master_key)?;
 
         // Create XTS cipher
-        #[allow(deprecated)]
-        let key1 = Aes256::new(GenericArray::from_slice(&xts_key[0..32]));
-        #[allow(deprecated)]
-        let key2 = Aes256::new(GenericArray::from_slice(&xts_key[32..64]));
+        let key1 =
+            Aes256::new_from_slice(&xts_key[0..32]).map_err(|_| SectorError::InvalidKeySize)?;
+        let key2 =
+            Aes256::new_from_slice(&xts_key[32..64]).map_err(|_| SectorError::InvalidKeySize)?;
 
         let cipher = Xts128::<Aes256>::new(key1, key2);
 

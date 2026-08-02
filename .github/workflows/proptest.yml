@@ -19,15 +19,12 @@ env:
 jobs:
   proptest:
     name: Proptest Property-Based Tests
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     container: rust:latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Fix workspace permissions for host runner
-        run: chmod -R a+rX $GITHUB_WORKSPACE || true
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -35,7 +32,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -63,29 +60,19 @@ jobs:
 
   proptest-windows:
     name: Proptest (Windows)
-    runs-on: [self-hosted, Windows]
+    runs-on: windows-latest
     defaults:
       run:
         shell: cmd
-    env:
-      CARGO_HOME: C:\cargo
-      RUSTUP_HOME: C:\rustup
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Add Git Bash and Cargo to PATH
-        shell: cmd
-        run: |
-          echo C:\Program Files\Git\bin>>"%GITHUB_PATH%"
-          echo C:\cargo\bin>>"%GITHUB_PATH%"
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry

@@ -15,12 +15,12 @@ env:
 jobs:
   rustfmt:
     name: Format Check
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     container: rust:latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -32,15 +32,12 @@ jobs:
 
   clippy:
     name: Clippy Lint
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     container: rust:latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Fix workspace permissions for host runner
-        run: chmod -R a+rX $GITHUB_WORKSPACE || true
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -48,7 +45,7 @@ jobs:
           components: clippy
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -65,23 +62,13 @@ jobs:
 
   clippy-windows:
     name: Clippy Lint (Windows)
-    runs-on: [self-hosted, Windows]
+    runs-on: windows-latest
     defaults:
       run:
         shell: cmd
-    env:
-      CARGO_HOME: C:\cargo
-      RUSTUP_HOME: C:\rustup
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Add Git Bash and Cargo to PATH
-        shell: cmd
-        run: |
-          echo C:\Program Files\Git\bin>>"%GITHUB_PATH%"
-          echo C:\cargo\bin>>"%GITHUB_PATH%"
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -89,7 +76,7 @@ jobs:
           components: clippy
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry

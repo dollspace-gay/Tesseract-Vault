@@ -3144,7 +3144,7 @@ impl eframe::App for CryptorApp {
         painter.add(egui::Shape::mesh(mesh));
 
         // Menu bar
-        egui::Panel::top("menu_bar").show_inside(ui, |ui| {
+        egui::Panel::top("menu_bar").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if self.tray_manager.is_some() && ui.button("Minimize to Tray").clicked() {
@@ -3209,7 +3209,7 @@ impl eframe::App for CryptorApp {
         // Main content panel
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 ui.add_space(60.0);
 
                 // Center the main panel

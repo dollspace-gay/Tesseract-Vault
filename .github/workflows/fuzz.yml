@@ -19,7 +19,7 @@ env:
 jobs:
   fuzz:
     name: Fuzz Testing
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     container: rust:latest
 
     strategy:
@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
@@ -50,7 +50,7 @@ jobs:
         run: cargo install cargo-fuzz
 
       - name: Cache fuzz corpus
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: fuzz/corpus/${{ matrix.target }}
           key: fuzz-corpus-${{ matrix.target }}-${{ github.sha }}
@@ -70,7 +70,7 @@ jobs:
 
       - name: Upload crash artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: crash-${{ matrix.target }}
           path: fuzz/artifacts/${{ matrix.target }}/
@@ -78,7 +78,7 @@ jobs:
 
   fuzz-summary:
     name: Fuzzing Summary
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     container: rust:latest
     needs: fuzz
     if: always()

@@ -20,6 +20,7 @@ jobs:
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
           language: rust
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           sanitizer: address
 
       - name: Run Corpus Pruning
@@ -42,6 +43,7 @@ jobs:
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
           language: rust
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           sanitizer: coverage
 
       - name: Run Coverage

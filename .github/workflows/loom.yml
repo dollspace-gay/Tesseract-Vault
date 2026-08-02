@@ -16,34 +16,31 @@ env:
 jobs:
   loom:
     name: Loom Concurrency Tests
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     container: rust:latest
     timeout-minutes: 30
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Fix workspace permissions for host runner
-        run: chmod -R a+rX $GITHUB_WORKSPACE || true
+        uses: actions/checkout@v7
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-loom-registry-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache Cargo index
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-loom-index-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache Cargo build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: target
           key: ${{ runner.os }}-cargo-loom-build-${{ hashFiles('**/Cargo.lock') }}

@@ -29,4 +29,7 @@ ignore = [
 
     # proc-macro-error - unmaintained build-time only dependency
     "RUSTSEC-2024-0370",
+
+    # ttf-parser - unmaintained transitive GUI dependency with no patched release
+    "RUSTSEC-2026-0192",
 ]

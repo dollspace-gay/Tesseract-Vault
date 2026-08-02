@@ -23,7 +23,7 @@
 use std::io;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, KeyInit, Mac};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

@@ -37,6 +37,9 @@ ignore = [
     { id = "RUSTSEC-2024-0375", reason = "atty: dev dep from dudect-bencher->clap, unmaintained" },
     # Unmaintained paste crate - used by accesskit and rav1e
     { id = "RUSTSEC-2024-0436", reason = "paste: transitive dep from accesskit/image, no upgrade available" },
+    # Unmaintained font parser pulled in by eframe -> winit -> sctk-adwaita.
+    # The advisory has no patched version; this dependency only parses bundled UI fonts.
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser: transitive GUI dependency from eframe/winit, no safe upgrade available" },
 ]
 
 # License configuration

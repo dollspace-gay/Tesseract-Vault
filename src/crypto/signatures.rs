@@ -6,7 +6,7 @@
 //! quantum-resistant digital signatures as specified in FIPS 204.
 
 use crate::error::{CryptorError, Result};
-use ml_dsa::{KeyGen, MlDsa44, MlDsa65, MlDsa87};
+use ml_dsa::{MlDsa44, MlDsa65, MlDsa87, SigningKey};
 use zeroize::Zeroizing;
 
 // Import signature traits from ml_dsa re-exports
@@ -69,7 +69,7 @@ impl MlDsaKeyPair {
 
         match level {
             SecurityLevel::Level44 => {
-                let kp = MlDsa44::from_seed(&seed.into());
+                let kp = SigningKey::<MlDsa44>::from_seed(&seed.into());
                 let vk_bytes = kp.verifying_key().encode();
 
                 Self {
@@ -79,7 +79,7 @@ impl MlDsaKeyPair {
                 }
             }
             SecurityLevel::Level65 => {
-                let kp = MlDsa65::from_seed(&seed.into());
+                let kp = SigningKey::<MlDsa65>::from_seed(&seed.into());
                 let vk_bytes = kp.verifying_key().encode();
 
                 Self {
@@ -89,7 +89,7 @@ impl MlDsaKeyPair {
                 }
             }
             SecurityLevel::Level87 => {
-                let kp = MlDsa87::from_seed(&seed.into());
+                let kp = SigningKey::<MlDsa87>::from_seed(&seed.into());
                 let vk_bytes = kp.verifying_key().encode();
 
                 Self {
@@ -143,18 +143,18 @@ impl MlDsaKeyPair {
     pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>> {
         match self.security_level {
             SecurityLevel::Level44 => {
-                let kp = MlDsa44::from_seed(&(*self.seed).into());
-                let sig = kp.signing_key().sign(message);
+                let kp = SigningKey::<MlDsa44>::from_seed(&(*self.seed).into());
+                let sig = kp.sign(message);
                 Ok(sig.encode()[..].to_vec())
             }
             SecurityLevel::Level65 => {
-                let kp = MlDsa65::from_seed(&(*self.seed).into());
-                let sig = kp.signing_key().sign(message);
+                let kp = SigningKey::<MlDsa65>::from_seed(&(*self.seed).into());
+                let sig = kp.sign(message);
                 Ok(sig.encode()[..].to_vec())
             }
             SecurityLevel::Level87 => {
-                let kp = MlDsa87::from_seed(&(*self.seed).into());
-                let sig = kp.signing_key().sign(message);
+                let kp = SigningKey::<MlDsa87>::from_seed(&(*self.seed).into());
+                let sig = kp.sign(message);
                 Ok(sig.encode()[..].to_vec())
             }
         }
@@ -210,15 +210,15 @@ impl MlDsaKeyPair {
         // This prevents accepting mismatched key pairs that could lead to security issues
         let derived_vk_bytes: Vec<u8> = match level {
             SecurityLevel::Level44 => {
-                let kp = MlDsa44::from_seed(&seed.into());
+                let kp = SigningKey::<MlDsa44>::from_seed(&seed.into());
                 kp.verifying_key().encode()[..].to_vec()
             }
             SecurityLevel::Level65 => {
-                let kp = MlDsa65::from_seed(&seed.into());
+                let kp = SigningKey::<MlDsa65>::from_seed(&seed.into());
                 kp.verifying_key().encode()[..].to_vec()
             }
             SecurityLevel::Level87 => {
-                let kp = MlDsa87::from_seed(&seed.into());
+                let kp = SigningKey::<MlDsa87>::from_seed(&seed.into());
                 kp.verifying_key().encode()[..].to_vec()
             }
         };

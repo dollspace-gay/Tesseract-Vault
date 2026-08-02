@@ -31,6 +31,7 @@ jobs:
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
           language: rust
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           sanitizer: ${{ matrix.sanitizer }}
 
       - name: Run Fuzzers (${{ matrix.sanitizer }})

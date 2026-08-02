@@ -628,7 +628,7 @@ pub fn mount(
     config.mount_options = mount_options;
     config.acl = acl;
 
-    let session = fuser::spawn_mount2(adapter, &options.mount_point, &config)
+    let session = fuser::spawn_mount(adapter, &options.mount_point, &config)
         .map_err(|e| MountError::Other(format!("FUSE mount failed: {}", e)))?;
 
     Ok(FuseMountHandle {

@@ -16,27 +16,24 @@ env:
 jobs:
   nist-cavp-verify:
     name: NIST CAVP Test Vectors
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     container: rust:latest
     timeout-minutes: 30
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Fix workspace permissions for host runner
-        run: chmod -R a+rX $GITHUB_WORKSPACE || true
+        uses: actions/checkout@v7
 
       - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y libgtk-3-dev libglib2.0-dev libatk1.0-dev libgdk-pixbuf-2.0-dev libcairo2-dev libpango1.0-dev libxdo-dev unzip
+          apt-get install -y curl unzip
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
@@ -49,10 +46,10 @@ jobs:
           unzip tests/nist_cavp/gcmtestvectors.zip -d tests/nist_cavp/
 
       - name: Build library
-        run: cargo build --lib
+        run: cargo build --lib --no-default-features --features "post-quantum compression ctrlc"
 
       - name: Run NIST CAVP AES-256-GCM tests
         run: |
           echo "::group::NIST CAVP AES-256-GCM Tests"
-          cargo test --test nist_cavp_tests -- --nocapture
+          cargo test --test nist_cavp_tests --no-default-features --features "post-quantum compression ctrlc" -- --nocapture
           echo "::endgroup::"

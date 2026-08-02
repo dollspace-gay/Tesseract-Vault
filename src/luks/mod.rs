@@ -40,10 +40,11 @@
 //!
 //! ```no_run
 //! use tesseract_lib::luks::{TesseractLuksKeyfile, LuksConfig};
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!
 //! // Create a new keyfile for a LUKS passphrase
 //! let config = LuksConfig::default();
-//! let keyfile = TesseractLuksKeyfile::new("my-luks-passphrase", "tesseract-password", config)?;
+//! let mut keyfile = TesseractLuksKeyfile::new("my-luks-passphrase", "tesseract-password", config)?;
 //!
 //! // Save to disk
 //! keyfile.save("/etc/tesseract/root.keyfile")?;
@@ -51,6 +52,8 @@
 //! // Later: unlock the LUKS device
 //! let luks_passphrase = keyfile.unlock("tesseract-password")?;
 //! // Use with: cryptsetup open /dev/sda2 root --key-file -
+//! # Ok(())
+//! # }
 //! ```
 
 mod keyfile;

@@ -143,11 +143,9 @@ impl ManagedVolume {
 /// let mut manager = VolumeManager::new();
 ///
 /// // Mount a volume
-/// let options = MountOptions {
-///     mount_point: PathBuf::from("/mnt/encrypted"),
-///     read_only: false,
-///     ..Default::default()
-/// };
+/// let mut options = MountOptions::default();
+/// options.mount_point = PathBuf::from("/mnt/encrypted");
+/// options.read_only = false;
 ///
 /// let volume = manager.mount(
 ///     "/path/to/container.scv",

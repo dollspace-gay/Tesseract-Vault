@@ -16,12 +16,17 @@ env:
 jobs:
   kani-config:
     name: Config & Constants
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Install Kani
+        run: |
+          cargo install --locked --version 0.67.0 kani-verifier
+          cargo kani setup
 
       - name: Verify CryptoConfig properties
         run: |
@@ -35,12 +40,17 @@ jobs:
 
   kani-nonce:
     name: Nonce Safety (Critical)
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Install Kani
+        run: |
+          cargo install --locked --version 0.67.0 kani-verifier
+          cargo kani setup
 
       # CRITICAL: Nonce uniqueness verification for streaming encryption
       # Nonce reuse in AES-GCM is catastrophic - it breaks authentication and allows key recovery
@@ -57,12 +67,17 @@ jobs:
 
   kani-memory:
     name: Memory Protection
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Install Kani
+        run: |
+          cargo install --locked --version 0.67.0 kani-verifier
+          cargo kani setup
 
       - name: Verify memory protection properties
         run: |
@@ -82,12 +97,17 @@ jobs:
 
   kani-volume:
     name: Volume Header
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Install Kani
+        run: |
+          cargo install --locked --version 0.67.0 kani-verifier
+          cargo kani setup
 
       - name: Verify volume header properties
         run: |
@@ -108,12 +128,17 @@ jobs:
 
   kani-daemon:
     name: Daemon IPC Protocol
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Install Kani
+        run: |
+          cargo install --locked --version 0.67.0 kani-verifier
+          cargo kani setup
 
       - name: Verify daemon protocol properties
         run: |
@@ -140,12 +165,17 @@ jobs:
 
   kani-keyslot:
     name: Key Slot Management
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Install Kani
+        run: |
+          cargo install --locked --version 0.67.0 kani-verifier
+          cargo kani setup
 
       - name: Verify keyslot properties
         run: |
